@@ -7,6 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 from .config import RepoConfig
+from ..git import repo as git
 
 
 # Extension → language mapping (by frequency)
@@ -50,7 +51,8 @@ def discover_repos(root: Path) -> list[RepoConfig]:
         if child.name.startswith("."):
             continue
 
-        # Check if it's a git repo
+        # Check if it's a git repo — .git can be a directory (normal)
+        # or a file (linked worktree)
         git_dir = child / ".git"
         if not git_dir.exists():
             continue
@@ -59,12 +61,22 @@ def discover_repos(root: Path) -> list[RepoConfig]:
         default_branch = _detect_default_branch(child)
         role = _guess_role(child.name, lang)
 
+        # Detect worktree status
+        is_linked_worktree = git_dir.is_file()
+        worktree_main = None
+        if is_linked_worktree:
+            main_path = git.worktree_main_path(child)
+            if main_path:
+                worktree_main = str(main_path)
+
         repos.append(RepoConfig(
             name=child.name,
             path=f"./{child.name}",
             role=role,
             lang=lang,
             default_branch=default_branch,
+            is_worktree=is_linked_worktree,
+            worktree_main=worktree_main,
         ))
 
     return repos
@@ -112,9 +124,20 @@ def _detect_language(repo_path: Path) -> str:
 
 
 def _detect_default_branch(repo_path: Path) -> str:
-    """Detect the default branch from local refs."""
-    # Check remote HEAD
-    head_ref = repo_path / ".git" / "refs" / "remotes" / "origin" / "HEAD"
+    """Detect the default branch from local refs.
+
+    Works for both normal repos (.git is a directory) and linked
+    worktrees (.git is a file pointing to the main repo).
+    """
+    git_path = repo_path / ".git"
+
+    # For linked worktrees, use the git command directly since
+    # the .git directory structure is different
+    if git_path.is_file():
+        return git.default_branch(repo_path)
+
+    # Normal repo: check remote HEAD
+    head_ref = git_path / "refs" / "remotes" / "origin" / "HEAD"
     if head_ref.exists():
         try:
             content = head_ref.read_text().strip()
@@ -126,12 +149,12 @@ def _detect_default_branch(repo_path: Path) -> str:
 
     # Check local refs for common default branch names
     for candidate in ("main", "master"):
-        ref_path = repo_path / ".git" / "refs" / "heads" / candidate
+        ref_path = git_path / "refs" / "heads" / candidate
         if ref_path.exists():
             return candidate
 
     # Fallback: parse HEAD for current branch
-    head_file = repo_path / ".git" / "HEAD"
+    head_file = git_path / "HEAD"
     if head_file.exists():
         try:
             content = head_file.read_text().strip()

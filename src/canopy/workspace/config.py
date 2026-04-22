@@ -29,6 +29,8 @@ class RepoConfig:
     role: str = ""           # optional: backend, frontend, shared, infra
     lang: str = ""           # optional: primary language
     default_branch: str = "main"
+    is_worktree: bool = False       # True if this is a linked worktree
+    worktree_main: str | None = None  # path to main working tree (if worktree)
 
 
 @dataclass
@@ -123,7 +125,7 @@ def validate_config(config: WorkspaceConfig) -> list[str]:
         abs_path = (config.root / repo.path).resolve()
         if not abs_path.exists():
             warnings.append(f"Repo '{repo.name}': path does not exist: {abs_path}")
-        elif not (abs_path / ".git").exists() and not (abs_path / ".git").is_file():
+        elif not (abs_path / ".git").exists():
             warnings.append(f"Repo '{repo.name}': not a git repository: {abs_path}")
 
     return warnings

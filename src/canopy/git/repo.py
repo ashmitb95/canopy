@@ -260,3 +260,245 @@ def pull_rebase(repo_path: Path, remote: str = "origin", branch: str | None = No
 def merge_base(repo_path: Path, ref_a: str, ref_b: str) -> str:
     """Find the merge base of two refs."""
     return _run(["merge-base", ref_a, ref_b], cwd=repo_path)
+
+
+# ── Stash ─────────────────────────────────────────────────────────────────
+
+def stash_save(repo_path: Path, message: str = "") -> bool:
+    """Stash uncommitted changes. Returns True if anything was stashed."""
+    args = ["stash", "push"]
+    if message:
+        args.extend(["-m", message])
+    output = _run(args, cwd=repo_path)
+    # "No local changes to save" means nothing was stashed
+    return "No local changes" not in output
+
+
+def stash_pop(repo_path: Path, index: int = 0) -> str:
+    """Pop a stash entry. Returns output message."""
+    return _run(["stash", "pop", f"stash@{{{index}}}"], cwd=repo_path)
+
+
+def stash_list(repo_path: Path) -> list[dict]:
+    """List stash entries.
+
+    Returns:
+        List of {index, branch, message}
+    """
+    output = _run_ok(["stash", "list", "--format=%gd|%gs"], cwd=repo_path)
+    if not output:
+        return []
+
+    entries = []
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("|", 1)
+        ref = parts[0].strip()  # stash@{0}
+        desc = parts[1].strip() if len(parts) > 1 else ""
+        # Extract index from stash@{N}
+        try:
+            idx = int(ref.split("{")[1].rstrip("}"))
+        except (IndexError, ValueError):
+            idx = 0
+        entries.append({
+            "index": idx,
+            "ref": ref,
+            "message": desc,
+        })
+    return entries
+
+
+def stash_drop(repo_path: Path, index: int = 0) -> str:
+    """Drop a stash entry."""
+    return _run(["stash", "drop", f"stash@{{{index}}}"], cwd=repo_path)
+
+
+# ── Branch management ─────────────────────────────────────────────────────
+
+def delete_branch(repo_path: Path, name: str, force: bool = False) -> str:
+    """Delete a local branch."""
+    flag = "-D" if force else "-d"
+    return _run(["branch", flag, name], cwd=repo_path)
+
+
+def rename_branch(repo_path: Path, old_name: str, new_name: str) -> str:
+    """Rename a local branch."""
+    return _run(["branch", "-m", old_name, new_name], cwd=repo_path)
+
+
+def all_branches(repo_path: Path) -> list[dict]:
+    """List all local branches with metadata.
+
+    Returns:
+        List of {name, is_current, sha, subject}
+    """
+    output = _run_ok(
+        ["branch", "--format=%(HEAD)|%(refname:short)|%(objectname:short)|%(subject)"],
+        cwd=repo_path,
+    )
+    if not output:
+        return []
+
+    entries = []
+    for line in output.splitlines():
+        parts = line.split("|", 3)
+        if len(parts) < 4:
+            continue
+        entries.append({
+            "name": parts[1].strip(),
+            "is_current": parts[0].strip() == "*",
+            "sha": parts[2].strip(),
+            "subject": parts[3].strip(),
+        })
+    return entries
+
+
+# ── Worktree ──────────────────────────────────────────────────────────────
+
+def is_worktree(repo_path: Path) -> bool:
+    """Check if repo_path is a linked worktree (not the main working tree).
+
+    Linked worktrees have a `.git` *file* (not directory) that points to
+    the main repo's `.git/worktrees/<name>/` directory.
+    """
+    git_path = repo_path / ".git"
+    return git_path.is_file()
+
+
+def worktree_main_path(repo_path: Path) -> Path | None:
+    """If repo_path is a linked worktree, return the main working tree path.
+
+    Returns None if this is the main working tree (not a linked worktree).
+    """
+    common = _run_ok(["rev-parse", "--git-common-dir"], cwd=repo_path)
+    local = _run_ok(["rev-parse", "--git-dir"], cwd=repo_path)
+
+    if not common or not local:
+        return None
+
+    common_resolved = (repo_path / common).resolve()
+    local_resolved = (repo_path / local).resolve()
+
+    if common_resolved == local_resolved:
+        return None  # main working tree
+
+    # common-dir is the main repo's .git — its parent is the main working tree
+    return common_resolved.parent
+
+
+def worktree_list(repo_path: Path) -> list[dict]:
+    """List all worktrees for the repo at repo_path.
+
+    Returns:
+        List of {path, head, branch, is_bare}
+    """
+    output = _run_ok(["worktree", "list", "--porcelain"], cwd=repo_path)
+    if not output:
+        return []
+
+    worktrees = []
+    current: dict = {}
+    for line in output.splitlines():
+        if line.startswith("worktree "):
+            if current:
+                worktrees.append(current)
+            current = {"path": line[9:], "head": "", "branch": "", "is_bare": False}
+        elif line.startswith("HEAD "):
+            current["head"] = line[5:]
+        elif line.startswith("branch "):
+            # "branch refs/heads/main" -> "main"
+            ref = line[7:]
+            current["branch"] = ref.replace("refs/heads/", "")
+        elif line == "bare":
+            current["is_bare"] = True
+        elif line == "detached":
+            current["branch"] = "(detached)"
+
+    if current:
+        worktrees.append(current)
+
+    return worktrees
+
+
+def worktree_for_branch(repo_path: Path, branch: str) -> str | None:
+    """Find the worktree path where a branch is checked out.
+
+    Returns the worktree path string, or None if the branch isn't
+    checked out in any worktree.
+    """
+    for wt in worktree_list(repo_path):
+        if wt.get("branch") == branch:
+            return wt["path"]
+    return None
+
+
+def worktree_add(
+    repo_path: Path,
+    dest_path: Path,
+    branch: str,
+    create_branch: bool = True,
+) -> str:
+    """Create a new linked worktree.
+
+    Args:
+        repo_path: The main repo (or any existing worktree of it).
+        dest_path: Where to create the new worktree directory.
+        branch: Branch name to checkout in the worktree.
+        create_branch: If True and branch doesn't exist, create it (-b).
+
+    Returns:
+        Output message from git.
+    """
+    args = ["worktree", "add"]
+    if create_branch and not branch_exists(repo_path, branch):
+        args.extend(["-b", branch])
+    args.append(str(dest_path))
+    if not create_branch or branch_exists(repo_path, branch):
+        args.append(branch)
+    return _run(args, cwd=repo_path)
+
+
+def worktree_remove(repo_path: Path, worktree_path: Path, force: bool = False) -> str:
+    """Remove a linked worktree."""
+    args = ["worktree", "remove"]
+    if force:
+        args.append("--force")
+    args.append(str(worktree_path))
+    return _run(args, cwd=repo_path)
+
+
+# ── Log ───────────────────────────────────────────────────────────────────
+
+def log_structured(
+    repo_path: Path,
+    ref: str = "HEAD",
+    max_count: int = 20,
+) -> list[dict]:
+    """Get structured log entries.
+
+    Returns:
+        List of {sha, short_sha, author, date, subject}
+    """
+    sep = "\x1f"  # unit separator
+    fmt = f"%H{sep}%h{sep}%an{sep}%ai{sep}%s"
+    output = _run_ok(
+        ["log", ref, f"--format={fmt}", f"--max-count={max_count}"],
+        cwd=repo_path,
+    )
+    if not output:
+        return []
+
+    entries = []
+    for line in output.splitlines():
+        parts = line.split(sep)
+        if len(parts) < 5:
+            continue
+        entries.append({
+            "sha": parts[0],
+            "short_sha": parts[1],
+            "author": parts[2],
+            "date": parts[3],
+            "subject": parts[4],
+        })
+    return entries

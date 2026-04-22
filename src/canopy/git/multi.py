@@ -203,6 +203,224 @@ def sync_all(
     return results
 
 
+def stash_save_all(
+    workspace: Workspace,
+    message: str = "",
+    repos: list[str] | None = None,
+) -> dict[str, str]:
+    """Stash uncommitted changes across repos.
+
+    Returns:
+        {repo_name: "stashed" | "clean" | error_message}
+    """
+    results: dict[str, str] = {}
+    targets = _filter_repos(workspace, repos)
+
+    for state in targets:
+        try:
+            stashed = git.stash_save(state.abs_path, message)
+            results[state.config.name] = "stashed" if stashed else "clean"
+        except git.GitError as e:
+            results[state.config.name] = str(e)
+
+    return results
+
+
+def stash_pop_all(
+    workspace: Workspace,
+    index: int = 0,
+    repos: list[str] | None = None,
+) -> dict[str, str]:
+    """Pop stash across repos.
+
+    Returns:
+        {repo_name: "ok" | "no stash" | error_message}
+    """
+    results: dict[str, str] = {}
+    targets = _filter_repos(workspace, repos)
+
+    for state in targets:
+        stashes = git.stash_list(state.abs_path)
+        if not stashes:
+            results[state.config.name] = "no stash"
+            continue
+        try:
+            git.stash_pop(state.abs_path, index)
+            results[state.config.name] = "ok"
+        except git.GitError as e:
+            results[state.config.name] = str(e)
+
+    return results
+
+
+def stash_list_all(workspace: Workspace) -> dict[str, list[dict]]:
+    """List stashes across all repos.
+
+    Returns:
+        {repo_name: [{index, ref, message}, ...]}
+    """
+    results: dict[str, list[dict]] = {}
+
+    for state in workspace.repos:
+        stashes = git.stash_list(state.abs_path)
+        if stashes:
+            results[state.config.name] = stashes
+
+    return results
+
+
+def stash_drop_all(
+    workspace: Workspace,
+    index: int = 0,
+    repos: list[str] | None = None,
+) -> dict[str, str]:
+    """Drop stash entry across repos.
+
+    Returns:
+        {repo_name: "ok" | "no stash" | error_message}
+    """
+    results: dict[str, str] = {}
+    targets = _filter_repos(workspace, repos)
+
+    for state in targets:
+        stashes = git.stash_list(state.abs_path)
+        if not stashes:
+            results[state.config.name] = "no stash"
+            continue
+        try:
+            git.stash_drop(state.abs_path, index)
+            results[state.config.name] = "ok"
+        except git.GitError as e:
+            results[state.config.name] = str(e)
+
+    return results
+
+
+def commit_all(
+    workspace: Workspace,
+    message: str,
+    repos: list[str] | None = None,
+) -> dict[str, str]:
+    """Commit staged changes across repos with the same message.
+
+    Returns:
+        {repo_name: new_sha | "nothing to commit" | error_message}
+    """
+    results: dict[str, str] = {}
+    targets = _filter_repos(workspace, repos)
+
+    for state in targets:
+        status = git.status_porcelain(state.abs_path)
+        staged = [e for e in status if e["index_status"]]
+        if not staged:
+            results[state.config.name] = "nothing to commit"
+            continue
+        try:
+            sha = git.commit(state.abs_path, message)
+            results[state.config.name] = sha[:12]
+        except git.GitError as e:
+            results[state.config.name] = str(e)
+
+    return results
+
+
+def log_all(
+    workspace: Workspace,
+    max_count: int = 20,
+    feature: str | None = None,
+) -> list[dict]:
+    """Interleaved log across repos, sorted by date.
+
+    Returns:
+        List of {repo, sha, short_sha, author, date, subject}
+    """
+    all_entries = []
+
+    for state in workspace.repos:
+        ref = feature if feature and git.branch_exists(state.abs_path, feature) else "HEAD"
+        entries = git.log_structured(state.abs_path, ref=ref, max_count=max_count)
+        for entry in entries:
+            entry["repo"] = state.config.name
+            all_entries.append(entry)
+
+    # Sort by date descending
+    all_entries.sort(key=lambda e: e["date"], reverse=True)
+    return all_entries[:max_count]
+
+
+def delete_branch_all(
+    workspace: Workspace,
+    branch: str,
+    force: bool = False,
+    repos: list[str] | None = None,
+) -> dict[str, str]:
+    """Delete a branch across repos.
+
+    Returns:
+        {repo_name: "ok" | "not found" | error_message}
+    """
+    results: dict[str, str] = {}
+    targets = _filter_repos(workspace, repos)
+
+    for state in targets:
+        if not git.branch_exists(state.abs_path, branch):
+            results[state.config.name] = "not found"
+            continue
+        # Don't delete the branch we're currently on
+        if git.current_branch(state.abs_path) == branch:
+            results[state.config.name] = "currently checked out"
+            continue
+        try:
+            git.delete_branch(state.abs_path, branch, force=force)
+            results[state.config.name] = "ok"
+        except git.GitError as e:
+            results[state.config.name] = str(e)
+
+    return results
+
+
+def rename_branch_all(
+    workspace: Workspace,
+    old_name: str,
+    new_name: str,
+    repos: list[str] | None = None,
+) -> dict[str, str]:
+    """Rename a branch across repos.
+
+    Returns:
+        {repo_name: "ok" | "not found" | error_message}
+    """
+    results: dict[str, str] = {}
+    targets = _filter_repos(workspace, repos)
+
+    for state in targets:
+        if not git.branch_exists(state.abs_path, old_name):
+            results[state.config.name] = "not found"
+            continue
+        try:
+            git.rename_branch(state.abs_path, old_name, new_name)
+            results[state.config.name] = "ok"
+        except git.GitError as e:
+            results[state.config.name] = str(e)
+
+    return results
+
+
+def branches_all(workspace: Workspace) -> dict[str, list[dict]]:
+    """List all branches across repos.
+
+    Returns:
+        {repo_name: [{name, is_current, sha, subject}, ...]}
+    """
+    results: dict[str, list[dict]] = {}
+
+    for state in workspace.repos:
+        entries = git.all_branches(state.abs_path)
+        results[state.config.name] = entries
+
+    return results
+
+
 def _filter_repos(
     workspace: Workspace,
     repo_names: list[str] | None,

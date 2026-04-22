@@ -16,6 +16,9 @@ from ..workspace.workspace import Workspace
 from ..git import repo as git
 from ..git.multi import create_branch_all, checkout_all, cross_repo_diff, find_type_overlaps
 
+# Default directory for worktrees, relative to workspace root
+_WORKTREE_DIR = ".canopy/worktrees"
+
 
 @dataclass
 class FeatureLane:
@@ -45,11 +48,26 @@ class FeatureCoordinator:
         self.workspace = workspace
         self._store_path = workspace.config.root / ".canopy" / "features.json"
 
-    def create(self, name: str, repos: list[str] | None = None) -> FeatureLane:
+    def create(
+        self,
+        name: str,
+        repos: list[str] | None = None,
+        use_worktrees: bool = False,
+        worktree_base: Path | None = None,
+    ) -> FeatureLane:
         """Create a new feature lane.
 
         Creates matching branches in all (or specified) repos and
         records the feature in .canopy/features.json.
+
+        Args:
+            name: Feature/branch name.
+            repos: Subset of repos (default: all).
+            use_worktrees: If True, create linked worktrees instead of
+                just branches. Each repo gets a worktree at
+                <worktree_base>/<feature>/<repo_name>.
+            worktree_base: Base directory for worktrees. Defaults to
+                <workspace_root>/.canopy/worktrees.
         """
         target_repos = repos or [r.config.name for r in self.workspace.repos]
 
@@ -59,13 +77,39 @@ class FeatureCoordinator:
         if unknown:
             raise ValueError(f"Unknown repos: {', '.join(sorted(unknown))}")
 
-        # Create branches
-        results = create_branch_all(self.workspace, name, target_repos)
-        failed = {r: msg for r, msg in results.items() if msg is not True}
-        if len(failed) == len(target_repos):
-            raise RuntimeError(
-                f"Failed to create branch in all repos: {failed}"
-            )
+        worktree_paths: dict[str, str] = {}
+
+        if use_worktrees:
+            base = worktree_base or (self.workspace.config.root / _WORKTREE_DIR)
+            feature_dir = base / name
+            feature_dir.mkdir(parents=True, exist_ok=True)
+
+            results: dict[str, bool | str] = {}
+            for repo_name in target_repos:
+                state = self.workspace.get_repo(repo_name)
+                wt_dest = feature_dir / repo_name
+                try:
+                    git.worktree_add(
+                        state.abs_path, wt_dest, name, create_branch=True,
+                    )
+                    results[repo_name] = True
+                    worktree_paths[repo_name] = str(wt_dest)
+                except git.GitError as e:
+                    results[repo_name] = str(e)
+
+            failed = {r: msg for r, msg in results.items() if msg is not True}
+            if len(failed) == len(target_repos):
+                raise RuntimeError(
+                    f"Failed to create worktrees in all repos: {failed}"
+                )
+        else:
+            # Just create branches
+            results = create_branch_all(self.workspace, name, target_repos)
+            failed = {r: msg for r, msg in results.items() if msg is not True}
+            if len(failed) == len(target_repos):
+                raise RuntimeError(
+                    f"Failed to create branch in all repos: {failed}"
+                )
 
         # Record the feature
         lane = FeatureLane(
@@ -76,11 +120,15 @@ class FeatureCoordinator:
         )
 
         features = self._load_features()
-        features[name] = {
+        feature_data: dict = {
             "repos": lane.repos,
             "created_at": lane.created_at,
             "status": lane.status,
         }
+        if worktree_paths:
+            feature_data["worktree_paths"] = worktree_paths
+            feature_data["use_worktrees"] = True
+        features[name] = feature_data
         self._save_features(features)
 
         return lane
@@ -126,7 +174,11 @@ class FeatureCoordinator:
         return lanes
 
     def switch(self, name: str) -> dict[str, bool | str]:
-        """Switch to a feature lane (checkout its branch in all repos)."""
+        """Switch to a feature lane (checkout its branch in all repos).
+
+        If a branch is already checked out in a worktree, reports the
+        worktree path instead of trying to checkout (which would fail).
+        """
         features = self._load_features()
         if name in features:
             repos = features[name]["repos"]
@@ -140,7 +192,42 @@ class FeatureCoordinator:
         if not repos:
             raise ValueError(f"Feature '{name}' not found in any repo")
 
-        return checkout_all(self.workspace, name, repos)
+        # Check for worktree conflicts before checkout
+        results: dict[str, bool | str] = {}
+        repos_to_checkout = []
+
+        for repo_name in repos:
+            try:
+                state = self.workspace.get_repo(repo_name)
+            except KeyError:
+                results[repo_name] = "repo not found"
+                continue
+
+            if not git.branch_exists(state.abs_path, name):
+                results[repo_name] = f"branch '{name}' does not exist"
+                continue
+
+            # Already on this branch?
+            if git.current_branch(state.abs_path) == name:
+                results[repo_name] = True
+                continue
+
+            # Check if branch is checked out in another worktree
+            wt_path = git.worktree_for_branch(state.abs_path, name)
+            if wt_path:
+                results[repo_name] = f"already in worktree: {wt_path}"
+                continue
+
+            repos_to_checkout.append(repo_name)
+
+        # Checkout the ones that aren't in worktrees
+        if repos_to_checkout:
+            checkout_results = checkout_all(
+                self.workspace, name, repos_to_checkout
+            )
+            results.update(checkout_results)
+
+        return results
 
     def status(self, name: str) -> FeatureLane:
         """Get detailed status for a feature lane."""
@@ -224,6 +311,39 @@ class FeatureCoordinator:
             "issues": issues,
         }
 
+    def resolve_paths(self, name: str) -> dict[str, str]:
+        """Get the working directory path for each repo in a feature lane.
+
+        For each repo, returns the best path to work in:
+        - If the branch is checked out in a worktree → that worktree path
+        - If the branch is the current branch in the repo → the repo path
+        - Otherwise → the repo path (caller may need to checkout first)
+
+        This is used by IDE launchers to know which directories to open.
+        """
+        lane = self.status(name)
+        paths: dict[str, str] = {}
+
+        for repo_name in lane.repos:
+            try:
+                state = self.workspace.get_repo(repo_name)
+            except KeyError:
+                continue
+
+            repo_state = lane.repo_states.get(repo_name, {})
+
+            # Priority 1: worktree path
+            if repo_state.get("worktree_path"):
+                paths[repo_name] = repo_state["worktree_path"]
+            # Priority 2: repo is on this branch
+            elif state.current_branch == name:
+                paths[repo_name] = str(state.abs_path)
+            # Priority 3: branch exists but not checked out — use repo path
+            elif repo_state.get("has_branch"):
+                paths[repo_name] = str(state.abs_path)
+
+        return paths
+
     def _enrich_lane(self, lane: FeatureLane) -> None:
         """Populate repo_states with live Git data."""
         for repo_name in lane.repos:
@@ -253,7 +373,7 @@ class FeatureCoordinator:
                 files = git.changed_files(state.abs_path, lane.name, base)
                 dirty = state.is_dirty if state.current_branch == lane.name else False
 
-                lane.repo_states[repo_name] = {
+                repo_state: dict = {
                     "has_branch": True,
                     "ahead": ahead,
                     "behind": behind,
@@ -262,6 +382,13 @@ class FeatureCoordinator:
                     "changed_file_count": len(files),
                     "default_branch": base,
                 }
+
+                # Check if branch is checked out in a worktree
+                wt_path = git.worktree_for_branch(state.abs_path, lane.name)
+                if wt_path:
+                    repo_state["worktree_path"] = wt_path
+
+                lane.repo_states[repo_name] = repo_state
             except git.GitError as e:
                 lane.repo_states[repo_name] = {
                     "has_branch": True,

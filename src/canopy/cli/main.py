@@ -4,17 +4,31 @@ Canopy CLI — workspace-first development orchestrator.
 Commands:
     init                         Auto-detect repos, generate canopy.toml
     status                       Cross-repo workspace status
+    checkout <branch>            Checkout branch across repos
+    commit -m <msg>              Commit staged changes across repos
+    log                          Interleaved log across repos
+    sync                         Pull + rebase across all repos
     feature create <name>        Create a feature lane across repos
     feature list                 List active feature lanes
     feature switch <name>        Checkout feature branch in all repos
     feature diff <name>          Aggregate diff for a feature lane
     feature status <name>        Detailed feature lane status
-    sync                         Pull + rebase across all repos
+    branch list                  List branches across repos
+    branch delete <name>         Delete a branch across repos
+    branch rename <old> <new>    Rename a branch across repos
+    stash save                   Stash changes across repos
+    stash pop                    Pop stash across repos
+    stash list                   List stashes across repos
+    stash drop                   Drop stash across repos
+    worktree                     Show worktree info for repos
+    code <feature|.>             Open VS Code for feature or workspace
+    cursor <feature|.>           Open Cursor for feature or workspace
 """
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -131,9 +145,10 @@ def cmd_feature_create(args: argparse.Namespace) -> None:
 
     coordinator = FeatureCoordinator(workspace)
     repos = args.repos.split(",") if args.repos else None
+    use_worktrees = getattr(args, "worktree", False)
 
     try:
-        lane = coordinator.create(args.name, repos)
+        lane = coordinator.create(args.name, repos, use_worktrees=use_worktrees)
     except (ValueError, RuntimeError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -142,9 +157,19 @@ def cmd_feature_create(args: argparse.Namespace) -> None:
         _print_json(lane.to_dict())
         return
 
-    print(f"Created feature lane: {lane.name}")
-    print(f"  Repos: {', '.join(lane.repos)}")
-    print(f"\nSwitch to it with: canopy feature switch {lane.name}")
+    if use_worktrees:
+        print(f"Created feature lane with worktrees: {lane.name}")
+        # Show worktree paths
+        paths = coordinator.resolve_paths(lane.name)
+        for repo_name, path in paths.items():
+            print(f"  {repo_name}: {path}")
+        print(f"\nOpen in VS Code: canopy code {lane.name}")
+        print(f"Open in Cursor:  canopy cursor {lane.name}")
+    else:
+        print(f"Created feature lane: {lane.name}")
+        print(f"  Repos: {', '.join(lane.repos)}")
+        print(f"\nSwitch to it with: canopy feature switch {lane.name}")
+        print(f"Or create with worktrees: canopy feature create --worktree {lane.name}")
 
 
 def cmd_feature_list(args: argparse.Namespace) -> None:
@@ -208,9 +233,20 @@ def cmd_feature_switch(args: argparse.Namespace) -> None:
         _print_json({"feature": args.name, "results": results})
         return
 
+    has_worktrees = False
     for repo, result in results.items():
-        status = "ok" if result is True else f"failed: {result}"
-        print(f"  {repo}: {status}")
+        if result is True:
+            print(f"  {repo}: ok")
+        elif isinstance(result, str) and result.startswith("already in worktree:"):
+            print(f"  {repo}: {result}")
+            has_worktrees = True
+        else:
+            print(f"  {repo}: failed: {result}")
+
+    if has_worktrees:
+        print(f"\nSome branches live in worktrees. Open them with:")
+        print(f"  canopy code {args.name}")
+        print(f"  canopy cursor {args.name}")
 
 
 def cmd_feature_diff(args: argparse.Namespace) -> None:
@@ -342,6 +378,325 @@ def cmd_sync(args: argparse.Namespace) -> None:
         print(f"  {repo}: {icon}")
 
 
+def cmd_checkout(args: argparse.Namespace) -> None:
+    """Checkout a branch across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import checkout_all
+
+    repos = args.repos.split(",") if args.repos else None
+    results = checkout_all(workspace, args.branch, repos)
+
+    if args.json:
+        _print_json({"branch": args.branch, "results": results})
+        return
+
+    for repo, result in results.items():
+        status = "ok" if result is True else f"failed: {result}"
+        print(f"  {repo}: {status}")
+
+
+def cmd_commit(args: argparse.Namespace) -> None:
+    """Commit staged changes across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import commit_all
+
+    repos = args.repos.split(",") if args.repos else None
+    results = commit_all(workspace, args.message, repos)
+
+    if args.json:
+        _print_json({"message": args.message, "results": results})
+        return
+
+    for repo, result in results.items():
+        print(f"  {repo}: {result}")
+
+
+def cmd_log(args: argparse.Namespace) -> None:
+    """Interleaved log across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import log_all
+
+    entries = log_all(workspace, max_count=args.count, feature=args.feature)
+
+    if args.json:
+        _print_json(entries)
+        return
+
+    if not entries:
+        print("  No commits found.")
+        return
+
+    for entry in entries:
+        date_short = entry["date"][:10] if entry.get("date") else ""
+        print(f"  {entry.get('short_sha', '')} [{entry.get('repo', '')}] "
+              f"{entry.get('subject', '')}  ({entry.get('author', '')}, {date_short})")
+
+
+def cmd_branch_list(args: argparse.Namespace) -> None:
+    """List branches across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import branches_all
+
+    results = branches_all(workspace)
+
+    if args.json:
+        _print_json(results)
+        return
+
+    for repo_name, branches in results.items():
+        print(f"\n  {repo_name}")
+        for b in branches:
+            marker = "* " if b["is_current"] else "  "
+            print(f"    {marker}{b['name']}  {b['sha']}  {b['subject']}")
+
+    print()
+
+
+def cmd_branch_delete(args: argparse.Namespace) -> None:
+    """Delete a branch across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import delete_branch_all
+
+    repos = args.repos.split(",") if args.repos else None
+    results = delete_branch_all(workspace, args.name, force=args.force, repos=repos)
+
+    if args.json:
+        _print_json({"branch": args.name, "results": results})
+        return
+
+    for repo, result in results.items():
+        print(f"  {repo}: {result}")
+
+
+def cmd_branch_rename(args: argparse.Namespace) -> None:
+    """Rename a branch across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import rename_branch_all
+
+    repos = args.repos.split(",") if args.repos else None
+    results = rename_branch_all(workspace, args.old, args.new, repos)
+
+    if args.json:
+        _print_json({"old": args.old, "new": args.new, "results": results})
+        return
+
+    for repo, result in results.items():
+        print(f"  {repo}: {result}")
+
+
+def cmd_stash_save(args: argparse.Namespace) -> None:
+    """Stash uncommitted changes across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import stash_save_all
+
+    repos = args.repos.split(",") if args.repos else None
+    results = stash_save_all(workspace, message=args.message or "", repos=repos)
+
+    if args.json:
+        _print_json({"results": results})
+        return
+
+    for repo, result in results.items():
+        print(f"  {repo}: {result}")
+
+
+def cmd_stash_pop(args: argparse.Namespace) -> None:
+    """Pop stash across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import stash_pop_all
+
+    repos = args.repos.split(",") if args.repos else None
+    results = stash_pop_all(workspace, index=args.index, repos=repos)
+
+    if args.json:
+        _print_json({"results": results})
+        return
+
+    for repo, result in results.items():
+        print(f"  {repo}: {result}")
+
+
+def cmd_stash_list(args: argparse.Namespace) -> None:
+    """List stashes across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import stash_list_all
+
+    results = stash_list_all(workspace)
+
+    if args.json:
+        _print_json(results)
+        return
+
+    if not results:
+        print("  No stashes found.")
+        return
+
+    for repo_name, stashes in results.items():
+        print(f"\n  {repo_name}")
+        for s in stashes:
+            print(f"    {s['ref']}: {s['message']}")
+
+    print()
+
+
+def cmd_stash_drop(args: argparse.Namespace) -> None:
+    """Drop stash across repos."""
+    workspace = _load_workspace()
+    from ..git.multi import stash_drop_all
+
+    repos = args.repos.split(",") if args.repos else None
+    results = stash_drop_all(workspace, index=args.index, repos=repos)
+
+    if args.json:
+        _print_json({"results": results})
+        return
+
+    for repo, result in results.items():
+        print(f"  {repo}: {result}")
+
+
+def cmd_worktree_list(args: argparse.Namespace) -> None:
+    """Show worktree info for repos in the workspace."""
+    workspace = _load_workspace()
+    from ..git import repo as git
+
+    all_info = {}
+    for state in workspace.repos:
+        if not state.abs_path.exists():
+            continue
+        worktrees = git.worktree_list(state.abs_path)
+        is_wt = git.is_worktree(state.abs_path)
+        main_path = git.worktree_main_path(state.abs_path) if is_wt else None
+        all_info[state.config.name] = {
+            "is_linked_worktree": is_wt,
+            "main_working_tree": str(main_path) if main_path else None,
+            "worktrees": worktrees,
+        }
+
+    if args.json:
+        _print_json(all_info)
+        return
+
+    for repo_name, info in all_info.items():
+        print(f"\n  {repo_name}")
+        if info["is_linked_worktree"]:
+            print(f"    (linked worktree of {info['main_working_tree']})")
+        worktrees = info["worktrees"]
+        if len(worktrees) > 1:
+            print(f"    worktrees:")
+            for wt in worktrees:
+                branch = wt.get("branch", "(detached)")
+                print(f"      {wt['path']}  [{branch}]")
+        elif len(worktrees) == 1:
+            print(f"    single working tree")
+        else:
+            print(f"    no worktree info")
+
+    print()
+
+
+def _open_ide(ide_cmd: str, args: argparse.Namespace) -> None:
+    """Open an IDE with the right directories for a feature or workspace.
+
+    Supports two modes:
+    - `canopy code <feature>` — open repos/worktrees for a feature lane
+    - `canopy code .` — open all repos in the workspace
+    """
+    workspace = _load_workspace()
+
+    target = args.target
+
+    if target == ".":
+        # Open all repos in workspace
+        paths = [str(state.abs_path) for state in workspace.repos
+                 if state.abs_path.exists()]
+        label = workspace.config.name
+    else:
+        # Open repos for a feature lane
+        from ..features.coordinator import FeatureCoordinator
+        coordinator = FeatureCoordinator(workspace)
+        try:
+            paths_dict = coordinator.resolve_paths(target)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        if not paths_dict:
+            print(f"No paths found for feature '{target}'", file=sys.stderr)
+            sys.exit(1)
+
+        paths = list(paths_dict.values())
+        label = target
+
+    if not paths:
+        print("No directories to open.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        _print_json({"ide": ide_cmd, "target": target, "paths": paths})
+        return
+
+    # If multiple paths, generate a .code-workspace file for multi-root
+    if len(paths) > 1:
+        workspace_file = _generate_workspace_file(
+            workspace.config.root, label, paths
+        )
+        cmd = [ide_cmd, workspace_file]
+        print(f"  Opening {ide_cmd} with workspace: {workspace_file}")
+    else:
+        cmd = [ide_cmd, paths[0]]
+        print(f"  Opening {ide_cmd}: {paths[0]}")
+
+    try:
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        print(f"Error: '{ide_cmd}' not found. Is it installed and on PATH?",
+              file=sys.stderr)
+        print(f"  VS Code: install 'code' command from Command Palette",
+              file=sys.stderr)
+        print(f"  Cursor:  install 'cursor' command from Command Palette",
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def _generate_workspace_file(
+    root: Path,
+    label: str,
+    paths: list[str],
+) -> str:
+    """Generate a .code-workspace file for multi-root workspace.
+
+    Returns the path to the generated file.
+    """
+    canopy_dir = root / ".canopy"
+    canopy_dir.mkdir(parents=True, exist_ok=True)
+
+    workspace_data = {
+        "folders": [{"path": p} for p in paths],
+        "settings": {
+            "canopy.feature": label,
+        },
+    }
+
+    ws_file = canopy_dir / f"{label}.code-workspace"
+    ws_file.write_text(json.dumps(workspace_data, indent=2))
+    return str(ws_file)
+
+
+def cmd_code(args: argparse.Namespace) -> None:
+    """Open VS Code with feature or workspace directories."""
+    _open_ide("code", args)
+
+
+def cmd_cursor(args: argparse.Namespace) -> None:
+    """Open Cursor with feature or workspace directories."""
+    _open_ide("cursor", args)
+
+
 # ── Entry point ───────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -372,6 +727,8 @@ def main() -> None:
     fc = feature_sub.add_parser("create", help="Create a feature lane")
     fc.add_argument("name", help="Feature/branch name")
     fc.add_argument("--repos", default=None, help="Comma-separated repo names (default: all)")
+    fc.add_argument("--worktree", action="store_true",
+                    help="Create linked worktrees (each repo gets its own directory)")
     fc.add_argument("--json", action="store_true", help="Output as JSON")
 
     # feature list
@@ -398,6 +755,79 @@ def main() -> None:
     sync_p.add_argument("--strategy", choices=["rebase", "merge"], default="rebase")
     sync_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # checkout
+    co_p = subparsers.add_parser("checkout", help="Checkout branch across repos")
+    co_p.add_argument("branch", help="Branch to checkout")
+    co_p.add_argument("--repos", default=None, help="Comma-separated repo names")
+    co_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # commit
+    ci_p = subparsers.add_parser("commit", help="Commit staged changes across repos")
+    ci_p.add_argument("-m", "--message", required=True, help="Commit message")
+    ci_p.add_argument("--repos", default=None, help="Comma-separated repo names")
+    ci_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # log
+    log_p = subparsers.add_parser("log", help="Interleaved log across repos")
+    log_p.add_argument("-n", "--count", type=int, default=20, help="Max entries")
+    log_p.add_argument("--feature", default=None, help="Show log for feature branch")
+    log_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # branch (with subcommands)
+    branch_p = subparsers.add_parser("branch", help="Branch operations across repos")
+    branch_sub = branch_p.add_subparsers(dest="branch_command")
+
+    bl = branch_sub.add_parser("list", help="List branches")
+    bl.add_argument("--json", action="store_true", help="Output as JSON")
+
+    bd = branch_sub.add_parser("delete", help="Delete a branch")
+    bd.add_argument("name", help="Branch to delete")
+    bd.add_argument("--force", action="store_true", help="Force delete")
+    bd.add_argument("--repos", default=None, help="Comma-separated repo names")
+    bd.add_argument("--json", action="store_true", help="Output as JSON")
+
+    br = branch_sub.add_parser("rename", help="Rename a branch")
+    br.add_argument("old", help="Current branch name")
+    br.add_argument("new", help="New branch name")
+    br.add_argument("--repos", default=None, help="Comma-separated repo names")
+    br.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # stash (with subcommands)
+    stash_p = subparsers.add_parser("stash", help="Stash operations across repos")
+    stash_sub = stash_p.add_subparsers(dest="stash_command")
+
+    ss = stash_sub.add_parser("save", help="Stash changes")
+    ss.add_argument("-m", "--message", default="", help="Stash message")
+    ss.add_argument("--repos", default=None, help="Comma-separated repo names")
+    ss.add_argument("--json", action="store_true", help="Output as JSON")
+
+    sp = stash_sub.add_parser("pop", help="Pop stash")
+    sp.add_argument("--index", type=int, default=0, help="Stash index")
+    sp.add_argument("--repos", default=None, help="Comma-separated repo names")
+    sp.add_argument("--json", action="store_true", help="Output as JSON")
+
+    sl = stash_sub.add_parser("list", help="List stashes")
+    sl.add_argument("--json", action="store_true", help="Output as JSON")
+
+    sd = stash_sub.add_parser("drop", help="Drop stash")
+    sd.add_argument("--index", type=int, default=0, help="Stash index")
+    sd.add_argument("--repos", default=None, help="Comma-separated repo names")
+    sd.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # worktree
+    wt_p = subparsers.add_parser("worktree", help="Worktree info for repos")
+    wt_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # code (IDE launcher)
+    code_p = subparsers.add_parser("code", help="Open VS Code for feature or workspace")
+    code_p.add_argument("target", help="Feature name, or '.' for whole workspace")
+    code_p.add_argument("--json", action="store_true", help="Output paths as JSON")
+
+    # cursor (IDE launcher)
+    cursor_p = subparsers.add_parser("cursor", help="Open Cursor for feature or workspace")
+    cursor_p.add_argument("target", help="Feature name, or '.' for whole workspace")
+    cursor_p.add_argument("--json", action="store_true", help="Output paths as JSON")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -408,6 +838,12 @@ def main() -> None:
         "init": cmd_init,
         "status": cmd_status,
         "sync": cmd_sync,
+        "checkout": cmd_checkout,
+        "commit": cmd_commit,
+        "log": cmd_log,
+        "worktree": cmd_worktree_list,
+        "code": cmd_code,
+        "cursor": cmd_cursor,
     }
 
     if args.command == "feature":
@@ -421,10 +857,28 @@ def main() -> None:
             "diff": cmd_feature_diff,
             "status": cmd_feature_status,
         }
-        # Inherit --json from parent parser if set there
-        if hasattr(args, "json") and not getattr(args, "json", False):
-            pass  # already False
         feature_commands[args.feature_command](args)
+    elif args.command == "branch":
+        if not args.branch_command:
+            branch_p.print_help()
+            sys.exit(0)
+        branch_commands = {
+            "list": cmd_branch_list,
+            "delete": cmd_branch_delete,
+            "rename": cmd_branch_rename,
+        }
+        branch_commands[args.branch_command](args)
+    elif args.command == "stash":
+        if not args.stash_command:
+            stash_p.print_help()
+            sys.exit(0)
+        stash_commands = {
+            "save": cmd_stash_save,
+            "pop": cmd_stash_pop,
+            "list": cmd_stash_list,
+            "drop": cmd_stash_drop,
+        }
+        stash_commands[args.stash_command](args)
     elif args.command in commands:
         commands[args.command](args)
     else:

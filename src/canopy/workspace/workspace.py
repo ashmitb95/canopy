@@ -29,7 +29,7 @@ class RepoState:
     changed_files: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "name": self.config.name,
             "path": str(self.abs_path),
             "role": self.config.role,
@@ -45,6 +45,10 @@ class RepoState:
             "changed_files": self.changed_files,
             "changed_file_count": len(self.changed_files),
         }
+        if self.config.is_worktree:
+            d["is_worktree"] = True
+            d["worktree_main"] = self.config.worktree_main
+        return d
 
 
 class Workspace:

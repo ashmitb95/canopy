@@ -728,17 +728,38 @@ def cmd_fork(args: argparse.Namespace) -> None:
         return
 
     # Fork opens repos individually — each path becomes a tab
+    import platform
+    import shutil
+
+    use_fork_cli = shutil.which("fork") is not None
+    is_macos = platform.system() == "Darwin"
+
+    if not use_fork_cli and not is_macos:
+        print(
+            "Error: 'fork' CLI not found.\n"
+            "  Install it from Fork → Preferences → Integration → Install CLI Tool.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     for p in paths:
-        try:
+        if use_fork_cli:
             subprocess.Popen(
-                ["fork", "open", p],
+                ["fork", p],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            print(f"  opened: {p}")
-        except FileNotFoundError:
-            print(f"Error: 'fork' CLI not found. Install it from Fork → Menu Bar → Install CLI.", file=sys.stderr)
-            sys.exit(1)
+        else:
+            # macOS fallback: open -a Fork
+            result = subprocess.run(
+                ["open", "-a", "Fork", p],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                print(f"Error: could not open Fork. Is Fork.app installed?",
+                      file=sys.stderr)
+                sys.exit(1)
+        print(f"  opened: {p}")
 
 
 def cmd_stage(args: argparse.Namespace) -> None:

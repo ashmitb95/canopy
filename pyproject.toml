@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "canopy"
+version = "0.1.0"
+description = "Workspace-first development orchestrator"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+graph = [
+    "networkx>=3.0",
+    "tree-sitter>=0.21",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+[project.scripts]
+canopy = "canopy.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/canopy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

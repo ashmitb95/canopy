@@ -21,8 +21,11 @@ Commands:
     stash list                   List stashes across repos
     stash drop                   Drop stash across repos
     worktree                     Show worktree info for repos
+    stage <message>              Context-aware add + commit (from worktree dir)
     code <feature|.>             Open VS Code for feature or workspace
     cursor <feature|.>           Open Cursor for feature or workspace
+    fork <feature|.>             Open Fork.app for feature or workspace
+    context                      Show detected canopy context (debug)
 """
 from __future__ import annotations
 
@@ -697,6 +700,135 @@ def cmd_cursor(args: argparse.Namespace) -> None:
     _open_ide("cursor", args)
 
 
+def cmd_fork(args: argparse.Namespace) -> None:
+    """Open Fork.app with feature or workspace repos."""
+    workspace = _load_workspace()
+
+    target = args.target
+
+    if target == ".":
+        paths = [str(state.abs_path) for state in workspace.repos
+                 if state.abs_path.exists()]
+    else:
+        from ..features.coordinator import FeatureCoordinator
+        coordinator = FeatureCoordinator(workspace)
+        try:
+            paths_dict = coordinator.resolve_paths(target)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        paths = list(paths_dict.values())
+
+    if not paths:
+        print("No directories to open.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        _print_json({"ide": "fork", "target": target, "paths": paths})
+        return
+
+    # Fork opens repos individually — each path becomes a tab
+    for p in paths:
+        try:
+            subprocess.Popen(
+                ["fork", "open", p],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            print(f"  opened: {p}")
+        except FileNotFoundError:
+            print(f"Error: 'fork' CLI not found. Install it from Fork → Menu Bar → Install CLI.", file=sys.stderr)
+            sys.exit(1)
+
+
+def cmd_stage(args: argparse.Namespace) -> None:
+    """Context-aware stage + commit across repos in current feature.
+
+    When run from inside a feature worktree directory, stages all
+    changes and commits with the given message across every repo
+    worktree in that feature.
+
+    When run from inside a single repo worktree, stages + commits
+    just that repo.
+    """
+    from ..workspace.context import detect_context
+    from ..git import repo as git_repo
+
+    ctx = detect_context()
+
+    if ctx.context_type == "unknown":
+        print("Error: can't detect canopy context from current directory.", file=sys.stderr)
+        print("Run this from inside a feature worktree or a workspace repo.", file=sys.stderr)
+        sys.exit(1)
+
+    if not ctx.repo_paths:
+        print("Error: no repos found in current context.", file=sys.stderr)
+        sys.exit(1)
+
+    message = args.message
+    results: dict[str, str] = {}
+
+    for repo_path, repo_name in zip(ctx.repo_paths, ctx.repo_names):
+        # Check if there are any changes to stage
+        status = git_repo.status_porcelain(repo_path)
+        if not status:
+            results[repo_name] = "clean"
+            continue
+
+        # Stage everything
+        try:
+            # Stage all changes (new, modified, deleted)
+            git_repo._run(["add", "-A"], cwd=repo_path)
+
+            # Commit
+            sha = git_repo.commit(repo_path, message)
+            results[repo_name] = sha[:12]
+        except git_repo.GitError as e:
+            results[repo_name] = f"error: {e}"
+
+    if args.json:
+        _print_json({
+            "message": message,
+            "feature": ctx.feature,
+            "context_type": ctx.context_type,
+            "results": results,
+        })
+        return
+
+    if ctx.feature:
+        print(f"\n  Feature: {ctx.feature}")
+    print(f"  Message: {message}")
+    print()
+    for repo, result in results.items():
+        print(f"  {repo}: {result}")
+    print()
+
+
+def cmd_context(args: argparse.Namespace) -> None:
+    """Show detected canopy context for current directory (debug)."""
+    from ..workspace.context import detect_context
+
+    ctx = detect_context()
+
+    if args.json:
+        _print_json(ctx.to_dict())
+        return
+
+    print(f"\n  Context type: {ctx.context_type}")
+    print(f"  Working dir:  {ctx.cwd}")
+    if ctx.workspace_root:
+        print(f"  Workspace:    {ctx.workspace_root}")
+    if ctx.feature:
+        print(f"  Feature:      {ctx.feature}")
+    if ctx.branch:
+        print(f"  Branch:       {ctx.branch}")
+    if ctx.repo_names:
+        print(f"  Repos:        {', '.join(ctx.repo_names)}")
+        for name, path in zip(ctx.repo_names, ctx.repo_paths):
+            print(f"    {name}: {path}")
+    print()
+
+
 # ── Entry point ───────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -828,6 +960,20 @@ def main() -> None:
     cursor_p.add_argument("target", help="Feature name, or '.' for whole workspace")
     cursor_p.add_argument("--json", action="store_true", help="Output paths as JSON")
 
+    # fork (IDE launcher)
+    fork_p = subparsers.add_parser("fork", help="Open Fork.app for feature or workspace")
+    fork_p.add_argument("target", help="Feature name, or '.' for whole workspace")
+    fork_p.add_argument("--json", action="store_true", help="Output paths as JSON")
+
+    # stage (context-aware add + commit)
+    stage_p = subparsers.add_parser("stage", help="Stage + commit in current feature context")
+    stage_p.add_argument("message", help="Commit message")
+    stage_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # context (debug)
+    ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
+    ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -844,6 +990,9 @@ def main() -> None:
         "worktree": cmd_worktree_list,
         "code": cmd_code,
         "cursor": cmd_cursor,
+        "fork": cmd_fork,
+        "stage": cmd_stage,
+        "context": cmd_context,
     }
 
     if args.command == "feature":

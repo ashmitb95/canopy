@@ -39,6 +39,7 @@ class WorkspaceConfig:
     name: str
     repos: list[RepoConfig]
     root: Path              # absolute path to workspace root
+    max_worktrees: int = 0  # 0 = unlimited
 
 
 def load_config(path: Path | None = None) -> WorkspaceConfig:
@@ -111,7 +112,124 @@ def _parse_config(data: dict[str, Any], root: Path) -> WorkspaceConfig:
             default_branch=entry.get("default_branch", "main"),
         ))
 
-    return WorkspaceConfig(name=name, repos=repos, root=root)
+    max_worktrees = workspace.get("max_worktrees", 0)
+
+    return WorkspaceConfig(name=name, repos=repos, root=root, max_worktrees=max_worktrees)
+
+
+# ── Workspace settings (keys under [workspace]) ────────────────────────
+
+# Settings that can be read/written via `canopy config`
+WORKSPACE_SETTINGS = {
+    "name": str,
+    "max_worktrees": int,
+}
+
+
+def get_config_value(root: Path, key: str) -> Any:
+    """Read a single workspace setting from canopy.toml."""
+    if key not in WORKSPACE_SETTINGS:
+        raise ConfigError(
+            f"Unknown setting: '{key}'. "
+            f"Available: {', '.join(sorted(WORKSPACE_SETTINGS))}"
+        )
+    toml_path = root / "canopy.toml"
+    if not toml_path.exists():
+        raise ConfigNotFoundError(f"No canopy.toml at {root}")
+    with open(toml_path, "rb") as f:
+        data = tomllib.load(f)
+    return data.get("workspace", {}).get(key)
+
+
+def set_config_value(root: Path, key: str, value: str) -> Any:
+    """Write a single workspace setting to canopy.toml.
+
+    Handles type coercion based on WORKSPACE_SETTINGS.
+    Returns the coerced value.
+    """
+    if key not in WORKSPACE_SETTINGS:
+        raise ConfigError(
+            f"Unknown setting: '{key}'. "
+            f"Available: {', '.join(sorted(WORKSPACE_SETTINGS))}"
+        )
+
+    expected_type = WORKSPACE_SETTINGS[key]
+    try:
+        if expected_type == int:
+            coerced = int(value)
+        else:
+            coerced = value
+    except (ValueError, TypeError):
+        raise ConfigError(f"Invalid value for '{key}': expected {expected_type.__name__}")
+
+    toml_path = root / "canopy.toml"
+    if not toml_path.exists():
+        raise ConfigNotFoundError(f"No canopy.toml at {root}")
+
+    content = toml_path.read_text()
+
+    # Try to update existing key under [workspace]
+    import re
+    # Match: key = value (with optional quotes for strings)
+    pattern = rf'^({re.escape(key)}\s*=\s*).*$'
+
+    # Find lines within the [workspace] section
+    lines = content.split("\n")
+    in_workspace = False
+    updated = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "[workspace]":
+            in_workspace = True
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            # Hit a new section — if we haven't updated yet, insert before this
+            if in_workspace and not updated:
+                # Insert the key before this section
+                formatted = _format_toml_value(key, coerced)
+                lines.insert(i, formatted)
+                updated = True
+            in_workspace = False
+            continue
+        if in_workspace and re.match(pattern, stripped):
+            lines[i] = _format_toml_value(key, coerced)
+            updated = True
+            break
+
+    # If still not updated, append to [workspace] section
+    if not updated:
+        # Find the [workspace] line and append after it
+        for i, line in enumerate(lines):
+            if line.strip() == "[workspace]":
+                lines.insert(i + 1, _format_toml_value(key, coerced))
+                updated = True
+                break
+
+    if not updated:
+        raise ConfigError("Could not find [workspace] section in canopy.toml")
+
+    toml_path.write_text("\n".join(lines))
+    return coerced
+
+
+def get_all_config(root: Path) -> dict[str, Any]:
+    """Read all workspace settings from canopy.toml."""
+    toml_path = root / "canopy.toml"
+    if not toml_path.exists():
+        raise ConfigNotFoundError(f"No canopy.toml at {root}")
+    with open(toml_path, "rb") as f:
+        data = tomllib.load(f)
+    ws = data.get("workspace", {})
+    return {k: ws.get(k) for k in WORKSPACE_SETTINGS}
+
+
+def _format_toml_value(key: str, value: Any) -> str:
+    """Format a key = value line for TOML."""
+    if isinstance(value, int):
+        return f"{key} = {value}"
+    elif isinstance(value, str):
+        return f'{key} = "{value}"'
+    return f"{key} = {value}"
 
 
 def validate_config(config: WorkspaceConfig) -> list[str]:

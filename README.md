@@ -8,8 +8,8 @@
 
 <p align="center">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-159%20passing-brightgreen?style=flat-square">
-  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-26-purple?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-187%20passing-brightgreen?style=flat-square">
+  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-29-purple?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-gray?style=flat-square">
 </p>
 
@@ -34,7 +34,7 @@ Working on a feature that spans multiple repos means coordinating branches, stas
 </details>
 
 <details>
-<summary><strong><code>canopy worktree payment-flow ENG-123</code></strong> — create with Linear link</summary>
+<summary><strong><code>canopy worktree ENG-412-add-oauth2-login ENG-412</code></strong> — create with Linear link</summary>
 <br>
 <p align="center">
   <img src="docs/cli-worktree-create.svg" alt="canopy worktree create" width="600">
@@ -50,7 +50,7 @@ Working on a feature that spans multiple repos means coordinating branches, stas
 </details>
 
 <details>
-<summary><strong><code>canopy init --force</code></strong> — workspace init</summary>
+<summary><strong><code>canopy init</code></strong> — workspace init</summary>
 <br>
 <p align="center">
   <img src="docs/cli-init.svg" alt="canopy init" width="600">
@@ -58,10 +58,50 @@ Working on a feature that spans multiple repos means coordinating branches, stas
 </details>
 
 <details>
-<summary><strong><code>canopy stage "feat: add auth module"</code></strong> — context-aware commit</summary>
+<summary><strong><code>canopy stage "feat: add token refresh"</code></strong> — context-aware commit</summary>
 <br>
 <p align="center">
   <img src="docs/cli-stage.svg" alt="canopy stage" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy list</code></strong> — feature overview</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-list.svg" alt="canopy list" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy switch ENG-412</code></strong> — switch to feature lane</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-switch.svg" alt="canopy switch" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy review ENG-412</code></strong> — PR comments + pre-commit + staging</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-review.svg" alt="canopy review" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy done ENG-412</code></strong> — feature cleanup</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-done.svg" alt="canopy done" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy config</code></strong> — workspace settings</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-config.svg" alt="canopy config" width="600">
 </p>
 </details>
 
@@ -88,17 +128,18 @@ export PATH="$HOME/projects/canopy/.venv/bin:$PATH"
 
 ```bash
 cd ~/my-product/
-canopy init                             # scan for repos, generate canopy.toml
+canopy init                                        # scan for repos, generate canopy.toml
 
-canopy worktree auth-flow               # create worktrees in every repo
-canopy worktree payment-flow ENG-123    # ...or link to a Linear issue
+canopy worktree ENG-412-add-oauth2-login ENG-412   # create worktrees + link Linear issue
+canopy worktree ENG-501-stripe-integration ENG-501 # another feature lane
 
-canopy code auth-flow                   # open in VS Code (multi-root workspace)
-canopy cursor auth-flow                 # open in Cursor
-canopy fork auth-flow                   # open in Fork.app
+canopy code ENG-412                                # open in VS Code (alias resolves)
+canopy cursor ENG-412                              # open in Cursor
+canopy fork ENG-412                                # open in Fork.app
 
-cd .canopy/worktrees/auth-flow
-canopy stage "feat: add auth module"    # stage + commit across all repos
+canopy switch ENG-412                              # checkout feature across all repos
+canopy stage "feat: add token refresh"             # context-aware commit from any worktree
+canopy done ENG-412                                # clean up when done
 ```
 
 ## Workspace Layout
@@ -109,13 +150,13 @@ my-product/
 ├── api/                     ← main working tree (on main)
 ├── ui/                      ← main working tree (on main)
 └── .canopy/
-    ├── features.json        ← feature lane metadata + Linear issue links
+    ├── features.json        ← feature lane metadata + Linear issue links + aliases
     ├── mcps.json            ← external MCP server configs (Linear, etc.)
     └── worktrees/
-        ├── auth-flow/       ← isolated feature environment
-        │   ├── api/         ← linked worktree on auth-flow branch
-        │   └── ui/          ← linked worktree on auth-flow branch
-        └── payment-flow/
+        ├── ENG-412-add-oauth2-login/  ← isolated feature environment
+        │   ├── api/                   ← linked worktree on ENG-412-add-oauth2-login branch
+        │   └── ui/                    ← linked worktree on ENG-412-add-oauth2-login branch
+        └── ENG-501-stripe-integration/
             ├── api/
             └── ui/
 ```
@@ -145,23 +186,34 @@ my-product/
 |---|---|
 | `canopy feature create <name>` | Create branches (no worktrees) across repos |
 | `canopy feature list` | List all lanes with per-repo state |
-| `canopy feature switch <name>` | Checkout branch in each repo (worktree-aware — won't fail if branch is in a worktree) |
+| `canopy feature switch <name>` | Checkout branch in each repo — worktree-aware, alias-aware |
 | `canopy feature diff <name>` | Aggregate diff vs default branch + cross-repo type overlap detection |
 | `canopy feature status <name>` | Detailed per-repo state + merge readiness check |
+
+All feature commands accept aliases (Linear ID or unique prefix) in place of the full feature name.
 
 ### IDE Integration
 
 | Command | Description |
 |---|---|
-| `canopy code <feature\|.>` | Generate `.code-workspace` and open VS Code |
-| `canopy cursor <feature\|.>` | Generate `.code-workspace` and open Cursor |
-| `canopy fork <feature\|.>` | Open each repo in Fork.app (separate tabs) |
+| `canopy code <feature\|.>` | Generate `.code-workspace` and open VS Code (alias-aware) |
+| `canopy cursor <feature\|.>` | Generate `.code-workspace` and open Cursor (alias-aware) |
+| `canopy fork <feature\|.>` | Open each repo in Fork.app (alias-aware) |
 
 ### Review
 
 | Command | Description |
 |---|---|
-| `canopy review <feature>` | Review readiness — PR status, unresolved comments, pre-commit checks |
+| `canopy review <feature>` | Review readiness — PR status, unresolved comments, pre-commit checks (alias-aware) |
+
+### Workspace Management
+
+| Command | Description |
+|---|---|
+| `canopy list` | Compact feature overview — name, Linear link, per-repo branch/dirty/ahead-behind |
+| `canopy switch <name>` | Checkout feature across all repos — shows branch, dirty count, ahead/behind, PR links |
+| `canopy done <feature>` | Clean up completed feature — remove worktrees, delete branches, archive |
+| `canopy config [key] [value]` | Read/write workspace settings (e.g. `max_worktrees`) |
 
 ### Cross-Repo Git
 
@@ -174,11 +226,11 @@ my-product/
 | `canopy branch list\|delete\|rename` | Branch management across repos |
 | `canopy stash save\|pop\|list\|drop` | Stash lifecycle across repos |
 
-Every command supports `--json` for machine-readable output. Human output uses [rich](https://github.com/Textualize/rich) for colored text, spinners, and status indicators; `--json` bypasses all of it.
+Every command supports `--json` for machine-readable output.
 
 ## MCP Server
 
-Canopy is an MCP server. Every CLI operation is exposed as a tool (26 total) over stdio transport, so AI agents can operate your workspace programmatically.
+Canopy is an MCP server. Every CLI operation is exposed as a tool (29 total) over stdio transport, so AI agents can operate your workspace programmatically.
 
 ```bash
 canopy-mcp   # starts the server
@@ -197,7 +249,7 @@ Register in Claude Code, Cursor, or any MCP-compatible client:
 }
 ```
 
-**Tools exposed:** `workspace_status`, `workspace_context`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `checkout`, `commit`, `stage`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`, `review_status`, `review_comments`, `review_prep`.
+**Tools exposed:** `workspace_status`, `workspace_context`, `workspace_config`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `feature_done`, `checkout`, `commit`, `stage`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`, `review_status`, `review_comments`, `review_prep`.
 
 ## MCP Client
 
@@ -238,6 +290,20 @@ Currently powers:
 
 This is implemented in `workspace/context.py` and powers `canopy stage`, `canopy context`, and the MCP `stage` tool.
 
+## Alias Resolution
+
+Every command that accepts a feature name also accepts a short alias. You don't need to type the full `ENG-412-add-oauth2-login` — just `ENG-412` is enough.
+
+Resolution order:
+
+1. **Exact match** — if the name matches a feature exactly, use it.
+2. **Prefix match** — if exactly one feature starts with the given string, resolve to it. `ENG-412` resolves to `ENG-412-add-oauth2-login`. If multiple features share the prefix, canopy raises an error listing the ambiguous matches.
+3. **Linear issue match** — if the string matches the `linear_issue` field stored in `features.json` (case-insensitive), resolve to that feature.
+
+This works across all feature-aware commands: `switch`, `status`, `diff`, `done`, `review`, `code`, `cursor`, `fork`, and all corresponding MCP tools. When an alias resolves, the CLI shows the resolution (`ENG-412 → ENG-412-add-oauth2-login`) so you always know what happened.
+
+The recommended naming convention is `{LINEAR_ID}-{slugified-title}` (e.g., `ENG-412-add-oauth2-login`). When you create a feature with a Linear issue link, canopy stores the issue ID in `features.json`, making the short alias available immediately.
+
 ## Architecture
 
 ```
@@ -260,7 +326,7 @@ src/canopy/
 │   ├── github.py            # GitHub PR + review comments (via mcp/client.py)
 │   └── precommit.py         # detect and run pre-commit hooks (framework or git hooks)
 └── mcp/
-    ├── server.py            # MCP server — 26 tools, stdio transport
+    ├── server.py            # MCP server — 29 tools, stdio transport
     └── client.py            # MCP client — spawn + call external MCP servers
 ```
 
@@ -275,6 +341,7 @@ src/canopy/
 ```toml
 [workspace]
 name = "my-product"
+max_worktrees = 5          # optional: cap active worktrees (0 = unlimited)
 
 [[repos]]
 name = "api"
@@ -297,7 +364,7 @@ Generated by `canopy init`. Worktrees are detected automatically — canopy dist
 cd ~/projects/canopy
 source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/ -v             # 159 tests, ~2s, all use real temporary Git repos
+pytest tests/ -v             # 187 tests, ~2s, all use real temporary Git repos
 ```
 
 Tests create real Git repositories in temporary directories — no mocks. This catches actual git behavior differences across platforms.

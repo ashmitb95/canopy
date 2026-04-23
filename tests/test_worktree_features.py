@@ -110,11 +110,13 @@ class TestWorktreeSmartSwitch:
         coordinator.create("wt-switch-test", use_worktrees=True)
 
         # Try to switch — branches are in worktrees, can't checkout
-        results = coordinator.switch("wt-switch-test")
+        result = coordinator.switch("wt-switch-test")
 
-        for repo_name, result in results.items():
-            assert isinstance(result, str)
-            assert "already in worktree:" in result
+        for repo_name, info in result["repos"].items():
+            assert info["ok"] is True
+            assert info["worktree"] is True
+            assert info["branch"] == "wt-switch-test"
+            assert isinstance(info["path"], str)
 
     def test_switch_mixed_worktree_and_branch(self, workspace_dir):
         """Some repos in worktrees, some not — should handle both."""
@@ -130,9 +132,9 @@ class TestWorktreeSmartSwitch:
         git.worktree_remove(workspace_dir / "ui", wt_base / "ui")
 
         # Now api has a worktree, ui has just a branch
-        results = coordinator.switch("mixed-test")
-        assert "already in worktree:" in results["api"]
-        assert results["ui"] is True
+        result = coordinator.switch("mixed-test")
+        assert result["repos"]["api"]["worktree"] is True
+        assert result["repos"]["ui"]["ok"] is True
 
 
 # ── Worktree-smart enrich / status ──────────────────────────────────────

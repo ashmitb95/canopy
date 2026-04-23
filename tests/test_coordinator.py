@@ -72,10 +72,14 @@ def test_switch_feature(canopy_toml):
     coord = FeatureCoordinator(ws)
 
     coord.create("switch-test")
-    results = coord.switch("switch-test")
+    result = coord.switch("switch-test")
 
-    assert results["api"] is True
-    assert results["ui"] is True
+    assert result["feature"] == "switch-test"
+    assert result["repos"]["api"]["ok"] is True
+    assert result["repos"]["ui"]["ok"] is True
+    assert result["repos"]["api"]["branch"] == "switch-test"
+    assert isinstance(result["repos"]["api"]["path"], str)
+    assert isinstance(result["repos"]["api"]["dirty_count"], int)
 
     # Verify branches are checked out
     ws.refresh()
@@ -186,3 +190,71 @@ def test_feature_to_dict(canopy_toml):
     assert "repos" in d
     assert "repo_states" in d
     assert "status" in d
+
+
+# ── Alias resolution ──────────────────────────────────────────────────
+
+class TestResolveAlias:
+    def test_exact_match(self, canopy_toml):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("ENG-100-exact-match")
+        assert coord._resolve_name("ENG-100-exact-match") == "ENG-100-exact-match"
+
+    def test_prefix_match(self, canopy_toml):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("ENG-200-add-login")
+        assert coord._resolve_name("ENG-200") == "ENG-200-add-login"
+
+    def test_linear_issue_match(self, canopy_toml):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("ENG-300-payment", linear_issue="ENG-300", linear_title="Payment")
+        assert coord._resolve_name("ENG-300") == "ENG-300-payment"
+
+    def test_linear_issue_case_insensitive(self, canopy_toml):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("eng-400-auth", linear_issue="ENG-400", linear_title="Auth")
+        assert coord._resolve_name("eng-400") == "eng-400-auth"
+
+    def test_ambiguous_prefix_raises(self, canopy_toml):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("shared-prefix-a")
+        coord.create("shared-prefix-b")
+        with pytest.raises(ValueError, match="Ambiguous"):
+            coord._resolve_name("shared-prefix")
+
+    def test_no_match_returns_as_is(self, canopy_toml):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        assert coord._resolve_name("nonexistent") == "nonexistent"
+
+    def test_switch_with_alias(self, canopy_toml):
+        """End-to-end: canopy switch works with a Linear ID alias."""
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("ENG-500-refactor-api", linear_issue="ENG-500")
+        result = coord.switch("ENG-500")
+        assert result["feature"] == "ENG-500-refactor-api"
+        assert result["alias"] == "ENG-500"
+        assert result["repos"]["api"]["ok"] is True
+        assert result["repos"]["api"]["branch"] == "ENG-500-refactor-api"
+
+    def test_done_with_alias(self, workspace_with_feature, canopy_toml):
+        """End-to-end: canopy done works with a prefix alias."""
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("ENG-600-cleanup", use_worktrees=True)
+        result = coord.done("ENG-600", force=True)
+        assert result["feature"] == "ENG-600-cleanup"

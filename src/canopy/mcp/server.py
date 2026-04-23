@@ -148,16 +148,18 @@ def feature_switch(name: str) -> dict:
     """Switch to a feature lane across repos.
 
     Checks out the feature branch in each participating repo.
-    If a branch is already checked out in a worktree, reports the
-    worktree path instead of failing.
+    Returns rich context per repo: branch, local path, dirty count,
+    ahead/behind, and whether it's a worktree.
+
+    Supports alias resolution: pass a Linear issue ID (e.g. "ENG-412")
+    or a unique prefix to resolve to the full feature name.
 
     Args:
-        name: Feature lane name.
+        name: Feature lane name, Linear issue ID, or unique prefix.
     """
     ws = _get_workspace()
     coordinator = FeatureCoordinator(ws)
-    results = coordinator.switch(name)
-    return {"feature": name, "results": {k: str(v) for k, v in results.items()}}
+    return coordinator.switch(name)
 
 
 @mcp.tool()
@@ -454,18 +456,86 @@ def worktree_create(
         else:
             linear_issue = issue
 
-    lane = coordinator.create(
-        name,
-        repos=repos,
-        use_worktrees=True,
-        linear_issue=linear_issue,
-        linear_title=linear_title,
-        linear_url=linear_url,
-    )
+    from ..features.coordinator import WorktreeLimitError
+    try:
+        lane = coordinator.create(
+            name,
+            repos=repos,
+            use_worktrees=True,
+            linear_issue=linear_issue,
+            linear_title=linear_title,
+            linear_url=linear_url,
+        )
+    except WorktreeLimitError as e:
+        return {
+            "error": "worktree_limit_reached",
+            "message": str(e),
+            "current": e.current,
+            "limit": e.limit,
+            "stale_candidates": e.stale,
+        }
 
     result = lane.to_dict()
     result["worktree_paths"] = coordinator.resolve_paths(name)
     return result
+
+
+# ── Feature done ────────────────────────────────────────────────────────
+
+@mcp.tool()
+def feature_done(feature: str, force: bool = False) -> dict:
+    """Clean up a completed feature: remove worktrees, delete branches, archive.
+
+    Use this when a feature is merged or abandoned. It removes worktree
+    directories, deletes local branches, and marks the feature as 'done'
+    in features.json. Does not touch remotes or PRs.
+
+    Fails if worktrees have uncommitted changes unless force=True.
+
+    Args:
+        feature: Feature lane name.
+        force: If True, remove even with dirty worktrees.
+    """
+    ws = _get_workspace()
+    coordinator = FeatureCoordinator(ws)
+    return coordinator.done(feature, force=force)
+
+
+# ── Config tools ────────────────────────────────────────────────────────
+
+@mcp.tool()
+def workspace_config(
+    key: str | None = None,
+    value: str | None = None,
+) -> dict:
+    """Read or write workspace settings in canopy.toml.
+
+    With no arguments: returns all settings.
+    With key only: returns that setting's value.
+    With key and value: sets the value and returns it.
+
+    Available settings: name, max_worktrees.
+
+    Args:
+        key: Setting name (e.g. "max_worktrees").
+        value: New value to set. Omit to read.
+    """
+    from ..workspace.config import (
+        get_config_value, set_config_value, get_all_config,
+        WORKSPACE_SETTINGS,
+    )
+
+    root = _get_workspace().config.root
+
+    if key is None:
+        return get_all_config(root)
+
+    if value is None:
+        v = get_config_value(root, key)
+        return {"key": key, "value": v}
+
+    coerced = set_config_value(root, key, value)
+    return {"key": key, "value": coerced}
 
 
 # ── Review tools ────────────────────────────────────────────────────────

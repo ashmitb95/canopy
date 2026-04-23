@@ -20,6 +20,15 @@ from ..git.multi import create_branch_all, checkout_all, cross_repo_diff, find_t
 _WORKTREE_DIR = ".canopy/worktrees"
 
 
+class WorktreeLimitError(Exception):
+    """Worktree limit would be exceeded."""
+    def __init__(self, message: str, current: int = 0, limit: int = 0, stale: list[dict] | None = None):
+        super().__init__(message)
+        self.current = current
+        self.limit = limit
+        self.stale = stale or []
+
+
 @dataclass
 class FeatureLane:
     """Metadata and live state for a feature lane."""
@@ -58,6 +67,43 @@ class FeatureCoordinator:
         self.workspace = workspace
         self._store_path = workspace.config.root / ".canopy" / "features.json"
 
+    def _resolve_name(self, name: str) -> str:
+        """Resolve a short alias to a full feature name.
+
+        Supports:
+        - Exact match (returned as-is)
+        - Linear issue prefix (e.g. "ENG-412" → "ENG-412-add-oauth2-login")
+        - Unique prefix match (e.g. "ENG-412" matches if only one feature starts with it)
+
+        Raises ValueError if the alias is ambiguous (matches multiple features).
+        Returns the original name if no match is found (allows implicit features).
+        """
+        features = self._load_features()
+
+        # Exact match — fast path
+        if name in features:
+            return name
+
+        # Prefix match: check if name is a prefix of exactly one feature
+        matches = [f for f in features if f.startswith(name)]
+
+        # Also check linear_issue field for issue-ID-only lookups
+        if not matches:
+            matches = [
+                f for f, data in features.items()
+                if data.get("linear_issue", "").upper() == name.upper()
+            ]
+
+        if len(matches) == 1:
+            return matches[0]
+        elif len(matches) > 1:
+            raise ValueError(
+                f"Ambiguous alias '{name}' matches: {', '.join(sorted(matches))}"
+            )
+
+        # No match in features.json — return as-is for implicit feature detection
+        return name
+
     def create(
         self,
         name: str,
@@ -93,6 +139,21 @@ class FeatureCoordinator:
         worktree_paths: dict[str, str] = {}
 
         if use_worktrees:
+            # Check worktree limit
+            limit = self.workspace.config.max_worktrees
+            if limit > 0:
+                current_count = self._count_active_worktrees()
+                if current_count >= limit:
+                    stale = self._find_stale_worktrees()
+                    raise WorktreeLimitError(
+                        f"Worktree limit reached ({current_count}/{limit}). "
+                        f"Clean up with `canopy done <feature>` or raise the "
+                        f"limit with `canopy config max_worktrees {limit + 1}`.",
+                        current=current_count,
+                        limit=limit,
+                        stale=stale,
+                    )
+
             base = worktree_base or (self.workspace.config.root / _WORKTREE_DIR)
             feature_dir = base / name
             feature_dir.mkdir(parents=True, exist_ok=True)
@@ -196,12 +257,32 @@ class FeatureCoordinator:
 
         return lanes
 
-    def switch(self, name: str) -> dict[str, bool | str]:
+    def switch(self, name: str) -> dict:
         """Switch to a feature lane (checkout its branch in all repos).
 
         If a branch is already checked out in a worktree, reports the
         worktree path instead of trying to checkout (which would fail).
+
+        Returns:
+            {
+                "feature": str,           # resolved feature name
+                "alias": str,             # original name passed in (before resolution)
+                "repos": {
+                    "<repo>": {
+                        "ok": bool,
+                        "branch": str,
+                        "path": str,           # local dir (worktree or repo root)
+                        "worktree": bool,      # True if path is a worktree
+                        "dirty_count": int,
+                        "ahead": int,
+                        "behind": int,
+                        "error": str | None,
+                    }
+                }
+            }
         """
+        original_name = name
+        name = self._resolve_name(name)
         features = self._load_features()
         if name in features:
             repos = features[name]["repos"]
@@ -215,45 +296,109 @@ class FeatureCoordinator:
         if not repos:
             raise ValueError(f"Feature '{name}' not found in any repo")
 
-        # Check for worktree conflicts before checkout
-        results: dict[str, bool | str] = {}
+        # Phase 1: figure out what needs checkout vs what's in worktrees
+        checkout_results: dict[str, bool | str] = {}
         repos_to_checkout = []
 
         for repo_name in repos:
             try:
                 state = self.workspace.get_repo(repo_name)
             except KeyError:
-                results[repo_name] = "repo not found"
+                checkout_results[repo_name] = "repo not found"
                 continue
 
             if not git.branch_exists(state.abs_path, name):
-                results[repo_name] = f"branch '{name}' does not exist"
+                checkout_results[repo_name] = f"branch '{name}' does not exist"
                 continue
 
             # Already on this branch?
             if git.current_branch(state.abs_path) == name:
-                results[repo_name] = True
+                checkout_results[repo_name] = True
                 continue
 
             # Check if branch is checked out in another worktree
             wt_path = git.worktree_for_branch(state.abs_path, name)
             if wt_path:
-                results[repo_name] = f"already in worktree: {wt_path}"
+                checkout_results[repo_name] = f"already in worktree: {wt_path}"
                 continue
 
             repos_to_checkout.append(repo_name)
 
-        # Checkout the ones that aren't in worktrees
+        # Phase 2: checkout
         if repos_to_checkout:
-            checkout_results = checkout_all(
-                self.workspace, name, repos_to_checkout
-            )
-            results.update(checkout_results)
+            co = checkout_all(self.workspace, name, repos_to_checkout)
+            checkout_results.update(co)
 
-        return results
+        # Phase 3: enrich every repo with context
+        enriched: dict[str, dict] = {}
+        for repo_name in repos:
+            try:
+                state = self.workspace.get_repo(repo_name)
+            except KeyError:
+                enriched[repo_name] = {
+                    "ok": False, "error": "repo not found",
+                    "branch": name, "path": "", "worktree": False,
+                    "dirty_count": 0, "ahead": 0, "behind": 0,
+                }
+                continue
+
+            result = checkout_results.get(repo_name)
+            is_worktree = False
+            local_path = str(state.abs_path)
+
+            if isinstance(result, str) and "already in worktree:" in result:
+                wt_path = result.split("already in worktree:")[-1].strip()
+                local_path = wt_path
+                is_worktree = True
+                ok = True
+                error = None
+            elif result is True:
+                ok = True
+                error = None
+                # Check if there's a worktree path we should prefer
+                wt_path = git.worktree_for_branch(state.abs_path, name)
+                if wt_path:
+                    local_path = wt_path
+                    is_worktree = True
+            else:
+                ok = False
+                error = str(result) if result else "checkout failed"
+                enriched[repo_name] = {
+                    "ok": False, "error": error,
+                    "branch": name, "path": local_path, "worktree": False,
+                    "dirty_count": 0, "ahead": 0, "behind": 0,
+                }
+                continue
+
+            # Get live git state from the working directory
+            work_path = Path(local_path)
+            try:
+                dirty_count = git.dirty_file_count(work_path)
+                ahead, behind = git.divergence(work_path)
+            except Exception:
+                dirty_count = 0
+                ahead, behind = 0, 0
+
+            enriched[repo_name] = {
+                "ok": ok,
+                "error": error,
+                "branch": name,
+                "path": local_path,
+                "worktree": is_worktree,
+                "dirty_count": dirty_count,
+                "ahead": ahead,
+                "behind": behind,
+            }
+
+        return {
+            "feature": name,
+            "alias": original_name if original_name != name else None,
+            "repos": enriched,
+        }
 
     def status(self, name: str) -> FeatureLane:
         """Get detailed status for a feature lane."""
+        name = self._resolve_name(name)
         features = self._load_features()
         if name in features:
             data = features[name]
@@ -281,6 +426,7 @@ class FeatureCoordinator:
 
     def diff(self, name: str) -> dict:
         """Get aggregate diff for a feature lane across repos."""
+        name = self._resolve_name(name)
         diff_data = cross_repo_diff(self.workspace, name)
         overlaps = find_type_overlaps(self.workspace, name)
 
@@ -311,6 +457,7 @@ class FeatureCoordinator:
         - All branches are up to date with default
         - No type overlaps detected
         """
+        name = self._resolve_name(name)
         lane = self.status(name)
         issues = []
 
@@ -347,6 +494,7 @@ class FeatureCoordinator:
 
         This is used by IDE launchers to know which directories to open.
         """
+        name = self._resolve_name(name)
         lane = self.status(name)
         paths: dict[str, str] = {}
 
@@ -519,6 +667,128 @@ class FeatureCoordinator:
             "repos": repos_wt,
         }
 
+    def done(self, name: str, force: bool = False) -> dict:
+        """Clean up a feature lane: remove worktrees, delete branches, archive.
+
+        Steps:
+        1. Check if worktrees are dirty (fail unless --force)
+        2. Remove worktree directories
+        3. Delete local branches
+        4. Mark feature as 'done' in features.json
+
+        Args:
+            name: Feature lane name (or alias/Linear ID).
+            force: If True, remove even with dirty worktrees.
+
+        Returns:
+            {
+                "feature": str,
+                "worktrees_removed": {repo: path},
+                "branches_deleted": {repo: "ok" | error},
+                "archived": bool,
+            }
+        """
+        name = self._resolve_name(name)
+        features = self._load_features()
+        feature_data = features.get(name, {})
+        repos = feature_data.get("repos", [])
+
+        # If not in features.json, try to find it as an implicit feature
+        if not repos:
+            for state in self.workspace.repos:
+                if git.branch_exists(state.abs_path, name):
+                    repos.append(state.config.name)
+            if not repos:
+                raise ValueError(f"Feature '{name}' not found")
+
+        worktrees_removed: dict[str, str] = {}
+        branches_deleted: dict[str, str] = {}
+
+        # ── Step 1+2: Remove worktrees ──
+        wt_base = self.workspace.config.root / _WORKTREE_DIR / name
+        if wt_base.is_dir():
+            for repo_dir in sorted(wt_base.iterdir()):
+                if not repo_dir.is_dir():
+                    continue
+                repo_name = repo_dir.name
+
+                # Check dirty state
+                if not force:
+                    try:
+                        porcelain = git.status_porcelain(repo_dir)
+                        if porcelain:
+                            raise ValueError(
+                                f"Worktree '{name}/{repo_name}' has uncommitted changes. "
+                                f"Use --force to remove anyway."
+                            )
+                    except git.GitError:
+                        pass
+
+                # Find the main repo to remove worktree from
+                try:
+                    state = self.workspace.get_repo(repo_name)
+                    git.worktree_remove(state.abs_path, repo_dir, force=force)
+                    worktrees_removed[repo_name] = str(repo_dir)
+                except (KeyError, git.GitError) as e:
+                    # If git worktree remove fails, try to clean up manually
+                    import shutil
+                    try:
+                        shutil.rmtree(repo_dir)
+                        worktrees_removed[repo_name] = str(repo_dir)
+                    except OSError:
+                        worktrees_removed[repo_name] = f"error: {e}"
+
+            # Remove the feature directory if empty
+            try:
+                wt_base.rmdir()
+            except OSError:
+                pass
+
+        # ── Step 3: Delete local branches ──
+        for repo_name in repos:
+            try:
+                state = self.workspace.get_repo(repo_name)
+            except KeyError:
+                branches_deleted[repo_name] = "repo not found"
+                continue
+
+            if not git.branch_exists(state.abs_path, name):
+                branches_deleted[repo_name] = "no branch"
+                continue
+
+            # Don't delete if it's the current branch
+            current = git.current_branch(state.abs_path)
+            if current == name:
+                # Switch to default branch first
+                try:
+                    git.checkout(state.abs_path, state.config.default_branch)
+                except git.GitError as e:
+                    branches_deleted[repo_name] = f"could not switch away: {e}"
+                    continue
+
+            try:
+                git.delete_branch(state.abs_path, name, force=force)
+                branches_deleted[repo_name] = "ok"
+            except git.GitError as e:
+                branches_deleted[repo_name] = str(e)
+
+        # ── Step 4: Archive in features.json ──
+        archived = False
+        if name in features:
+            features[name]["status"] = "done"
+            # Remove worktree paths since they no longer exist
+            features[name].pop("worktree_paths", None)
+            features[name].pop("use_worktrees", None)
+            self._save_features(features)
+            archived = True
+
+        return {
+            "feature": name,
+            "worktrees_removed": worktrees_removed,
+            "branches_deleted": branches_deleted,
+            "archived": archived,
+        }
+
     def review_status(self, name: str) -> dict:
         """Check if PRs exist for a feature lane across repos.
 
@@ -550,6 +820,8 @@ class FeatureCoordinator:
             _extract_owner_repo,
             GitHubNotConfiguredError,
         )
+
+        name = self._resolve_name(name)
 
         if not is_github_configured(self.workspace.config.root):
             raise GitHubNotConfiguredError(
@@ -650,6 +922,7 @@ class FeatureCoordinator:
             GitHubNotConfiguredError,
         )
 
+        name = self._resolve_name(name)
         status = self.review_status(name)
         if not status["has_prs"]:
             raise PullRequestNotFoundError(
@@ -728,6 +1001,7 @@ class FeatureCoordinator:
         """
         from ..integrations.precommit import run_precommit
 
+        name = self._resolve_name(name)
         paths = self.resolve_paths(name)
         if not paths:
             raise ValueError(f"No working directories found for feature '{name}'")
@@ -776,6 +1050,73 @@ class FeatureCoordinator:
             "repos": results,
             "all_passed": all_passed,
         }
+
+    def _count_active_worktrees(self) -> int:
+        """Count active worktree feature directories on disk."""
+        wt_base = self.workspace.config.root / _WORKTREE_DIR
+        if not wt_base.is_dir():
+            return 0
+        return sum(1 for d in wt_base.iterdir() if d.is_dir())
+
+    def _find_stale_worktrees(self) -> list[dict]:
+        """Find worktrees that are candidates for cleanup.
+
+        A worktree is 'stale' if:
+        - Its feature is marked as done/merged/abandoned in features.json
+        - All its repos are clean (no dirty files)
+        - Its branches have been merged into default
+
+        Returns a list of {name, reason} dicts, most stale first.
+        """
+        wt_base = self.workspace.config.root / _WORKTREE_DIR
+        if not wt_base.is_dir():
+            return []
+
+        features = self._load_features()
+        stale = []
+
+        for feat_dir in sorted(wt_base.iterdir()):
+            if not feat_dir.is_dir():
+                continue
+            feat_name = feat_dir.name
+            meta = features.get(feat_name, {})
+
+            # Check if archived
+            status = meta.get("status", "active")
+            if status in ("done", "merged", "abandoned"):
+                stale.append({"name": feat_name, "reason": f"status: {status}"})
+                continue
+
+            # Check if all repos are clean and merged
+            all_clean = True
+            all_merged = True
+            for repo_dir in feat_dir.iterdir():
+                if not repo_dir.is_dir():
+                    continue
+                try:
+                    porcelain = git.status_porcelain(repo_dir)
+                    if porcelain:
+                        all_clean = False
+                except git.GitError:
+                    pass
+
+                try:
+                    repo_name = repo_dir.name
+                    state = self.workspace.get_repo(repo_name)
+                    ahead, _ = git.divergence(
+                        repo_dir, feat_name, state.config.default_branch,
+                    )
+                    if ahead > 0:
+                        all_merged = False
+                except (KeyError, git.GitError):
+                    pass
+
+            if all_clean and all_merged:
+                stale.append({"name": feat_name, "reason": "clean and merged"})
+            elif all_clean:
+                stale.append({"name": feat_name, "reason": "clean (not yet merged)"})
+
+        return stale
 
     def _load_features(self) -> dict:
         """Load features.json, returning empty dict if not found."""

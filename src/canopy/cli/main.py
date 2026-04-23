@@ -703,8 +703,26 @@ def cmd_worktree_create(args: argparse.Namespace) -> None:
                 linear_title=linear_title,
                 linear_url=linear_url,
             )
-    except (ValueError, RuntimeError) as e:
+    except (RuntimeError,) as e:
         print_error(str(e))
+        sys.exit(1)
+    except ValueError as e:
+        # Check if this is a worktree limit error
+        from ..features.coordinator import WorktreeLimitError
+        if isinstance(e, WorktreeLimitError):
+            print_error(f"Worktree limit reached ({e.current}/{e.limit})")
+            if e.stale:
+                console.print()
+                console.print(f"  [muted]Suggested cleanup:[/]")
+                for s in e.stale:
+                    console.print(f"    [feature]{s['name']}[/]  [muted]{s['reason']}[/]")
+                console.print()
+                console.print(f"  [muted]Run:[/] [info]canopy done <feature>[/]")
+            else:
+                console.print(f"  [muted]Run:[/] [info]canopy done <feature>[/] to free a slot")
+                console.print(f"  [muted]Or:[/]  [info]canopy config max_worktrees {e.limit + 1}[/]")
+        else:
+            print_error(str(e))
         sys.exit(1)
 
     result = lane.to_dict()
@@ -1233,40 +1251,39 @@ def cmd_list(args: argparse.Namespace) -> None:
             title_bit = f" {lane.linear_title}" if lane.linear_title else ""
             linear_str = f"  [linear]{SYM_LINK} {lane.linear_issue}{title_bit}[/]"
 
-        # Compact repo status
-        repo_parts = []
+        console.print(f"  [feature]{lane.name}[/]{linear_str}")
+
+        # Per-repo: branch context line
         for repo_name, state in lane.repo_states.items():
             if "error" in state or not state.get("has_branch"):
-                repo_parts.append(f"[muted]{repo_name}[/]")
+                console.print(f"    [muted]{repo_name}[/]  [muted]no branch[/]")
                 continue
-            indicators = []
-            if state.get("dirty"):
-                indicators.append("[dirty]*[/]")
+
+            parts = [f"    [repo]{repo_name}[/]"]
+            # Dirty count
+            dirty_count = state.get("changed_file_count", 0)
+            if state.get("dirty") and dirty_count:
+                parts.append(f"[dirty]{dirty_count} dirty[/]")
+            elif state.get("dirty"):
+                parts.append("[dirty]*[/]")
+            # Ahead/behind
             if state.get("ahead"):
-                indicators.append(f"[ahead]↑{state['ahead']}[/]")
+                parts.append(f"[ahead]↑{state['ahead']}[/]")
             if state.get("behind"):
-                indicators.append(f"[behind]↓{state['behind']}[/]")
-            suffix = " ".join(indicators)
-            repo_parts.append(f"[repo]{repo_name}[/]{' ' + suffix if suffix else ''}")
+                parts.append(f"[behind]↓{state['behind']}[/]")
+            # Worktree path
+            wt_path = state.get("worktree_path")
+            if wt_path:
+                parts.append(f"[path]{wt_path}[/]")
 
-        repos_str = "  ".join(repo_parts)
-
-        # Check for worktree paths
-        has_worktree = any(
-            s.get("worktree_path") for s in lane.repo_states.values()
-            if isinstance(s, dict)
-        )
-        wt_marker = "  [muted]wt[/]" if has_worktree else ""
-
-        console.print(f"  [feature]{lane.name}[/]{linear_str}{wt_marker}")
-        console.print(f"    {repos_str}")
+            console.print("  ".join(parts))
 
     console.print()
 
 
 def cmd_switch(args: argparse.Namespace) -> None:
     """Switch to a feature lane — checkout branches across repos."""
-    from .ui import console, print_success, print_error, print_warning, SYM_ARROW, SYM_CHECK
+    from .ui import console, print_success, print_error, print_warning, SYM_ARROW, SYM_CHECK, SYM_BRANCH, SYM_LINK
 
     workspace = _load_workspace()
     from ..features.coordinator import FeatureCoordinator
@@ -1275,33 +1292,191 @@ def cmd_switch(args: argparse.Namespace) -> None:
     name = args.name
 
     try:
-        results = coordinator.switch(name)
+        result = coordinator.switch(name)
     except ValueError as e:
         print_error(str(e))
         sys.exit(1)
 
     if args.json:
-        _print_json({"feature": name, "results": {k: str(v) for k, v in results.items()}})
+        _print_json(result)
         return
 
-    console.print()
-    worktree_paths = []
-    for repo, result in results.items():
-        if result is True:
-            print_success(f"[repo]{repo}[/]  [muted]{SYM_ARROW} {name}[/]")
-        elif isinstance(result, str) and "already in worktree:" in result:
-            wt_path = result.split("already in worktree:")[-1].strip()
-            worktree_paths.append((repo, wt_path))
-            console.print(f"  [success]{SYM_CHECK}[/] [repo]{repo}[/]  [muted]{SYM_ARROW}[/] [path]{wt_path}[/]")
-        else:
-            print_warning(f"[repo]{repo}[/]  {result}")
+    feature = result["feature"]
+    alias = result.get("alias")
 
-    if worktree_paths:
+    # Try to get PR info (best-effort, don't fail if GitHub isn't configured)
+    pr_map: dict[str, dict] = {}
+    try:
+        review = coordinator.review_status(feature)
+        for repo_name, info in review.get("repos", {}).items():
+            pr = info.get("pr")
+            if pr:
+                pr_map[repo_name] = pr
+    except Exception:
+        pass  # GitHub not configured or no PRs — that's fine
+
+    console.print()
+
+    # Show alias resolution
+    if alias:
+        console.print(f"  [muted]{alias} {SYM_ARROW}[/] [feature]{feature}[/]")
+        console.print()
+
+    has_worktree = False
+    for repo_name, info in result["repos"].items():
+        if not info["ok"]:
+            print_warning(f"[repo]{repo_name}[/]  {info.get('error', 'failed')}")
+            continue
+
+        # Line 1: repo + path
+        path = info["path"]
+        is_wt = info.get("worktree", False)
+        if is_wt:
+            has_worktree = True
+        print_success(f"[repo]{repo_name}[/]  [muted]{SYM_ARROW}[/] [path]{path}[/]")
+
+        # Line 2: branch + dirty + ahead/behind + PR
+        parts = [f"    [muted]{SYM_BRANCH}[/] [branch]{info['branch']}[/]"]
+        dirty = info.get("dirty_count", 0)
+        if dirty:
+            parts.append(f"[dirty]{dirty} dirty[/]")
+        ahead = info.get("ahead", 0)
+        behind = info.get("behind", 0)
+        if ahead:
+            parts.append(f"[ahead]↑{ahead}[/]")
+        if behind:
+            parts.append(f"[behind]↓{behind}[/]")
+        pr = pr_map.get(repo_name)
+        if pr:
+            parts.append(f"[linear]{SYM_LINK} #{pr.get('number', '')}[/]")
+        console.print("  ".join(parts))
+
+    if has_worktree:
         console.print()
         console.print(f"  [muted]Open in IDE:[/]")
-        console.print(f"    [info]canopy code {name}[/]")
-        console.print(f"    [info]canopy cursor {name}[/]")
+        console.print(f"    [info]canopy code {feature}[/]")
+        console.print(f"    [info]canopy cursor {feature}[/]")
     console.print()
+
+
+def cmd_done(args: argparse.Namespace) -> None:
+    """Clean up a completed feature — remove worktrees, branches, archive."""
+    from .ui import console, spinner, print_success, print_error, print_warning, separator, SYM_CHECK, SYM_CROSS, SYM_ARROW
+
+    workspace = _load_workspace()
+    from ..features.coordinator import FeatureCoordinator
+
+    coordinator = FeatureCoordinator(workspace)
+    name = args.name
+
+    # Resolve alias for display
+    resolved = coordinator._resolve_name(name)
+
+    try:
+        with spinner(f"Cleaning up {resolved}..."):
+            result = coordinator.done(name, force=args.force)
+    except ValueError as e:
+        print_error(str(e))
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    feature = result["feature"]
+    console.print()
+
+    # Show alias resolution
+    if name != feature:
+        console.print(f"  [muted]{name} {SYM_ARROW}[/] [feature]{feature}[/]")
+        console.print()
+
+    console.print(f"  [header]Done: {feature}[/]")
+
+    wt = result.get("worktrees_removed", {})
+    if wt:
+        separator()
+        console.print(f"  [muted]Worktrees removed:[/]")
+        for repo, path in wt.items():
+            if "error" in str(path):
+                console.print(f"    [repo]{repo}[/]  [error]{path}[/]")
+            else:
+                print_success(f"[repo]{repo}[/]  [muted]{path}[/]")
+
+    br = result.get("branches_deleted", {})
+    if br:
+        separator()
+        console.print(f"  [muted]Branches deleted:[/]")
+        for repo, status in br.items():
+            if status == "ok":
+                print_success(f"[repo]{repo}[/]  [branch]{feature}[/]  [muted]deleted[/]")
+            elif status == "no branch":
+                console.print(f"    [repo]{repo}[/]  [muted]no branch[/]")
+            else:
+                print_warning(f"[repo]{repo}[/]  {status}")
+
+    if result.get("archived"):
+        separator()
+        print_success("Archived in features.json")
+
+    console.print()
+
+
+def cmd_config(args: argparse.Namespace) -> None:
+    """Read or write workspace settings in canopy.toml."""
+    from .ui import console, print_success, print_error
+    from ..workspace.config import (
+        get_config_value, set_config_value, get_all_config,
+        ConfigNotFoundError, ConfigError, WORKSPACE_SETTINGS,
+    )
+
+    # Find workspace root
+    from ..workspace.config import _find_config
+    try:
+        toml_path = _find_config()
+        root = toml_path.parent
+    except ConfigNotFoundError as e:
+        print_error(str(e))
+        sys.exit(1)
+
+    key = args.key
+    value = args.value
+
+    try:
+        if key is None:
+            # Show all settings
+            settings = get_all_config(root)
+            if args.json:
+                _print_json(settings)
+                return
+            console.print()
+            for k, v in settings.items():
+                display = v if v is not None else "[muted]not set[/]"
+                console.print(f"  [info]{k}[/] = {display}")
+            console.print()
+
+        elif value is None:
+            # Get a single setting
+            v = get_config_value(root, key)
+            if args.json:
+                _print_json({"key": key, "value": v})
+                return
+            if v is not None:
+                console.print(f"  {v}")
+            else:
+                console.print(f"  [muted]not set[/]")
+
+        else:
+            # Set a value
+            coerced = set_config_value(root, key, value)
+            if args.json:
+                _print_json({"key": key, "value": coerced})
+                return
+            print_success(f"[info]{key}[/] = {coerced}")
+
+    except (ConfigNotFoundError, ConfigError) as e:
+        print_error(str(e))
+        sys.exit(1)
 
 
 def cmd_context(args: argparse.Namespace) -> None:
@@ -1510,6 +1685,24 @@ def main() -> None:
     )
     review_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # done
+    done_p = subparsers.add_parser(
+        "done",
+        help="Clean up a feature — remove worktrees, branches, archive",
+    )
+    done_p.add_argument("name", help="Feature lane name")
+    done_p.add_argument("--force", action="store_true", help="Remove even with dirty worktrees")
+    done_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # config
+    config_p = subparsers.add_parser(
+        "config",
+        help="Read or write workspace settings (canopy config [key] [value])",
+    )
+    config_p.add_argument("key", nargs="?", default=None, help="Setting name")
+    config_p.add_argument("value", nargs="?", default=None, help="New value")
+    config_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # context (debug)
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
@@ -1535,6 +1728,8 @@ def main() -> None:
         "list": cmd_list,
         "switch": cmd_switch,
         "review": cmd_review,
+        "done": cmd_done,
+        "config": cmd_config,
         "context": cmd_context,
     }
 

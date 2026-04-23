@@ -21,6 +21,8 @@ Commands:
     stash list                   List stashes across repos
     stash drop                   Drop stash across repos
     worktree                     Show worktree info for repos
+    list                         List all feature lanes
+    switch <name>                Switch to a feature lane
     stage <message>              Context-aware add + commit (from worktree dir)
     review <feature>             Fetch PR comments + run pre-commit + stage
     code <feature|.>             Open VS Code for feature or workspace
@@ -1203,6 +1205,105 @@ def cmd_review(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_list(args: argparse.Namespace) -> None:
+    """List all feature lanes — quick overview of what exists."""
+    from .ui import console, separator, SYM_BRANCH, SYM_LINK, SYM_ARROW
+
+    workspace = _load_workspace()
+    from ..features.coordinator import FeatureCoordinator
+
+    coordinator = FeatureCoordinator(workspace)
+    lanes = coordinator.list_active()
+
+    if args.json:
+        _print_json([lane.to_dict() for lane in lanes])
+        return
+
+    if not lanes:
+        console.print()
+        console.print("  [muted]No features.[/] Create one with [info]canopy worktree <name>[/]")
+        console.print()
+        return
+
+    console.print()
+    for lane in lanes:
+        # Feature name + Linear link on one line
+        linear_str = ""
+        if lane.linear_issue:
+            title_bit = f" {lane.linear_title}" if lane.linear_title else ""
+            linear_str = f"  [linear]{SYM_LINK} {lane.linear_issue}{title_bit}[/]"
+
+        # Compact repo status
+        repo_parts = []
+        for repo_name, state in lane.repo_states.items():
+            if "error" in state or not state.get("has_branch"):
+                repo_parts.append(f"[muted]{repo_name}[/]")
+                continue
+            indicators = []
+            if state.get("dirty"):
+                indicators.append("[dirty]*[/]")
+            if state.get("ahead"):
+                indicators.append(f"[ahead]↑{state['ahead']}[/]")
+            if state.get("behind"):
+                indicators.append(f"[behind]↓{state['behind']}[/]")
+            suffix = " ".join(indicators)
+            repo_parts.append(f"[repo]{repo_name}[/]{' ' + suffix if suffix else ''}")
+
+        repos_str = "  ".join(repo_parts)
+
+        # Check for worktree paths
+        has_worktree = any(
+            s.get("worktree_path") for s in lane.repo_states.values()
+            if isinstance(s, dict)
+        )
+        wt_marker = "  [muted]wt[/]" if has_worktree else ""
+
+        console.print(f"  [feature]{lane.name}[/]{linear_str}{wt_marker}")
+        console.print(f"    {repos_str}")
+
+    console.print()
+
+
+def cmd_switch(args: argparse.Namespace) -> None:
+    """Switch to a feature lane — checkout branches across repos."""
+    from .ui import console, print_success, print_error, print_warning, SYM_ARROW, SYM_CHECK
+
+    workspace = _load_workspace()
+    from ..features.coordinator import FeatureCoordinator
+
+    coordinator = FeatureCoordinator(workspace)
+    name = args.name
+
+    try:
+        results = coordinator.switch(name)
+    except ValueError as e:
+        print_error(str(e))
+        sys.exit(1)
+
+    if args.json:
+        _print_json({"feature": name, "results": {k: str(v) for k, v in results.items()}})
+        return
+
+    console.print()
+    worktree_paths = []
+    for repo, result in results.items():
+        if result is True:
+            print_success(f"[repo]{repo}[/]  [muted]{SYM_ARROW} {name}[/]")
+        elif isinstance(result, str) and "already in worktree:" in result:
+            wt_path = result.split("already in worktree:")[-1].strip()
+            worktree_paths.append((repo, wt_path))
+            console.print(f"  [success]{SYM_CHECK}[/] [repo]{repo}[/]  [muted]{SYM_ARROW}[/] [path]{wt_path}[/]")
+        else:
+            print_warning(f"[repo]{repo}[/]  {result}")
+
+    if worktree_paths:
+        console.print()
+        console.print(f"  [muted]Open in IDE:[/]")
+        console.print(f"    [info]canopy code {name}[/]")
+        console.print(f"    [info]canopy cursor {name}[/]")
+    console.print()
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     """Show detected canopy context for current directory (debug)."""
     from ..workspace.context import detect_context
@@ -1384,6 +1485,15 @@ def main() -> None:
     stage_p.add_argument("message", help="Commit message")
     stage_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # list (top-level shortcut)
+    list_p = subparsers.add_parser("list", help="List all feature lanes")
+    list_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # switch (top-level shortcut)
+    switch_p = subparsers.add_parser("switch", help="Switch to a feature lane")
+    switch_p.add_argument("name", help="Feature lane name")
+    switch_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # review
     review_p = subparsers.add_parser(
         "review",
@@ -1422,6 +1532,8 @@ def main() -> None:
         "cursor": cmd_cursor,
         "fork": cmd_fork,
         "stage": cmd_stage,
+        "list": cmd_list,
+        "switch": cmd_switch,
         "review": cmd_review,
         "context": cmd_context,
     }

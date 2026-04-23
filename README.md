@@ -40,11 +40,15 @@ Working on a feature that spans multiple repos means coordinating branches, swit
 
 ## Install
 
+Requires Python 3.10+.
+
 ```bash
-pipx install canopy
+pipx install git+https://github.com/ashmitb95/canopy.git
 ```
 
-Or from source:
+If you don't have pipx: `brew install pipx && pipx ensurepath`.
+
+Or from source, for contributors:
 
 ```bash
 git clone https://github.com/ashmitb95/canopy.git ~/projects/canopy

@@ -1,144 +1,181 @@
-# Canopy
+<p align="center">
+  <img src="docs/canopy-banner.svg" alt="Canopy" width="600">
+</p>
 
-A worktree-first workspace manager that makes multi-repo feature development feel like a monorepo, without actually being one.
+<p align="center">
+  <strong>Multi-repo worktree manager with MCP server for AI agents</strong>
+</p>
 
-## The Problem
+<p align="center">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-130%20passing-brightgreen?style=flat-square">
+  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-23-purple?style=flat-square">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-gray?style=flat-square">
+</p>
 
-Modern products span multiple repos — a React frontend, Python API, shared types, infrastructure. Working on a single feature means coordinating branches, stashing, switching, and committing across all of them. Git worktrees solve the context-switching problem perfectly, but nobody uses them because the UX is terrible.
+---
 
-## What Canopy Does
+Canopy coordinates Git worktrees across multiple repositories. It creates isolated working directories for each feature, opens them in your IDE, commits across repos atomically, and exposes every operation as both a CLI command and an MCP tool — so AI agents can operate your workspace through the same interface you use.
 
-Canopy manages **worktrees as first-class project units**. Create a feature, get isolated directories for every repo, open them in your IDE with one command, commit across all of them at once. Your main branches stay untouched — no stashing, no context switching.
+No proprietary abstractions. Feature lanes map to real Git branches and real Git worktrees.
 
+## Why
+
+Working on a feature that spans multiple repos means coordinating branches, stashing, switching, and committing across all of them. Git worktrees solve the context-switching problem, but the UX for managing them across multiple repos doesn't exist. Canopy provides it: one command to create worktrees in every repo, one command to open them in your IDE, one command to commit across all of them.
+
+## How It Looks
+
+<details open>
+<summary><strong><code>canopy worktree</code></strong> — live worktree dashboard</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-worktree.svg" alt="canopy worktree" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy worktree payment-flow ENG-123</code></strong> — create with Linear link</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-worktree-create.svg" alt="canopy worktree create" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy status</code></strong> — cross-repo status</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-status.svg" alt="canopy status" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy init --force</code></strong> — workspace init</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-init.svg" alt="canopy init" width="600">
+</p>
+</details>
+
+<details>
+<summary><strong><code>canopy stage "feat: add auth module"</code></strong> — context-aware commit</summary>
+<br>
+<p align="center">
+  <img src="docs/cli-stage.svg" alt="canopy stage" width="600">
+</p>
+</details>
+
+## Installation
+
+```bash
+git clone https://github.com/ashmitb/canopy.git
+cd canopy
+
+python3 -m venv .venv
+source .venv/bin/activate   # On Windows: .venv\Scripts\activate
+
+pip install -e .
 ```
-my-product/
-├── canopy.toml              ← workspace definition
-├── api/                     ← Python backend (on main)
-├── ui/                      ← React frontend (on main)
-└── .canopy/
-    ├── features.json        ← feature lane metadata
-    └── worktrees/
-        ├── auth-flow/       ← feature worktrees
-        │   ├── api/         ← api on auth-flow branch
-        │   └── ui/          ← ui on auth-flow branch
-        └── payment-flow/    ← another feature, in parallel
-            ├── api/
-            └── ui/
+
+To make `canopy` available globally without activating the venv:
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+export PATH="$HOME/projects/canopy/.venv/bin:$PATH"
 ```
 
 ## Quick Start
 
 ```bash
-pip install -e .
-
-# Initialize a workspace (auto-detects repos)
 cd ~/my-product/
-canopy init
+canopy init                             # scan for repos, generate canopy.toml
 
-# Create a feature with worktrees — each repo gets its own directory
-canopy worktree auth-flow
+canopy worktree auth-flow               # create worktrees in every repo
+canopy worktree payment-flow ENG-123    # ...or link to a Linear issue
 
-# Or link it to a Linear issue (fetches title via MCP)
-canopy worktree payment-flow ENG-123
+canopy code auth-flow                   # open in VS Code (multi-root workspace)
+canopy cursor auth-flow                 # open in Cursor
+canopy fork auth-flow                   # open in Fork.app
 
-# Open in your IDE
-canopy code auth-flow        # VS Code (multi-root workspace)
-canopy cursor auth-flow      # Cursor
-canopy fork auth-flow        # Fork (separate windows per repo)
-
-# Work in your IDE... then commit from the feature directory
 cd .canopy/worktrees/auth-flow
-canopy stage "feat: add auth module"
-#   api: a3f2b1c
-#   ui: 7e8d4f2
+canopy stage "feat: add auth module"    # stage + commit across all repos
+```
 
-# Check live worktree status
-canopy worktree
-#   Feature worktrees (2):
-#   ──────────────────────────────────────────────────
-#   auth-flow
-#     api [auth-flow] (+2)
-#     ui [auth-flow] (1 dirty)
-#   ──────────────────────────────────────────────────
-#   payment-flow  [ENG-123 — Add payment processing]
-#     api [payment-flow]
-#     ui [payment-flow]
+## Workspace Layout
+
+```
+my-product/
+├── canopy.toml              ← workspace definition (which repos, roles, languages)
+├── api/                     ← main working tree (on main)
+├── ui/                      ← main working tree (on main)
+└── .canopy/
+    ├── features.json        ← feature lane metadata + Linear issue links
+    ├── mcps.json            ← external MCP server configs (Linear, etc.)
+    └── worktrees/
+        ├── auth-flow/       ← isolated feature environment
+        │   ├── api/         ← linked worktree on auth-flow branch
+        │   └── ui/          ← linked worktree on auth-flow branch
+        └── payment-flow/
+            ├── api/
+            └── ui/
 ```
 
 ## Commands
 
-### Worktrees (primary workflow)
+### Worktrees
 
 | Command | Description |
 |---|---|
-| `canopy worktree <name>` | Create feature with worktrees across all repos |
-| `canopy worktree <name> <issue>` | Create + link to Linear issue (via MCP) |
-| `canopy worktree` | Live status of all active worktrees |
+| `canopy worktree <name>` | Create linked worktrees for a feature across all repos |
+| `canopy worktree <name> <issue>` | Same, with a Linear issue link (fetched via MCP) |
+| `canopy worktree` | Live dashboard — shows branch, dirty state, ahead/behind per worktree |
 
-### Core workflow
-
-| Command | Description |
-|---|---|
-| `canopy init` | Auto-detect repos, generate `canopy.toml` |
-| `canopy status` | Cross-repo status (branches, divergence, dirty files) |
-| `canopy stage <message>` | Context-aware add + commit (knows which feature you're in) |
-| `canopy context` | Show detected context for current directory |
-
-### Feature lanes
+### Core
 
 | Command | Description |
 |---|---|
-| `canopy feature create <name>` | Create branches across repos |
-| `canopy feature create --worktree <name>` | Create worktrees (same as `canopy worktree <name>`) |
-| `canopy feature list` | List active feature lanes |
-| `canopy feature switch <name>` | Checkout feature (worktree-aware) |
-| `canopy feature diff <name>` | Aggregate diff with type overlap detection |
-| `canopy feature status <name>` | Detailed status + merge readiness check |
+| `canopy init` | Scan subdirectories, detect Git repos and worktrees, generate `canopy.toml` |
+| `canopy status` | Per-repo branch, dirty count, divergence from default branch |
+| `canopy stage <msg>` | Context-aware `git add -A && git commit` — detects feature from cwd |
+| `canopy context` | Debug: show detected context type, feature, repos, paths |
 
-### IDE integration
+### Feature Lanes
 
 | Command | Description |
 |---|---|
-| `canopy code <feature\|.>` | Open VS Code with feature repos |
-| `canopy cursor <feature\|.>` | Open Cursor with feature repos |
-| `canopy fork <feature\|.>` | Open Fork.app (separate window per repo) |
+| `canopy feature create <name>` | Create branches (no worktrees) across repos |
+| `canopy feature list` | List all lanes with per-repo state |
+| `canopy feature switch <name>` | Checkout branch in each repo (worktree-aware — won't fail if branch is in a worktree) |
+| `canopy feature diff <name>` | Aggregate diff vs default branch + cross-repo type overlap detection |
+| `canopy feature status <name>` | Detailed per-repo state + merge readiness check |
 
-### Git operations (cross-repo)
+### IDE Integration
 
 | Command | Description |
 |---|---|
-| `canopy checkout <branch>` | Checkout across repos |
-| `canopy commit -m <msg>` | Commit staged changes across repos |
+| `canopy code <feature\|.>` | Generate `.code-workspace` and open VS Code |
+| `canopy cursor <feature\|.>` | Generate `.code-workspace` and open Cursor |
+| `canopy fork <feature\|.>` | Open each repo in Fork.app (separate tabs) |
+
+### Cross-Repo Git
+
+| Command | Description |
+|---|---|
+| `canopy checkout <branch>` | Checkout across all repos |
+| `canopy commit -m <msg>` | Commit staged changes in repos that have them |
 | `canopy log` | Interleaved chronological log across repos |
-| `canopy sync` | Pull default branch + rebase features |
+| `canopy sync` | Pull default branch, rebase feature branches |
 | `canopy branch list\|delete\|rename` | Branch management across repos |
 | `canopy stash save\|pop\|list\|drop` | Stash lifecycle across repos |
 
-All commands support `--json` for machine-readable output.
-
-## Linear Integration
-
-Canopy links features to Linear issues via MCP — no direct API dependency. Configure a Linear MCP server in `.canopy/mcps.json`:
-
-```json
-{
-  "linear": {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-linear"],
-    "env": { "LINEAR_API_KEY": "lin_api_..." }
-  }
-}
-```
-
-Then `canopy worktree payment-flow ENG-123` spawns the Linear MCP, fetches the issue title and URL, creates the worktrees, and stores the link in `features.json`. If Linear MCP isn't configured, the issue ID is stored without fetching details.
+Every command supports `--json` for machine-readable output. Human output uses [rich](https://github.com/Textualize/rich) for colored text, spinners, and status indicators; `--json` bypasses all of it.
 
 ## MCP Server
 
-Canopy exposes all operations as an MCP server (23 tools) for AI agents:
+Canopy is an MCP server. Every CLI operation is exposed as a tool (23 total) over stdio transport, so AI agents can operate your workspace programmatically.
 
 ```bash
-# Run the MCP server
-canopy-mcp
+canopy-mcp   # starts the server
 ```
 
 Register in Claude Code, Cursor, or any MCP-compatible client:
@@ -154,18 +191,74 @@ Register in Claude Code, Cursor, or any MCP-compatible client:
 }
 ```
 
-Tools include: `workspace_status`, `worktree_create`, `worktree_info`, `feature_create`, `feature_status`, `stage`, `log`, `checkout`, `commit`, `branch_list`, `stash_save`, and more.
+**Tools exposed:** `workspace_status`, `workspace_context`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `checkout`, `commit`, `stage`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`.
 
 ## MCP Client
 
-Canopy is also an MCP **client** — it can spawn external MCP servers to fetch data. This powers the Linear integration and is extensible to any MCP server. Configured in `.canopy/mcps.json`:
+Canopy is also an MCP **client**. Rather than adding direct API integrations (Linear SDK, GitHub SDK, etc.), canopy spawns external MCP servers as subprocesses and calls their tools via the standard MCP protocol. This means:
+
+- Zero external API dependencies in the canopy codebase
+- Any MCP server can be plugged in via config
+- Integrations work through the same protocol AI agents use
+
+Configuration lives in `.canopy/mcps.json`:
 
 ```json
 {
-  "linear": { "command": "npx", "args": [...], "env": {...} },
-  "github": { "command": "...", "args": [...] }
+  "linear": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-linear"],
+    "env": { "LINEAR_API_KEY": "lin_api_..." }
+  }
 }
 ```
+
+The client module (`mcp/client.py`) uses the `mcp` SDK's `ClientSession` + `stdio_client` to spawn the server, call tools, and return results. A synchronous wrapper handles event loop management for CLI use.
+
+Currently powers: **Linear integration** — `canopy worktree <name> ENG-123` spawns the Linear MCP, fetches the issue title/URL, and stores the link in `features.json`.
+
+## Context Detection
+
+`canopy stage` and other context-aware commands work by detecting where you are in the filesystem:
+
+| Context | Detection | Scope |
+|---|---|---|
+| `feature_dir` | Inside `.canopy/worktrees/<feature>/` | All repos in the feature |
+| `repo_worktree` | Inside `.canopy/worktrees/<feature>/<repo>/` | Single repo |
+| `repo` | Inside a workspace repo directory | Single repo (feature = current branch if non-default) |
+| `workspace_root` | At the `canopy.toml` level | All repos |
+
+This is implemented in `workspace/context.py` and powers `canopy stage`, `canopy context`, and the MCP `stage` tool.
+
+## Architecture
+
+```
+src/canopy/
+├── cli/
+│   ├── main.py              # argparse CLI — thin layer, no business logic
+│   └── ui.py                # rich terminal output (theme, spinners, colors)
+├── workspace/
+│   ├── config.py            # canopy.toml parser (RepoConfig, WorkspaceConfig)
+│   ├── discovery.py         # auto-detect repos + worktrees, generate toml
+│   ├── context.py           # context detection from cwd
+│   └── workspace.py         # Workspace class, RepoState dataclass
+├── git/
+│   ├── repo.py              # ALL git subprocess calls (single-repo only)
+│   └── multi.py             # cross-repo operations (calls repo.py)
+├── features/
+│   └── coordinator.py       # feature lane lifecycle, worktree creation, live scanning
+├── integrations/
+│   └── linear.py            # Linear issue fetching (via mcp/client.py)
+└── mcp/
+    ├── server.py            # MCP server — 23 tools, stdio transport
+    └── client.py            # MCP client — spawn + call external MCP servers
+```
+
+**Key boundary:** `git/repo.py` is the only module that calls `subprocess.run(["git", ...])`. Everything else goes through it. This makes the git layer replaceable and testable.
+
+**Key boundary:** `mcp/server.py` and `cli/main.py` are thin wrappers. Business logic lives in `features/coordinator.py`, `git/multi.py`, and `workspace/`.
+
+**Key boundary:** All external integrations go through `mcp/client.py`. No direct API calls anywhere in the codebase.
 
 ## canopy.toml
 
@@ -186,50 +279,18 @@ role = "frontend"
 lang = "typescript"
 ```
 
-`canopy init` generates this automatically by scanning subdirectories for Git repos. Worktrees are detected and tagged — Canopy understands which directories are linked worktrees of the same repo.
-
-## Design Decisions
-
-**Worktree-first.** Features get their own directories. No stashing, no context switching. Open a feature in your IDE and it's just a normal project.
-
-**Real Git only.** Feature lanes map to real Git branches. Worktrees are real Git worktrees. Any Git tool works alongside Canopy.
-
-**IDE as the interface.** Canopy doesn't try to be a Git GUI. It orchestrates worktrees and opens your existing tools (VS Code, Cursor, Fork) in the right context.
-
-**MCP-native.** Every CLI command is also an MCP tool. AI agents can operate your workspace through the same interface you use.
-
-**MCP-client too.** Canopy spawns external MCP servers (Linear, GitHub, etc.) to fetch data. No direct API dependencies — everything goes through MCP.
-
-## Project Structure
-
-```
-src/canopy/
-├── cli/main.py              # argparse entry point, all commands
-├── workspace/
-│   ├── config.py            # canopy.toml parser
-│   ├── discovery.py         # repo auto-detection (worktree-aware)
-│   ├── context.py           # context detection (where am I?)
-│   └── workspace.py         # Workspace class, RepoState
-├── git/
-│   ├── repo.py              # ALL git subprocess calls (single-repo)
-│   └── multi.py             # cross-repo operations
-├── features/
-│   └── coordinator.py       # feature lane lifecycle (worktree-smart)
-├── integrations/
-│   └── linear.py            # Linear issue fetching via MCP
-└── mcp/
-    ├── server.py            # MCP server (23 tools, stdio transport)
-    └── client.py            # MCP client (call external MCP servers)
-
-tests/                       # 130 tests, ~2s
-```
+Generated by `canopy init`. Worktrees are detected automatically — canopy distinguishes `.git` directories (normal repos) from `.git` files (linked worktrees) and tags them with `is_worktree` and `worktree_main`.
 
 ## Development
 
 ```bash
+cd ~/projects/canopy
+source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/ -v
+pytest tests/ -v             # 130 tests, ~2s, all use real temporary Git repos
 ```
+
+Tests create real Git repositories in temporary directories — no mocks. This catches actual git behavior differences across platforms.
 
 ## License
 

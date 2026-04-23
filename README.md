@@ -106,7 +106,7 @@ Working on a feature that spans multiple repos means coordinating branches, swit
 ## Installation
 
 ```bash
-git clone https://github.com/ashmitb/canopy.git
+git clone https://github.com/ashmitb95/canopy.git
 cd canopy
 
 python3 -m venv .venv

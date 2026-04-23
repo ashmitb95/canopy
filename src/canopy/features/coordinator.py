@@ -28,17 +28,27 @@ class FeatureLane:
     created_at: str = ""                 # ISO timestamp
     status: str = "active"              # active | merged | abandoned
 
+    # Optional integration links
+    linear_issue: str = ""              # e.g. "ENG-123"
+    linear_title: str = ""              # e.g. "Add payment processing"
+    linear_url: str = ""                # e.g. "https://linear.app/..."
+
     # Populated at query time (not persisted)
     repo_states: dict[str, dict] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "name": self.name,
             "repos": self.repos,
             "created_at": self.created_at,
             "status": self.status,
             "repo_states": self.repo_states,
         }
+        if self.linear_issue:
+            d["linear_issue"] = self.linear_issue
+            d["linear_title"] = self.linear_title
+            d["linear_url"] = self.linear_url
+        return d
 
 
 class FeatureCoordinator:
@@ -54,6 +64,9 @@ class FeatureCoordinator:
         repos: list[str] | None = None,
         use_worktrees: bool = False,
         worktree_base: Path | None = None,
+        linear_issue: str = "",
+        linear_title: str = "",
+        linear_url: str = "",
     ) -> FeatureLane:
         """Create a new feature lane.
 
@@ -117,6 +130,9 @@ class FeatureCoordinator:
             repos=target_repos,
             created_at=datetime.now(timezone.utc).isoformat(),
             status="active",
+            linear_issue=linear_issue,
+            linear_title=linear_title,
+            linear_url=linear_url,
         )
 
         features = self._load_features()
@@ -128,6 +144,10 @@ class FeatureCoordinator:
         if worktree_paths:
             feature_data["worktree_paths"] = worktree_paths
             feature_data["use_worktrees"] = True
+        if linear_issue:
+            feature_data["linear_issue"] = linear_issue
+            feature_data["linear_title"] = linear_title
+            feature_data["linear_url"] = linear_url
         features[name] = feature_data
         self._save_features(features)
 
@@ -146,6 +166,9 @@ class FeatureCoordinator:
                 repos=data["repos"],
                 created_at=data.get("created_at", ""),
                 status=data.get("status", "active"),
+                linear_issue=data.get("linear_issue", ""),
+                linear_title=data.get("linear_title", ""),
+                linear_url=data.get("linear_url", ""),
             )
             self._enrich_lane(lane)
             lanes.append(lane)
@@ -239,6 +262,9 @@ class FeatureCoordinator:
                 repos=data["repos"],
                 created_at=data.get("created_at", ""),
                 status=data.get("status", "active"),
+                linear_issue=data.get("linear_issue", ""),
+                linear_title=data.get("linear_title", ""),
+                linear_url=data.get("linear_url", ""),
             )
         else:
             # Implicit feature
@@ -394,6 +420,104 @@ class FeatureCoordinator:
                     "has_branch": True,
                     "error": str(e),
                 }
+
+    def worktrees_live(self) -> dict:
+        """Live scan of all worktrees across the workspace.
+
+        Scans .canopy/worktrees/ on disk and enriches each entry with
+        live git state (branch, dirty files, ahead/behind). Also includes
+        git-level worktree info per main repo. Never cached — always
+        reflects the filesystem as it is right now.
+
+        Returns:
+            {
+                "features": {
+                    "<feature>": {
+                        "repos": {
+                            "<repo>": {
+                                "path": str,
+                                "branch": str,
+                                "dirty": bool,
+                                "dirty_count": int,
+                                "dirty_files": [...],
+                                "ahead": int,
+                                "behind": int,
+                                "default_branch": str,
+                            }
+                        }
+                    }
+                },
+                "repos": {
+                    "<repo>": {
+                        "main_path": str,
+                        "worktrees": [{"path": str, "branch": str, "sha": str}]
+                    }
+                }
+            }
+        """
+        root = self.workspace.config.root
+        wt_base = root / _WORKTREE_DIR
+
+        # ── Part 1: scan .canopy/worktrees/ ──────────────────────────
+        features: dict = {}
+        if wt_base.is_dir():
+            for feat_dir in sorted(wt_base.iterdir()):
+                if not feat_dir.is_dir():
+                    continue
+                feat_name = feat_dir.name
+                repos_info: dict = {}
+                for repo_dir in sorted(feat_dir.iterdir()):
+                    if not repo_dir.is_dir():
+                        continue
+                    repo_name = repo_dir.name
+                    entry: dict = {"path": str(repo_dir)}
+                    try:
+                        entry["branch"] = git.current_branch(repo_dir)
+                        porcelain = git.status_porcelain(repo_dir)
+                        entry["dirty"] = len(porcelain) > 0
+                        entry["dirty_count"] = len(porcelain)
+                        entry["dirty_files"] = [
+                            f.get("path", "") for f in porcelain
+                        ]
+                        # Divergence from default branch
+                        # Find the matching repo config for default_branch
+                        default_branch = "main"
+                        try:
+                            state = self.workspace.get_repo(repo_name)
+                            default_branch = state.config.default_branch
+                        except KeyError:
+                            pass
+                        entry["default_branch"] = default_branch
+                        try:
+                            ahead, behind = git.divergence(
+                                repo_dir, entry["branch"], default_branch,
+                            )
+                            entry["ahead"] = ahead
+                            entry["behind"] = behind
+                        except git.GitError:
+                            entry["ahead"] = 0
+                            entry["behind"] = 0
+                    except git.GitError as e:
+                        entry["error"] = str(e)
+                    repos_info[repo_name] = entry
+                if repos_info:
+                    features[feat_name] = {"repos": repos_info}
+
+        # ── Part 2: git-level worktree info per main repo ────────────
+        repos_wt: dict = {}
+        for state in self.workspace.repos:
+            if not state.abs_path.exists():
+                continue
+            worktrees = git.worktree_list(state.abs_path)
+            repos_wt[state.config.name] = {
+                "main_path": str(state.abs_path),
+                "worktrees": worktrees,
+            }
+
+        return {
+            "features": features,
+            "repos": repos_wt,
+        }
 
     def _load_features(self) -> dict:
         """Load features.json, returning empty dict if not found."""

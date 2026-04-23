@@ -254,3 +254,63 @@ class TestWorktreeAddAndQuery:
 
         # Cleanup
         git.worktree_remove(api, wt_path)
+
+
+# ── worktrees_live() ──────────────────────────────────────────────────
+
+class TestWorktreesLive:
+    def test_live_scan_empty(self, workspace_dir):
+        """No worktrees → features dict is empty."""
+        ws = _make_workspace(workspace_dir)
+        coordinator = FeatureCoordinator(ws)
+        result = coordinator.worktrees_live()
+
+        assert result["features"] == {}
+        assert "api" in result["repos"]
+        assert "ui" in result["repos"]
+
+    def test_live_scan_with_feature_worktrees(self, workspace_dir):
+        """Create feature worktrees, then scan — should reflect live state."""
+        ws = _make_workspace(workspace_dir)
+        coordinator = FeatureCoordinator(ws)
+        coordinator.create("live-test", use_worktrees=True)
+
+        result = coordinator.worktrees_live()
+
+        assert "live-test" in result["features"]
+        feat = result["features"]["live-test"]
+        assert "api" in feat["repos"]
+        assert "ui" in feat["repos"]
+
+        api_info = feat["repos"]["api"]
+        assert api_info["branch"] == "live-test"
+        assert api_info["dirty"] is False
+        assert api_info["dirty_count"] == 0
+        assert "path" in api_info
+
+    def test_live_scan_dirty_worktree(self, workspace_dir):
+        """Dirty files in a worktree show up in the live scan."""
+        ws = _make_workspace(workspace_dir)
+        coordinator = FeatureCoordinator(ws)
+        coordinator.create("dirty-test", use_worktrees=True)
+
+        wt_path = workspace_dir / ".canopy" / "worktrees" / "dirty-test" / "api"
+        (wt_path / "new_file.py").write_text("print('hello')")
+
+        result = coordinator.worktrees_live()
+        api_info = result["features"]["dirty-test"]["repos"]["api"]
+        assert api_info["dirty"] is True
+        assert api_info["dirty_count"] >= 1
+        assert "new_file.py" in api_info["dirty_files"]
+
+    def test_live_scan_git_worktree_list(self, workspace_dir):
+        """Repos section should show multiple worktrees when they exist."""
+        ws = _make_workspace(workspace_dir)
+        coordinator = FeatureCoordinator(ws)
+        coordinator.create("wt-list-test", use_worktrees=True)
+
+        result = coordinator.worktrees_live()
+        api_wts = result["repos"]["api"]["worktrees"]
+        assert len(api_wts) >= 2
+        branches = [wt.get("branch", "") for wt in api_wts]
+        assert "wt-list-test" in branches

@@ -80,9 +80,25 @@ def cmd_init(args: argparse.Namespace) -> None:
     toml_content = generate_toml(root, workspace_name=args.name)
 
     if args.json:
+        all_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
+        skipped = [d.name for d in all_dirs if not (d / ".git").exists()]
+        # Detect existing feature worktrees
+        worktrees_dir = root / ".canopy" / "worktrees"
+        active_worktrees = {}
+        if worktrees_dir.is_dir():
+            for feat_dir in worktrees_dir.iterdir():
+                if feat_dir.is_dir():
+                    active_worktrees[feat_dir.name] = sorted(
+                        d.name for d in feat_dir.iterdir() if d.is_dir()
+                    )
         _print_json({
             "root": str(root),
-            "repos": [{"name": r.name, "path": r.path, "role": r.role, "lang": r.lang} for r in repos],
+            "repos": [{
+                "name": r.name, "path": r.path, "role": r.role, "lang": r.lang,
+                "is_worktree": r.is_worktree, "worktree_main": r.worktree_main,
+            } for r in repos],
+            "skipped": skipped,
+            "active_worktrees": active_worktrees,
             "toml": toml_content,
         })
         return
@@ -93,6 +109,11 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     toml_path.write_text(toml_content)
     print(f"Created {toml_path}")
+
+    # Count non-git dirs that were skipped
+    all_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    skipped = [d.name for d in all_dirs if not (d / ".git").exists()]
+
     print(f"Found {len(repos)} repos:")
     for r in repos:
         tags = []
@@ -100,8 +121,29 @@ def cmd_init(args: argparse.Namespace) -> None:
             tags.append(r.role)
         if r.lang:
             tags.append(r.lang)
+        if r.is_worktree:
+            tags.append(f"worktree → {r.worktree_main}")
         tag_str = f" ({', '.join(tags)})" if tags else ""
         print(f"  {r.name}{tag_str}")
+
+    if skipped:
+        print(f"Skipped {len(skipped)} non-git dirs: {', '.join(skipped)}")
+
+    # Report existing feature worktrees under .canopy/
+    canopy_dir = root / ".canopy"
+    worktrees_dir = canopy_dir / "worktrees"
+    if worktrees_dir.is_dir():
+        features_with_wt = sorted(
+            d.name for d in worktrees_dir.iterdir() if d.is_dir()
+        )
+        if features_with_wt:
+            print(f"Active worktrees ({len(features_with_wt)}):")
+            for feat in features_with_wt:
+                feat_dir = worktrees_dir / feat
+                wt_repos = sorted(
+                    d.name for d in feat_dir.iterdir() if d.is_dir()
+                )
+                print(f"  {feat} → {', '.join(wt_repos)}")
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -558,42 +600,167 @@ def cmd_stash_drop(args: argparse.Namespace) -> None:
         print(f"  {repo}: {result}")
 
 
-def cmd_worktree_list(args: argparse.Namespace) -> None:
-    """Show worktree info for repos in the workspace."""
-    workspace = _load_workspace()
-    from ..git import repo as git
+def cmd_worktree(args: argparse.Namespace) -> None:
+    """Dispatch: list worktrees or create a new one."""
+    if args.name:
+        cmd_worktree_create(args)
+    else:
+        cmd_worktree_list(args)
 
-    all_info = {}
-    for state in workspace.repos:
-        if not state.abs_path.exists():
-            continue
-        worktrees = git.worktree_list(state.abs_path)
-        is_wt = git.is_worktree(state.abs_path)
-        main_path = git.worktree_main_path(state.abs_path) if is_wt else None
-        all_info[state.config.name] = {
-            "is_linked_worktree": is_wt,
-            "main_working_tree": str(main_path) if main_path else None,
-            "worktrees": worktrees,
-        }
+
+def cmd_worktree_create(args: argparse.Namespace) -> None:
+    """Create a feature with worktrees, optionally linked to a Linear issue."""
+    workspace = _load_workspace()
+    from ..features.coordinator import FeatureCoordinator
+
+    name = args.name
+    issue_id = args.issue
+    repos = args.repos
+
+    # ── Linear integration ──
+    linear_issue = ""
+    linear_title = ""
+    linear_url = ""
+
+    if issue_id:
+        from ..integrations.linear import (
+            is_linear_configured,
+            get_issue,
+            format_branch_name,
+            LinearNotConfiguredError,
+            LinearIssueNotFoundError,
+        )
+        from ..mcp.client import McpClientError
+
+        if is_linear_configured(workspace.config.root):
+            try:
+                print(f"  Fetching {issue_id} from Linear...")
+                issue_data = get_issue(workspace.config.root, issue_id)
+                linear_issue = issue_data.get("identifier", issue_id)
+                linear_title = issue_data.get("title", "")
+                linear_url = issue_data.get("url", "")
+                if linear_title:
+                    print(f"  {linear_issue}: {linear_title}")
+            except (LinearNotConfiguredError, LinearIssueNotFoundError, McpClientError) as e:
+                print(f"  Warning: could not fetch Linear issue: {e}", file=sys.stderr)
+                print(f"  Continuing without Linear link...", file=sys.stderr)
+                linear_issue = issue_id  # Store the ID even if we can't fetch details
+        else:
+            print(
+                f"  Linear MCP not configured — storing issue ID '{issue_id}' without fetching.",
+                file=sys.stderr,
+            )
+            linear_issue = issue_id
+
+    # ── Create the feature with worktrees ──
+    coordinator = FeatureCoordinator(workspace)
+    try:
+        lane = coordinator.create(
+            name,
+            repos=repos,
+            use_worktrees=True,
+            linear_issue=linear_issue,
+            linear_title=linear_title,
+            linear_url=linear_url,
+        )
+    except (ValueError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    result = lane.to_dict()
+    result["worktree_paths"] = coordinator.resolve_paths(name)
 
     if args.json:
-        _print_json(all_info)
+        _print_json(result)
         return
 
-    for repo_name, info in all_info.items():
-        print(f"\n  {repo_name}")
-        if info["is_linked_worktree"]:
-            print(f"    (linked worktree of {info['main_working_tree']})")
-        worktrees = info["worktrees"]
-        if len(worktrees) > 1:
-            print(f"    worktrees:")
-            for wt in worktrees:
+    print(f"\n  Created worktree: {name}")
+    if linear_issue:
+        title_str = f" — {linear_title}" if linear_title else ""
+        print(f"  Linear: {linear_issue}{title_str}")
+    print(f"  Repos:")
+    for repo_name, path in result["worktree_paths"].items():
+        print(f"    {repo_name} → {path}")
+    print()
+    print(f"  Open in IDE:")
+    print(f"    canopy code {name}")
+    print(f"    canopy cursor {name}")
+    print(f"    canopy fork {name}")
+    print()
+
+
+def cmd_worktree_list(args: argparse.Namespace) -> None:
+    """Show live worktree status — always reflects current filesystem."""
+    workspace = _load_workspace()
+    from ..features.coordinator import FeatureCoordinator
+
+    coordinator = FeatureCoordinator(workspace)
+    data = coordinator.worktrees_live()
+
+    if args.json:
+        _print_json(data)
+        return
+
+    features = data.get("features", {})
+    repos_wt = data.get("repos", {})
+
+    # Also load feature metadata for Linear links
+    features_json = coordinator._load_features()
+
+    if not features and all(
+        len(r.get("worktrees", [])) <= 1 for r in repos_wt.values()
+    ):
+        print("\n  No active worktrees.")
+        print()
+        return
+
+    # ── Feature worktrees ──
+    if features:
+        print(f"\n  Feature worktrees ({len(features)}):")
+        for feat_name, feat_data in features.items():
+            print(f"  {'─' * 50}")
+            # Show Linear link if present
+            meta = features_json.get(feat_name, {})
+            linear_id = meta.get("linear_issue", "")
+            linear_title = meta.get("linear_title", "")
+            if linear_id:
+                title_str = f" — {linear_title}" if linear_title else ""
+                print(f"  {feat_name}  [{linear_id}{title_str}]")
+            else:
+                print(f"  {feat_name}")
+
+            for repo_name, info in feat_data.get("repos", {}).items():
+                branch = info.get("branch", "?")
+                dirty = info.get("dirty", False)
+                dirty_count = info.get("dirty_count", 0)
+                ahead = info.get("ahead", 0)
+                behind = info.get("behind", 0)
+
+                status_parts = []
+                if dirty:
+                    status_parts.append(f"{dirty_count} dirty")
+                if ahead:
+                    status_parts.append(f"+{ahead}")
+                if behind:
+                    status_parts.append(f"-{behind}")
+
+                status_str = f" ({', '.join(status_parts)})" if status_parts else ""
+                print(f"    {repo_name} [{branch}]{status_str}")
+                print(f"      {info.get('path', '?')}")
+
+    # ── Per-repo git worktrees (only show if repo has >1 worktree) ──
+    multi_wt = {
+        name: info for name, info in repos_wt.items()
+        if len(info.get("worktrees", [])) > 1
+    }
+    if multi_wt:
+        print(f"\n  Git worktrees per repo:")
+        for repo_name, info in multi_wt.items():
+            print(f"  {'─' * 50}")
+            print(f"  {repo_name} (main: {info['main_path']})")
+            for wt in info["worktrees"]:
                 branch = wt.get("branch", "(detached)")
-                print(f"      {wt['path']}  [{branch}]")
-        elif len(worktrees) == 1:
-            print(f"    single working tree")
-        else:
-            print(f"    no worktree info")
+                print(f"    {wt['path']}  [{branch}]")
 
     print()
 
@@ -742,7 +909,9 @@ def cmd_fork(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
-    for p in paths:
+    import time
+
+    for i, p in enumerate(paths):
         if use_fork_cli:
             subprocess.Popen(
                 ["fork", p],
@@ -760,6 +929,9 @@ def cmd_fork(args: argparse.Namespace) -> None:
                       file=sys.stderr)
                 sys.exit(1)
         print(f"  opened: {p}")
+        # Small delay between opens so Fork can register each repo
+        if i < len(paths) - 1:
+            time.sleep(0.5)
 
 
 def cmd_stage(args: argparse.Namespace) -> None:
@@ -968,7 +1140,22 @@ def main() -> None:
     sd.add_argument("--json", action="store_true", help="Output as JSON")
 
     # worktree
-    wt_p = subparsers.add_parser("worktree", help="Worktree info for repos")
+    wt_p = subparsers.add_parser(
+        "worktree",
+        help="Create or list worktrees (canopy worktree <name> [issue])",
+    )
+    wt_p.add_argument(
+        "name", nargs="?", default=None,
+        help="Feature name to create. Omit to list existing worktrees.",
+    )
+    wt_p.add_argument(
+        "issue", nargs="?", default=None,
+        help="Linear issue ID (e.g. ENG-123). Fetches via Linear MCP if configured.",
+    )
+    wt_p.add_argument(
+        "--repos", nargs="+",
+        help="Subset of repos (default: all)",
+    )
     wt_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # code (IDE launcher)
@@ -1008,7 +1195,7 @@ def main() -> None:
         "checkout": cmd_checkout,
         "commit": cmd_commit,
         "log": cmd_log,
-        "worktree": cmd_worktree_list,
+        "worktree": cmd_worktree,
         "code": cmd_code,
         "cursor": cmd_cursor,
         "fork": cmd_fork,

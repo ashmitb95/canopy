@@ -391,25 +391,81 @@ def stash_drop(
 
 @mcp.tool()
 def worktree_info() -> dict:
-    """Get worktree information for all repos in the workspace.
+    """Get live worktree status across the workspace — always fresh.
 
-    Shows which repos are linked worktrees, their main working tree,
-    and all worktrees associated with each repo.
+    Scans .canopy/worktrees/ on disk and enriches each entry with
+    live git state (branch, dirty files, ahead/behind). Also shows
+    git-level worktree info per main repo.
+
+    Returns:
+        features: per-feature dict with per-repo branch, dirty state,
+            ahead/behind, dirty files list, and worktree path.
+        repos: per-repo git worktree list from the main working tree.
     """
     ws = _get_workspace()
-    all_info = {}
-    for state in ws.repos:
-        if not state.abs_path.exists():
-            continue
-        worktrees = git.worktree_list(state.abs_path)
-        is_wt = git.is_worktree(state.abs_path)
-        main_path = git.worktree_main_path(state.abs_path) if is_wt else None
-        all_info[state.config.name] = {
-            "is_linked_worktree": is_wt,
-            "main_working_tree": str(main_path) if main_path else None,
-            "worktrees": worktrees,
-        }
-    return all_info
+    coordinator = FeatureCoordinator(ws)
+    return coordinator.worktrees_live()
+
+
+@mcp.tool()
+def worktree_create(
+    name: str,
+    issue: str | None = None,
+    repos: list[str] | None = None,
+) -> dict:
+    """Create a feature with worktrees, optionally linked to a Linear issue.
+
+    This is the primary workflow entry point: create isolated worktree
+    directories for each repo, open them in your IDE, and optionally
+    link to a Linear issue for tracking.
+
+    Args:
+        name: Feature/branch name (e.g. "payment-flow").
+        issue: Optional Linear issue ID (e.g. "ENG-123"). If a Linear
+            MCP server is configured in .canopy/mcps.json, fetches the
+            issue title and URL. The issue ID is stored in feature
+            metadata either way.
+        repos: Subset of repo names. Default: all repos.
+    """
+    ws = _get_workspace()
+    coordinator = FeatureCoordinator(ws)
+
+    linear_issue = ""
+    linear_title = ""
+    linear_url = ""
+
+    if issue:
+        from ..integrations.linear import (
+            is_linear_configured,
+            get_issue,
+            LinearNotConfiguredError,
+            LinearIssueNotFoundError,
+        )
+        from .client import McpClientError
+
+        if is_linear_configured(ws.config.root):
+            try:
+                issue_data = get_issue(ws.config.root, issue)
+                linear_issue = issue_data.get("identifier", issue)
+                linear_title = issue_data.get("title", "")
+                linear_url = issue_data.get("url", "")
+            except (LinearNotConfiguredError, LinearIssueNotFoundError, McpClientError):
+                linear_issue = issue
+        else:
+            linear_issue = issue
+
+    lane = coordinator.create(
+        name,
+        repos=repos,
+        use_worktrees=True,
+        linear_issue=linear_issue,
+        linear_title=linear_title,
+        linear_url=linear_url,
+    )
+
+    result = lane.to_dict()
+    result["worktree_paths"] = coordinator.resolve_paths(name)
+    return result
 
 
 # ── Sync ─────────────────────────────────────────────────────────────────

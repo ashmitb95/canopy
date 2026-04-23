@@ -4,7 +4,7 @@
 
 Canopy coordinates real Git branches and worktrees across multiple repositories — no proprietary abstractions, no virtual branches. This extension gives you a VSCode-native UI on top of the [Canopy CLI + MCP server](https://github.com/ashmitb95/canopy).
 
-![Canopy sidebar in VSCode](media/screenshots/sidebar.png)
+![Canopy sidebar in VSCode](https://raw.githubusercontent.com/ashmitb95/canopy/main/vscode-extension/media/screenshots/sidebar.png)
 
 ---
 
@@ -16,13 +16,13 @@ The activity-bar entry gives you four collapsible sections backed by the same MC
 
 ### Per-feature dashboard with Linear + GitHub context
 
-![Feature dashboard webview](media/screenshots/dashboard.png)
+![Feature dashboard webview](https://raw.githubusercontent.com/ashmitb95/canopy/main/vscode-extension/media/screenshots/dashboard.png)
 
 Click any feature to open a webview showing branch state across every repo, linked Linear issue, open PRs, pre-commit status, cross-repo file overlap warnings, and recent commits interleaved across all worktrees.
 
 ### Linear-aware Create Feature quick pick
 
-![Create feature quick pick](media/screenshots/quickpick.png)
+![Create feature quick pick](https://raw.githubusercontent.com/ashmitb95/canopy/main/vscode-extension/media/screenshots/quickpick.png)
 
 `Cmd+Shift+P` → *Canopy: Create Feature*. The picker auto-suggests lane names from your assigned Linear issues and creates matching branches + worktrees across the repos you select.
 

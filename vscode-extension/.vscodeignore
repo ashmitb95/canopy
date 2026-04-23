@@ -8,6 +8,3 @@ esbuild.config.mjs
 tsconfig.json
 **/*.map
 **/*.ts
-node_modules/**
-!node_modules/@modelcontextprotocol/**
-!dist/**

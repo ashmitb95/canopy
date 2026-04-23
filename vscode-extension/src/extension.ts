@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { CanopyClient } from "./canopyClient";
 import { runCreateFeature } from "./commands/createFeature";
 import { runInstallBackend } from "./commands/installBackend";
+import { runSetupWizard } from "./commands/setupWizard";
 import { resolveCanopyMcp } from "./mcpResolver";
 import { StatusBarManager } from "./statusBar";
 import { ChangesProvider } from "./views/changesProvider";
@@ -42,7 +43,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       "canopy.state",
       "no-workspace",
     );
-    registerInitCommand(context);
+    registerInitCommand(context, output);
     return;
   }
 
@@ -274,21 +275,12 @@ async function bootstrap(
   await refresh();
 }
 
-function registerInitCommand(context: vscode.ExtensionContext): void {
+function registerInitCommand(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("canopy.init", async () => {
-      const folder = vscode.workspace.workspaceFolders?.[0];
-      if (!folder) {
-        void vscode.window.showErrorMessage("Open a folder first.");
-        return;
-      }
-      const term = vscode.window.createTerminal({
-        name: "canopy init",
-        cwd: folder.uri.fsPath,
-      });
-      term.show();
-      term.sendText("canopy init");
-    }),
+    vscode.commands.registerCommand("canopy.init", () => runSetupWizard(output)),
   );
 }
 

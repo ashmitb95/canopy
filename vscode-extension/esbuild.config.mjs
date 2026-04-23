@@ -6,7 +6,7 @@ const config = {
   entryPoints: ["src/extension.ts"],
   bundle: true,
   outfile: "dist/extension.js",
-  external: ["vscode"],
+  external: ["vscode", "@modelcontextprotocol/sdk"],
   format: "cjs",
   platform: "node",
   target: "node18",

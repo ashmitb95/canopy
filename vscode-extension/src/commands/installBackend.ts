@@ -7,9 +7,10 @@ import * as vscode from "vscode";
 
 const execFileAsync = promisify(execFile);
 
-const VENV_DIR = path.join(os.homedir(), ".canopy-vscode", "venv");
+export const VENV_DIR = path.join(os.homedir(), ".canopy-vscode", "venv");
 const PIP_BIN = path.join(VENV_DIR, "bin", "pip");
-const MCP_BIN = path.join(VENV_DIR, "bin", "canopy-mcp");
+export const MCP_BIN = path.join(VENV_DIR, "bin", "canopy-mcp");
+export const CANOPY_BIN = path.join(VENV_DIR, "bin", "canopy");
 
 /**
  * One-click Canopy backend installer.

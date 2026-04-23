@@ -2,8 +2,8 @@
   "name": "canopy",
   "displayName": "Canopy — Multi-Repo Worktree Manager",
   "description": "Worktree-first workspace manager for multi-repo development. Features, worktrees, per-repo changes, and review readiness in one sidebar.",
-  "version": "0.1.6",
-  "publisher": "canopy",
+  "version": "0.1.7",
+  "publisher": "SingularityInc",
   "license": "MIT",
   "icon": "media/canopy-icon.png",
   "repository": {

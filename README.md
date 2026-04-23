@@ -246,7 +246,35 @@ Register in Claude Code, Cursor, or any MCP-compatible client:
 }
 ```
 
-**Tools exposed:** `workspace_status`, `workspace_context`, `workspace_config`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `feature_done`, `checkout`, `preflight`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`, `review_status`, `review_comments`, `review_prep`.
+| Tool | Description |
+|---|---|
+| `workspace_status` | Full workspace status across all repos |
+| `workspace_context` | Detect canopy context from a directory path |
+| `workspace_config` | Read or write workspace settings in canopy.toml |
+| `feature_create` | Create a new feature lane across repos |
+| `feature_list` | List all active feature lanes with repo states |
+| `feature_status` | Detailed status for a feature lane |
+| `feature_switch` | Switch to a feature lane across repos (alias-aware) |
+| `feature_diff` | Aggregate diff for a feature lane across repos |
+| `feature_merge_readiness` | Check if a feature is ready to merge |
+| `feature_paths` | Get working directory paths for each repo in a feature |
+| `feature_done` | Clean up a feature — remove worktrees, delete branches, archive |
+| `worktree_create` | Create worktrees for a feature, optionally linked to a Linear issue |
+| `worktree_info` | Live worktree status across the workspace |
+| `checkout` | Checkout a branch across repos |
+| `preflight` | Context-aware pre-commit quality gate — stages + runs hooks, does not commit |
+| `log` | Interleaved commit log across repos, sorted by date |
+| `sync` | Pull default branch, rebase feature branches |
+| `branch_list` | List branches across repos |
+| `branch_delete` | Delete a branch across repos |
+| `branch_rename` | Rename a branch across repos |
+| `stash_save` | Stash uncommitted changes across repos |
+| `stash_pop` | Pop stash across repos |
+| `stash_list` | List stash entries across repos |
+| `stash_drop` | Drop a stash entry across repos |
+| `review_status` | Check if PRs exist for a feature |
+| `review_comments` | Fetch unresolved PR review comments for a feature |
+| `review_prep` | Run pre-commit hooks and stage changes for a feature |
 
 ## MCP Client
 

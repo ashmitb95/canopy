@@ -36,7 +36,10 @@ cd ~/my-product/
 canopy init
 
 # Create a feature with worktrees — each repo gets its own directory
-canopy feature create --worktree auth-flow
+canopy worktree auth-flow
+
+# Or link it to a Linear issue (fetches title via MCP)
+canopy worktree payment-flow ENG-123
 
 # Open in your IDE
 canopy code auth-flow        # VS Code (multi-root workspace)
@@ -49,12 +52,28 @@ canopy stage "feat: add auth module"
 #   api: a3f2b1c
 #   ui: 7e8d4f2
 
-# Start another feature in parallel — no conflicts
-canopy feature create --worktree payment-flow
-canopy code payment-flow
+# Check live worktree status
+canopy worktree
+#   Feature worktrees (2):
+#   ──────────────────────────────────────────────────
+#   auth-flow
+#     api [auth-flow] (+2)
+#     ui [auth-flow] (1 dirty)
+#   ──────────────────────────────────────────────────
+#   payment-flow  [ENG-123 — Add payment processing]
+#     api [payment-flow]
+#     ui [payment-flow]
 ```
 
 ## Commands
+
+### Worktrees (primary workflow)
+
+| Command | Description |
+|---|---|
+| `canopy worktree <name>` | Create feature with worktrees across all repos |
+| `canopy worktree <name> <issue>` | Create + link to Linear issue (via MCP) |
+| `canopy worktree` | Live status of all active worktrees |
 
 ### Core workflow
 
@@ -70,7 +89,7 @@ canopy code payment-flow
 | Command | Description |
 |---|---|
 | `canopy feature create <name>` | Create branches across repos |
-| `canopy feature create --worktree <name>` | Create worktrees (recommended) |
+| `canopy feature create --worktree <name>` | Create worktrees (same as `canopy worktree <name>`) |
 | `canopy feature list` | List active feature lanes |
 | `canopy feature switch <name>` | Checkout feature (worktree-aware) |
 | `canopy feature diff <name>` | Aggregate diff with type overlap detection |
@@ -94,13 +113,28 @@ canopy code payment-flow
 | `canopy sync` | Pull default branch + rebase features |
 | `canopy branch list\|delete\|rename` | Branch management across repos |
 | `canopy stash save\|pop\|list\|drop` | Stash lifecycle across repos |
-| `canopy worktree` | Show worktree info per repo |
 
 All commands support `--json` for machine-readable output.
 
+## Linear Integration
+
+Canopy links features to Linear issues via MCP — no direct API dependency. Configure a Linear MCP server in `.canopy/mcps.json`:
+
+```json
+{
+  "linear": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-linear"],
+    "env": { "LINEAR_API_KEY": "lin_api_..." }
+  }
+}
+```
+
+Then `canopy worktree payment-flow ENG-123` spawns the Linear MCP, fetches the issue title and URL, creates the worktrees, and stores the link in `features.json`. If Linear MCP isn't configured, the issue ID is stored without fetching details.
+
 ## MCP Server
 
-Canopy exposes all operations as an MCP server (22 tools) for AI agents:
+Canopy exposes all operations as an MCP server (23 tools) for AI agents:
 
 ```bash
 # Run the MCP server
@@ -120,7 +154,18 @@ Register in Claude Code, Cursor, or any MCP-compatible client:
 }
 ```
 
-Tools include: `workspace_status`, `feature_create`, `feature_status`, `stage`, `log`, `checkout`, `commit`, `branch_list`, `stash_save`, `worktree_info`, and more.
+Tools include: `workspace_status`, `worktree_create`, `worktree_info`, `feature_create`, `feature_status`, `stage`, `log`, `checkout`, `commit`, `branch_list`, `stash_save`, and more.
+
+## MCP Client
+
+Canopy is also an MCP **client** — it can spawn external MCP servers to fetch data. This powers the Linear integration and is extensible to any MCP server. Configured in `.canopy/mcps.json`:
+
+```json
+{
+  "linear": { "command": "npx", "args": [...], "env": {...} },
+  "github": { "command": "...", "args": [...] }
+}
+```
 
 ## canopy.toml
 
@@ -153,6 +198,8 @@ lang = "typescript"
 
 **MCP-native.** Every CLI command is also an MCP tool. AI agents can operate your workspace through the same interface you use.
 
+**MCP-client too.** Canopy spawns external MCP servers (Linear, GitHub, etc.) to fetch data. No direct API dependencies — everything goes through MCP.
+
 ## Project Structure
 
 ```
@@ -168,10 +215,13 @@ src/canopy/
 │   └── multi.py             # cross-repo operations
 ├── features/
 │   └── coordinator.py       # feature lane lifecycle (worktree-smart)
+├── integrations/
+│   └── linear.py            # Linear issue fetching via MCP
 └── mcp/
-    └── server.py            # MCP server (22 tools, stdio transport)
+    ├── server.py            # MCP server (23 tools, stdio transport)
+    └── client.py            # MCP client (call external MCP servers)
 
-tests/                       # 104 tests, ~1.5s
+tests/                       # 130 tests, ~2s
 ```
 
 ## Development

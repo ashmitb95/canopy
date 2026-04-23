@@ -5,7 +5,7 @@
 ### Before You Start
 
 1. Read `CLAUDE.md` for architecture and conventions.
-2. Run `pytest tests/ -v` to verify the baseline (104 tests, ~1.5s).
+2. Run `pytest tests/ -v` to verify the baseline (130 tests, ~2s).
 
 ### Module Boundaries
 
@@ -18,6 +18,8 @@
 - `workspace/context.py` detects where canopy is running from. It reads filesystem paths and calls `git/repo.py` for branch info.
 - `cli/main.py` is a thin layer that parses args and calls the modules above. Keep business logic out of the CLI.
 - `mcp/server.py` wraps the same modules as the CLI. Every tool calls the same functions — the MCP server should never have its own logic.
+- `mcp/client.py` is the MCP client — it spawns external MCP servers and calls their tools. All external integrations go through this.
+- `integrations/linear.py` fetches Linear issue data via `mcp/client.py`. It never calls the Linear API directly.
 
 ### Adding a New CLI Command
 
@@ -58,6 +60,23 @@ Every `--json` command and MCP tool returns structured data. Key shapes:
 - `feature_status` → `FeatureLane.to_dict()` (includes `repo_states` with `worktree_path`)
 - `feature_diff` → dict with `repos`, `summary`, `type_overlaps`
 - `workspace_context` → `CanopyContext.to_dict()` (context_type, feature, repo_names, repo_paths)
+- `worktree_info` → `{features: {name: {repos: {name: {path, branch, dirty, ahead, behind}}}}, repos: {name: {main_path, worktrees: [...]}}}`
+- `worktree_create` → `FeatureLane.to_dict()` + `worktree_paths` (optional `linear_issue`, `linear_title`, `linear_url`)
+
+### Integration Conventions
+
+- **All integrations go through MCP.** Canopy never calls external APIs directly. It spawns the relevant MCP server via `mcp/client.py` and calls tools.
+- **MCP server configs live in `.canopy/mcps.json`.** Each key is a server name (e.g. `"linear"`) with `command`, `args`, and `env`.
+- **Graceful degradation.** If an MCP server isn't configured, the feature still works — just without enrichment (e.g. Linear issue title won't be fetched, but the issue ID is still stored).
+
+### Adding a New Integration
+
+1. Add a module in `integrations/` (e.g. `integrations/github.py`).
+2. Use `mcp.client.get_mcp_config()` to check if the server is configured.
+3. Use `mcp.client.call_tool()` to call the server's tools.
+4. Handle `McpClientError` gracefully — never fail the whole operation because an integration is down.
+5. Store any linked metadata in `features.json` via `FeatureLane` fields.
+6. Write tests that mock the MCP call but test the data flow end-to-end.
 
 ### IDE Launcher Conventions
 

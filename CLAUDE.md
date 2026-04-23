@@ -19,8 +19,11 @@ src/canopy/
 │   └── multi.py             # cross-repo operations (calls repo.py)
 ├── features/
 │   └── coordinator.py       # FeatureLane, FeatureCoordinator (worktree-smart lifecycle)
+├── integrations/
+│   └── linear.py            # Linear issue fetching via MCP client
 └── mcp/
-    └── server.py            # MCP server — 22 tools, stdio transport
+    ├── server.py            # MCP server — 23 tools, stdio transport
+    └── client.py            # MCP client — call external MCP servers (Linear, etc.)
 ```
 
 ## Key Conventions
@@ -32,12 +35,15 @@ src/canopy/
 - **Worktrees live in `.canopy/worktrees/<feature>/<repo>/`** when created with `--worktree`.
 - **canopy.toml is the workspace definition.** Source of truth for which repos are in the workspace.
 - **Context detection** (`workspace/context.py`) walks up from cwd to determine feature, repo, and branch — powers `canopy stage` and other context-aware commands.
+- **MCP client** (`mcp/client.py`) enables canopy to call external MCP servers. Config lives in `.canopy/mcps.json`. Currently powers Linear integration.
+- **Integrations** (`integrations/`) are always MCP-based — canopy never calls external APIs directly. It spawns the relevant MCP server, calls a tool, and uses the result.
+- **Linear integration** (`integrations/linear.py`) fetches issue data via a configured Linear MCP server. `FeatureLane` stores `linear_issue`, `linear_title`, `linear_url` in `features.json`.
 
 ## Build & Test
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 104 tests, ~1.5s
+pytest tests/ -v          # 130 tests, ~2s
 ```
 
 ## Test Fixtures
@@ -55,7 +61,7 @@ Tests use real temporary Git repos created in pytest fixtures (see `tests/confte
 - **Overlap detection:** `git.multi.find_type_overlaps()` matches files by basename across repos.
 - **Worktree detection:** `discovery.py` recognizes `.git` files (not just directories) to identify linked worktrees. `RepoConfig.is_worktree` and `worktree_main` track the relationship.
 - **Context detection:** `context.py` parses the `.canopy/worktrees/<feature>/<repo>/` path structure to determine what feature/repo you're working in.
-- **MCP server:** Uses `mcp` Python SDK with FastMCP. 22 tools exposed via stdio transport. `CANOPY_ROOT` env var sets the workspace path.
+- **MCP server:** Uses `mcp` Python SDK with FastMCP. 23 tools exposed via stdio transport. `CANOPY_ROOT` env var sets the workspace path.
 
 ## MCP Server
 
@@ -67,7 +73,25 @@ feature_create, feature_list, feature_status, feature_switch, feature_diff, feat
 checkout, commit, stage, log,
 branch_list, branch_delete, branch_rename,
 stash_save, stash_pop, stash_list, stash_drop,
-worktree_info, sync
+worktree_info, worktree_create, sync
 ```
 
 Run with: `canopy-mcp` (entry point) or `python -m canopy.mcp.server`.
+
+## MCP Client
+
+Canopy is also an MCP client — it spawns external MCP servers to fetch data. This is how all integrations work (no direct API calls).
+
+Config lives in `.canopy/mcps.json`:
+
+```json
+{
+  "linear": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-linear"],
+    "env": {"LINEAR_API_KEY": "lin_api_..."}
+  }
+}
+```
+
+The client module (`mcp/client.py`) uses the `mcp` SDK's `ClientSession` + `stdio_client` to spawn the server process, call tools, and return results. Synchronous wrapper handles event loop management for CLI use.

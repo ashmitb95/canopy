@@ -12,12 +12,15 @@ const PIP_BIN = path.join(VENV_DIR, "bin", "pip");
 export const MCP_BIN = path.join(VENV_DIR, "bin", "canopy-mcp");
 export const CANOPY_BIN = path.join(VENV_DIR, "bin", "canopy");
 
+const GIT_URL = "git+https://github.com/ashmitb95/canopy.git";
+
 /**
  * One-click Canopy backend installer.
  *
  *   1. Finds python3 (>= 3.10) via login shell.
  *   2. Creates a managed venv at ~/.canopy-vscode/venv.
- *   3. Installs canopy there (from PyPI, a local source tree, or a git URL).
+ *   3. Installs canopy — editable from a detected local checkout if we can
+ *      find one, otherwise `pip install git+https://github.com/...`.
  *   4. Saves the absolute canopy-mcp path to the extension setting so the
  *      extension uses it without needing a shell PATH.
  *
@@ -32,8 +35,8 @@ export async function runInstallBackend(
   const python = await findPython(output);
   if (!python) return null;
 
-  const source = await pickSource();
-  if (!source) return null;
+  const source = resolveSource();
+  output.appendLine(`[canopy] install source: ${source.label}`);
 
   return await vscode.window.withProgress(
     {
@@ -92,69 +95,12 @@ interface SourceChoice {
   pipArgs: string[];
 }
 
-async function pickSource(): Promise<SourceChoice | null> {
-  const items: vscode.QuickPickItem[] = [];
+function resolveSource(): SourceChoice {
   const localDir = detectLocalCheckout();
   if (localDir) {
-    items.push({
-      label: "Local source",
-      description: localDir,
-      detail: `pip install -e ${localDir}`,
-    });
-  }
-  items.push(
-    {
-      label: "PyPI",
-      description: "canopy",
-      detail: "pip install canopy",
-    },
-    {
-      label: "Git URL…",
-      detail: "You'll be prompted for a pip-compatible git URL",
-    },
-    {
-      label: "Browse for source folder…",
-      detail: "Pick a directory containing pyproject.toml",
-    },
-  );
-  const choice = await vscode.window.showQuickPick(items, {
-    title: "Install Canopy — choose source",
-    placeHolder: "Where should the backend be installed from?",
-  });
-  if (!choice) return null;
-
-  if (choice.label === "Local source" && localDir) {
     return { label: `local checkout (${localDir})`, pipArgs: ["-e", localDir] };
   }
-  if (choice.label === "PyPI") {
-    return { label: "PyPI", pipArgs: ["canopy"] };
-  }
-  if (choice.label === "Git URL…") {
-    const url = await vscode.window.showInputBox({
-      prompt: "Git URL",
-      placeHolder: "git+https://github.com/ashmit-biswas/canopy.git",
-    });
-    if (!url) return null;
-    return { label: `git URL ${url}`, pipArgs: [url] };
-  }
-  if (choice.label === "Browse for source folder…") {
-    const picked = await vscode.window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      openLabel: "Install from this folder",
-    });
-    if (!picked || !picked.length) return null;
-    const folder = picked[0].fsPath;
-    if (!fs.existsSync(path.join(folder, "pyproject.toml"))) {
-      void vscode.window.showErrorMessage(
-        `${folder} doesn't contain a pyproject.toml`,
-      );
-      return null;
-    }
-    return { label: `local checkout (${folder})`, pipArgs: ["-e", folder] };
-  }
-  return null;
+  return { label: `GitHub (${GIT_URL})`, pipArgs: [GIT_URL] };
 }
 
 function detectLocalCheckout(): string | null {

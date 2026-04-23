@@ -9,19 +9,17 @@
 <p align="center">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
   <img alt="Tests" src="https://img.shields.io/badge/tests-187%20passing-brightgreen?style=flat-square">
-  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-29-purple?style=flat-square">
+  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-27-purple?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-gray?style=flat-square">
 </p>
 
 ---
 
-Canopy coordinates Git worktrees across multiple repositories. It creates isolated working directories for each feature, opens them in your IDE, commits across repos atomically, and exposes every operation as both a CLI command and an MCP tool — so AI agents can operate your workspace through the same interface you use.
-
-No proprietary abstractions. Feature lanes map to real Git branches and real Git worktrees.
+Canopy coordinates Git worktrees across multiple repositories. It creates isolated working directories for each feature, opens them in your IDE, runs pre-commit checks, and exposes every operation as both a CLI command and an MCP tool — so AI agents can operate your workspace through the same interface you use.
 
 ## Why
 
-Working on a feature that spans multiple repos means coordinating branches, stashing, switching, and committing across all of them. Git worktrees solve the context-switching problem, but the UX for managing them across multiple repos doesn't exist. Canopy provides it: one command to create worktrees in every repo, one command to open them in your IDE, one command to commit across all of them.
+Working on a feature that spans multiple repos means coordinating branches, switching, and managing worktrees across all of them. Git worktrees solve the context-switching problem, but the UX for managing them across multiple repos doesn't exist. Canopy provides it: one command to create worktrees in every repo, one command to open them in your IDE, one command to check everything before you commit.
 
 ## How It Looks
 
@@ -220,7 +218,6 @@ All feature commands accept aliases (Linear ID or unique prefix) in place of the
 | Command | Description |
 |---|---|
 | `canopy checkout <branch>` | Checkout across all repos |
-| `canopy commit -m <msg>` | Commit staged changes in repos that have them |
 | `canopy log` | Interleaved chronological log across repos |
 | `canopy sync` | Pull default branch, rebase feature branches |
 | `canopy branch list\|delete\|rename` | Branch management across repos |
@@ -230,7 +227,7 @@ Every command supports `--json` for machine-readable output.
 
 ## MCP Server
 
-Canopy is an MCP server. Every CLI operation is exposed as a tool (29 total) over stdio transport, so AI agents can operate your workspace programmatically.
+Canopy is an MCP server. Every CLI operation is exposed as a tool (28 total) over stdio transport, so AI agents can operate your workspace programmatically.
 
 ```bash
 canopy-mcp   # starts the server
@@ -249,7 +246,7 @@ Register in Claude Code, Cursor, or any MCP-compatible client:
 }
 ```
 
-**Tools exposed:** `workspace_status`, `workspace_context`, `workspace_config`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `feature_done`, `checkout`, `commit`, `preflight`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`, `review_status`, `review_comments`, `review_prep`.
+**Tools exposed:** `workspace_status`, `workspace_context`, `workspace_config`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `feature_done`, `checkout`, `preflight`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`, `review_status`, `review_comments`, `review_prep`.
 
 ## MCP Client
 
@@ -326,7 +323,7 @@ src/canopy/
 │   ├── github.py            # GitHub PR + review comments (via mcp/client.py)
 │   └── precommit.py         # detect and run pre-commit hooks (framework or git hooks)
 └── mcp/
-    ├── server.py            # MCP server — 29 tools, stdio transport
+    ├── server.py            # MCP server — 27 tools, stdio transport
     └── client.py            # MCP client — spawn + call external MCP servers
 ```
 

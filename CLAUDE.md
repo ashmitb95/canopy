@@ -65,7 +65,7 @@ Tests use real temporary Git repos created in pytest fixtures (see `tests/confte
 - **Overlap detection:** `git.multi.find_type_overlaps()` matches files by basename across repos.
 - **Worktree detection:** `discovery.py` recognizes `.git` files (not just directories) to identify linked worktrees. `RepoConfig.is_worktree` and `worktree_main` track the relationship.
 - **Context detection:** `context.py` parses the `.canopy/worktrees/<feature>/<repo>/` path structure to determine what feature/repo you're working in.
-- **MCP server:** Uses `mcp` Python SDK with FastMCP. 29 tools exposed via stdio transport. `CANOPY_ROOT` env var sets the workspace path.
+- **MCP server:** Uses `mcp` Python SDK with FastMCP. 27 tools exposed via stdio transport. `CANOPY_ROOT` env var sets the workspace path.
 - **Worktree limits:** `max_worktrees` in `canopy.toml` caps active worktrees. `WorktreeLimitError` includes stale candidates for cleanup. Limit of 0 means unlimited.
 - **Config management:** `set_config_value()` does text-based TOML editing (since `tomllib` is read-only). Regex within `[workspace]` section to update/insert values.
 - **Alias resolution:** `_resolve_name()` lets users type just the Linear ID (e.g. `ENG-412`) instead of the full feature name. Resolution order: exact match → prefix match → linear_issue field match. Ambiguous prefixes raise. All coordinator methods that accept a feature name call `_resolve_name()` first.
@@ -78,7 +78,7 @@ The MCP server at `mcp/server.py` exposes every canopy operation as a tool:
 ```
 workspace_status, workspace_context, workspace_config,
 feature_create, feature_list, feature_status, feature_switch, feature_diff, feature_merge_readiness, feature_paths, feature_done,
-checkout, commit, preflight, log,
+checkout, preflight, log,
 branch_list, branch_delete, branch_rename,
 stash_save, stash_pop, stash_list, stash_drop,
 worktree_info, worktree_create, sync,

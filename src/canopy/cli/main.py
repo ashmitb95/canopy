@@ -5,7 +5,6 @@ Commands:
     init                         Auto-detect repos, generate canopy.toml
     status                       Cross-repo workspace status
     checkout <branch>            Checkout branch across repos
-    commit -m <msg>              Commit staged changes across repos
     log                          Interleaved log across repos
     sync                         Pull + rebase across all repos
     feature create <name>        Create a feature lane across repos
@@ -479,21 +478,6 @@ def cmd_checkout(args: argparse.Namespace) -> None:
         status = "ok" if result is True else f"failed: {result}"
         print(f"  {repo}: {status}")
 
-
-def cmd_commit(args: argparse.Namespace) -> None:
-    """Commit staged changes across repos."""
-    workspace = _load_workspace()
-    from ..git.multi import commit_all
-
-    repos = args.repos.split(",") if args.repos else None
-    results = commit_all(workspace, args.message, repos)
-
-    if args.json:
-        _print_json({"message": args.message, "results": results})
-        return
-
-    for repo, result in results.items():
-        print(f"  {repo}: {result}")
 
 
 def cmd_log(args: argparse.Namespace) -> None:
@@ -1604,12 +1588,6 @@ def main() -> None:
     co_p.add_argument("--repos", default=None, help="Comma-separated repo names")
     co_p.add_argument("--json", action="store_true", help="Output as JSON")
 
-    # commit
-    ci_p = subparsers.add_parser("commit", help="Commit staged changes across repos")
-    ci_p.add_argument("-m", "--message", required=True, help="Commit message")
-    ci_p.add_argument("--repos", default=None, help="Comma-separated repo names")
-    ci_p.add_argument("--json", action="store_true", help="Output as JSON")
-
     # log
     log_p = subparsers.add_parser("log", help="Interleaved log across repos")
     log_p.add_argument("-n", "--count", type=int, default=20, help="Max entries")
@@ -1753,7 +1731,6 @@ def main() -> None:
         "status": cmd_status,
         "sync": cmd_sync,
         "checkout": cmd_checkout,
-        "commit": cmd_commit,
         "log": cmd_log,
         "worktree": cmd_worktree,
         "code": cmd_code,

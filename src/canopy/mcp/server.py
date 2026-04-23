@@ -222,20 +222,6 @@ def checkout(branch: str, repos: list[str] | None = None) -> dict:
     return {"branch": branch, "results": {k: str(v) for k, v in results.items()}}
 
 
-@mcp.tool()
-def commit(message: str, repos: list[str] | None = None) -> dict:
-    """Commit staged changes across workspace repos.
-
-    Only commits in repos that have staged changes.
-
-    Args:
-        message: Commit message.
-        repos: Subset of repo names. Default: all repos.
-    """
-    ws = _get_workspace()
-    results = multi.commit_all(ws, message, repos)
-    return {"message": message, "results": results}
-
 
 @mcp.tool()
 def preflight(cwd: str | None = None) -> dict:

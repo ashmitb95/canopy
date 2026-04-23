@@ -468,6 +468,82 @@ def worktree_create(
     return result
 
 
+# ── Review tools ────────────────────────────────────────────────────────
+
+@mcp.tool()
+def review_status(feature: str) -> dict:
+    """Check if pull requests exist for a feature across repos.
+
+    For each repo in the feature lane, resolves the GitHub remote and
+    checks for an open PR matching the feature branch. Requires a
+    GitHub MCP server configured in .canopy/mcps.json.
+
+    Args:
+        feature: Feature lane name (e.g. "auth-flow").
+
+    Returns:
+        Per-repo PR status including number, title, URL. The top-level
+        "has_prs" field is False if no PRs exist in any repo — the
+        review workflow cannot proceed without PRs.
+    """
+    ws = _get_workspace()
+    coordinator = FeatureCoordinator(ws)
+    return coordinator.review_status(feature)
+
+
+@mcp.tool()
+def review_comments(feature: str) -> dict:
+    """Fetch unresolved PR review comments for a feature across repos.
+
+    Requires an open PR in at least one repo — fails if no PRs exist.
+    Returns comments grouped by repo and file, filtered to unresolved
+    comments only (resolved and bot comments are excluded).
+
+    This is the primary tool for an agent to understand what reviewers
+    want changed before the PR can be merged.
+
+    Args:
+        feature: Feature lane name (e.g. "auth-flow").
+
+    Returns:
+        Comments grouped by repo, each with path, line, body, author.
+        total_comments gives the aggregate count across all repos.
+    """
+    ws = _get_workspace()
+    coordinator = FeatureCoordinator(ws)
+    return coordinator.review_comments(feature)
+
+
+@mcp.tool()
+def review_prep(
+    feature: str,
+    message: str = "",
+) -> dict:
+    """Run pre-commit hooks and stage all changes for a feature.
+
+    This is the "get to commit-ready state" workflow:
+    1. Finds working directories for the feature (worktrees or repos)
+    2. Runs pre-commit hooks in each repo (detects framework vs git hooks)
+    3. Stages all changes (git add -A)
+    4. Reports per-repo results
+
+    Does NOT create a commit — it leaves the repos staged and ready.
+    Call the `stage` or `commit` tool afterwards to actually commit.
+
+    Args:
+        feature: Feature lane name.
+        message: Suggested commit message (included in result for
+            convenience, not used for committing).
+
+    Returns:
+        Per-repo pre-commit results and staging status.
+        all_passed is True only if every repo's hooks passed.
+    """
+    ws = _get_workspace()
+    coordinator = FeatureCoordinator(ws)
+    return coordinator.review_prep(feature, message=message)
+
+
 # ── Sync ─────────────────────────────────────────────────────────────────
 
 @mcp.tool()

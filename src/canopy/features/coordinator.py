@@ -519,6 +519,264 @@ class FeatureCoordinator:
             "repos": repos_wt,
         }
 
+    def review_status(self, name: str) -> dict:
+        """Check if PRs exist for a feature lane across repos.
+
+        For each repo, resolves the remote URL to owner/repo, then queries
+        GitHub MCP for an open PR matching the feature branch.
+
+        Returns:
+            {
+                "feature": str,
+                "has_prs": bool,
+                "repos": {
+                    "<repo>": {
+                        "branch": str,
+                        "owner": str,
+                        "repo_name": str,
+                        "pr": {number, title, url, state, head_branch} | None,
+                        "error": str (optional)
+                    }
+                }
+            }
+
+        Raises:
+            ValueError: If the feature doesn't exist.
+            GitHubNotConfiguredError: If GitHub MCP is not configured.
+        """
+        from ..integrations.github import (
+            is_github_configured,
+            find_pull_request,
+            _extract_owner_repo,
+            GitHubNotConfiguredError,
+        )
+
+        if not is_github_configured(self.workspace.config.root):
+            raise GitHubNotConfiguredError(
+                "GitHub MCP not configured.\n"
+                "Add a 'github' entry to .canopy/mcps.json:\n"
+                "  {\n"
+                '    "github": {\n'
+                '      "command": "npx",\n'
+                '      "args": ["-y", "@modelcontextprotocol/server-github"],\n'
+                '      "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_..."}\n'
+                "    }\n"
+                "  }"
+            )
+
+        lane = self.status(name)
+        results: dict[str, dict] = {}
+        has_any_pr = False
+
+        for repo_name in lane.repos:
+            try:
+                state = self.workspace.get_repo(repo_name)
+            except KeyError:
+                results[repo_name] = {"error": "repo not found"}
+                continue
+
+            remote = git.remote_url(state.abs_path)
+            if not remote:
+                results[repo_name] = {
+                    "branch": name,
+                    "error": "no remote URL configured",
+                }
+                continue
+
+            parsed = _extract_owner_repo(remote)
+            if not parsed:
+                results[repo_name] = {
+                    "branch": name,
+                    "error": f"could not parse GitHub owner/repo from: {remote}",
+                }
+                continue
+
+            owner, repo_slug = parsed
+            try:
+                pr = find_pull_request(
+                    self.workspace.config.root, owner, repo_slug, name,
+                )
+                if pr:
+                    has_any_pr = True
+                results[repo_name] = {
+                    "branch": name,
+                    "owner": owner,
+                    "repo_name": repo_slug,
+                    "pr": pr,
+                }
+            except Exception as e:
+                results[repo_name] = {
+                    "branch": name,
+                    "owner": owner,
+                    "repo_name": repo_slug,
+                    "pr": None,
+                    "error": str(e),
+                }
+
+        return {
+            "feature": name,
+            "has_prs": has_any_pr,
+            "repos": results,
+        }
+
+    def review_comments(self, name: str) -> dict:
+        """Fetch unresolved PR review comments for a feature lane.
+
+        Precondition: PR must exist. If no PR exists in any repo, this
+        returns an error.
+
+        Returns:
+            {
+                "feature": str,
+                "total_comments": int,
+                "repos": {
+                    "<repo>": {
+                        "pr_number": int,
+                        "pr_url": str,
+                        "comments": [
+                            {path, line, body, author, state, created_at, url}
+                        ]
+                    }
+                }
+            }
+
+        Raises:
+            PullRequestNotFoundError: If no PR exists for any repo.
+            GitHubNotConfiguredError: If GitHub MCP is not configured.
+        """
+        from ..integrations.github import (
+            get_review_comments,
+            PullRequestNotFoundError,
+            GitHubNotConfiguredError,
+        )
+
+        status = self.review_status(name)
+        if not status["has_prs"]:
+            raise PullRequestNotFoundError(
+                f"No open PRs found for feature '{name}' in any repo. "
+                "Push your branch and create a PR first."
+            )
+
+        results: dict[str, dict] = {}
+        total = 0
+
+        for repo_name, info in status["repos"].items():
+            pr = info.get("pr")
+            if not pr:
+                continue
+
+            owner = info.get("owner", "")
+            repo_slug = info.get("repo_name", "")
+            pr_number = pr["number"]
+
+            try:
+                comments = get_review_comments(
+                    self.workspace.config.root,
+                    owner,
+                    repo_slug,
+                    pr_number,
+                )
+                total += len(comments)
+                results[repo_name] = {
+                    "pr_number": pr_number,
+                    "pr_url": pr.get("url", ""),
+                    "pr_title": pr.get("title", ""),
+                    "comments": comments,
+                }
+            except Exception as e:
+                results[repo_name] = {
+                    "pr_number": pr_number,
+                    "pr_url": pr.get("url", ""),
+                    "pr_title": pr.get("title", ""),
+                    "comments": [],
+                    "error": str(e),
+                }
+
+        return {
+            "feature": name,
+            "total_comments": total,
+            "repos": results,
+        }
+
+    def review_prep(self, name: str, message: str = "") -> dict:
+        """Run pre-commit hooks and stage changes for a feature lane.
+
+        This is the "get to commit-ready state" workflow:
+        1. Resolve feature → repo paths (worktree or checked-out)
+        2. Run pre-commit hooks in each repo
+        3. Stage all changes (git add -A)
+        4. Report results (does NOT commit — leaves that to the caller)
+
+        If message is provided, it's included in the result for the caller
+        to use as a commit message.
+
+        Returns:
+            {
+                "feature": str,
+                "message": str,
+                "repos": {
+                    "<repo>": {
+                        "path": str,
+                        "precommit": {type, passed, output},
+                        "staged": bool,
+                        "dirty_count": int,
+                        "error": str (optional),
+                    }
+                },
+                "all_passed": bool,
+            }
+        """
+        from ..integrations.precommit import run_precommit
+
+        paths = self.resolve_paths(name)
+        if not paths:
+            raise ValueError(f"No working directories found for feature '{name}'")
+
+        results: dict[str, dict] = {}
+        all_passed = True
+
+        for repo_name, path_str in paths.items():
+            repo_path = Path(path_str)
+            entry: dict = {"path": path_str}
+
+            # Run pre-commit hooks
+            try:
+                pc_result = run_precommit(repo_path)
+                entry["precommit"] = pc_result
+                if not pc_result["passed"]:
+                    all_passed = False
+            except Exception as e:
+                entry["precommit"] = {
+                    "type": "error",
+                    "passed": False,
+                    "output": str(e),
+                }
+                all_passed = False
+
+            # Stage all changes
+            try:
+                porcelain = git.status_porcelain(repo_path)
+                if porcelain:
+                    git._run(["add", "-A"], cwd=repo_path)
+                    entry["staged"] = True
+                    entry["dirty_count"] = len(porcelain)
+                else:
+                    entry["staged"] = False
+                    entry["dirty_count"] = 0
+            except git.GitError as e:
+                entry["staged"] = False
+                entry["dirty_count"] = 0
+                entry["error"] = str(e)
+
+            results[repo_name] = entry
+
+        return {
+            "feature": name,
+            "message": message,
+            "repos": results,
+            "all_passed": all_passed,
+        }
+
     def _load_features(self) -> dict:
         """Load features.json, returning empty dict if not found."""
         if not self._store_path.exists():

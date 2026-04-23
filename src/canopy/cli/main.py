@@ -22,6 +22,7 @@ Commands:
     stash drop                   Drop stash across repos
     worktree                     Show worktree info for repos
     stage <message>              Context-aware add + commit (from worktree dir)
+    review <feature>             Fetch PR comments + run pre-commit + stage
     code <feature|.>             Open VS Code for feature or workspace
     cursor <feature|.>           Open Cursor for feature or workspace
     fork <feature|.>             Open Fork.app for feature or workspace
@@ -1052,6 +1053,156 @@ def cmd_stage(args: argparse.Namespace) -> None:
     print()
 
 
+def cmd_review(args: argparse.Namespace) -> None:
+    """Fetch PR review comments and prep for commit.
+
+    Full workflow:
+    1. Check if PRs exist for the feature
+    2. Fetch unresolved review comments
+    3. Run pre-commit hooks
+    4. Stage all changes
+    """
+    from .ui import console, spinner, separator, print_success, print_warning, print_error, SYM_CHECK, SYM_CROSS, SYM_LINK
+    from ..integrations.github import GitHubNotConfiguredError, PullRequestNotFoundError
+
+    workspace = _load_workspace()
+    from ..features.coordinator import FeatureCoordinator
+
+    coordinator = FeatureCoordinator(workspace)
+    feature = args.name
+
+    # ── Step 1: Check PR status ──
+    try:
+        with spinner(f"Checking PRs for {feature}..."):
+            status = coordinator.review_status(feature)
+    except GitHubNotConfiguredError as e:
+        print_error(str(e))
+        sys.exit(1)
+    except ValueError as e:
+        print_error(str(e))
+        sys.exit(1)
+
+    if not status["has_prs"]:
+        print_error(f"No open PRs found for feature '{feature}'")
+        console.print(f"  [muted]Push your branch and create a PR first.[/]")
+        if args.json:
+            _print_json(status)
+        sys.exit(1)
+
+    # ── Step 2: Fetch comments ──
+    try:
+        with spinner(f"Fetching review comments..."):
+            comments_data = coordinator.review_comments(feature)
+    except PullRequestNotFoundError as e:
+        print_error(str(e))
+        sys.exit(1)
+
+    # ── Step 3: Run pre-commit + stage ──
+    prep_data = None
+    if not args.comments_only:
+        with spinner(f"Running pre-commit hooks..."):
+            prep_data = coordinator.review_prep(
+                feature, message=args.message or "",
+            )
+
+    if args.json:
+        result = {
+            "review_status": status,
+            "comments": comments_data,
+        }
+        if prep_data:
+            result["prep"] = prep_data
+        _print_json(result)
+        return
+
+    # ── Display PR status ──
+    console.print()
+    console.print(f"  [header]Review: {feature}[/]")
+
+    for repo_name, info in status["repos"].items():
+        pr = info.get("pr")
+        if pr:
+            console.print(
+                f"  [repo]{repo_name}[/]  "
+                f"[linear]{SYM_LINK} #{pr['number']}[/] {pr['title']}"
+            )
+            console.print(f"    [path]{pr.get('url', '')}[/]")
+        elif "error" in info:
+            console.print(f"  [repo]{repo_name}[/]  [error]{info['error']}[/]")
+        else:
+            console.print(f"  [repo]{repo_name}[/]  [muted]no PR[/]")
+
+    # ── Display comments ──
+    separator()
+    total = comments_data.get("total_comments", 0)
+    if total == 0:
+        print_success("No unresolved review comments")
+    else:
+        console.print(f"  [warning]{total} unresolved comment{'s' if total != 1 else ''}[/]")
+        console.print()
+
+        for repo_name, repo_data in comments_data.get("repos", {}).items():
+            comments = repo_data.get("comments", [])
+            if not comments:
+                continue
+
+            console.print(f"  [repo]{repo_name}[/]  [muted]#{repo_data.get('pr_number', '?')}[/]")
+
+            # Group by file
+            by_file: dict[str, list] = {}
+            for c in comments:
+                path = c.get("path") or "(general)"
+                by_file.setdefault(path, []).append(c)
+
+            for filepath, file_comments in by_file.items():
+                console.print(f"    [path]{filepath}[/]")
+                for c in file_comments:
+                    line = c.get("line")
+                    line_str = f"L{line}" if line else ""
+                    author = c.get("author", "")
+                    body = c.get("body", "").split("\n")[0][:120]
+                    console.print(
+                        f"      [muted]{line_str}[/] "
+                        f"[info]{author}[/]: {body}"
+                    )
+
+    # ── Display prep results ──
+    if prep_data:
+        separator()
+        if prep_data["all_passed"]:
+            print_success("Pre-commit hooks passed")
+        else:
+            print_warning("Pre-commit hooks failed in some repos")
+
+        for repo_name, info in prep_data["repos"].items():
+            pc = info.get("precommit", {})
+            pc_type = pc.get("type", "none")
+            passed = pc.get("passed", True)
+            staged = info.get("staged", False)
+            dirty = info.get("dirty_count", 0)
+
+            status_parts = []
+            if pc_type != "none":
+                icon = SYM_CHECK if passed else SYM_CROSS
+                style = "success" if passed else "error"
+                status_parts.append(f"[{style}]{icon} hooks[/]")
+            if staged:
+                status_parts.append(f"[ahead]{dirty} staged[/]")
+            elif dirty == 0:
+                status_parts.append("[muted]clean[/]")
+
+            console.print(
+                f"  [repo]{repo_name}[/]  {' '.join(status_parts)}"
+            )
+
+            if not passed and pc.get("output"):
+                # Show first few lines of hook output
+                for line in pc["output"].split("\n")[:5]:
+                    console.print(f"    [muted]{line}[/]")
+
+    console.print()
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     """Show detected canopy context for current directory (debug)."""
     from ..workspace.context import detect_context
@@ -1233,6 +1384,22 @@ def main() -> None:
     stage_p.add_argument("message", help="Commit message")
     stage_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # review
+    review_p = subparsers.add_parser(
+        "review",
+        help="Fetch PR review comments and prep for commit",
+    )
+    review_p.add_argument("name", help="Feature lane name")
+    review_p.add_argument(
+        "-m", "--message", default="",
+        help="Placeholder commit message (staged but not committed)",
+    )
+    review_p.add_argument(
+        "--comments-only", action="store_true",
+        help="Only fetch comments — skip pre-commit and staging",
+    )
+    review_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # context (debug)
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
@@ -1255,6 +1422,7 @@ def main() -> None:
         "cursor": cmd_cursor,
         "fork": cmd_fork,
         "stage": cmd_stage,
+        "review": cmd_review,
         "context": cmd_context,
     }
 

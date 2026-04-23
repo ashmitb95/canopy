@@ -5,7 +5,7 @@
 ### Before You Start
 
 1. Read `CLAUDE.md` for architecture and conventions.
-2. Run `pytest tests/ -v` to verify the baseline (130 tests, ~2s).
+2. Run `pytest tests/ -v` to verify the baseline (159 tests, ~2s).
 
 ### Module Boundaries
 
@@ -20,6 +20,8 @@
 - `mcp/server.py` wraps the same modules as the CLI. Every tool calls the same functions — the MCP server should never have its own logic.
 - `mcp/client.py` is the MCP client — it spawns external MCP servers and calls their tools. All external integrations go through this.
 - `integrations/linear.py` fetches Linear issue data via `mcp/client.py`. It never calls the Linear API directly.
+- `integrations/github.py` finds PRs for a branch and fetches unresolved review comments via `mcp/client.py`. It never calls the GitHub API directly.
+- `integrations/precommit.py` detects and runs pre-commit hooks. It checks for `.pre-commit-config.yaml` (framework) and `.git/hooks/pre-commit` (raw git hooks). It does not go through MCP — it runs hooks locally via subprocess.
 
 ### Adding a New CLI Command
 
@@ -62,6 +64,9 @@ Every `--json` command and MCP tool returns structured data. Key shapes:
 - `workspace_context` → `CanopyContext.to_dict()` (context_type, feature, repo_names, repo_paths)
 - `worktree_info` → `{features: {name: {repos: {name: {path, branch, dirty, ahead, behind}}}}, repos: {name: {main_path, worktrees: [...]}}}`
 - `worktree_create` → `FeatureLane.to_dict()` + `worktree_paths` (optional `linear_issue`, `linear_title`, `linear_url`)
+- `review_status` → `{feature, repos: [{name, branch, pr: {number, url, state, title}, has_unresolved_comments}], precommit: {available, passed, errors}}`
+- `review_comments` → `{feature, repos: [{name, pr_number, comments: [{path, line, body, author, resolved}]}]}`
+- `review_prep` → `{feature, ready, blockers: [str], repos: [{name, merge_readiness, pr_status, unresolved_comment_count, precommit_passed}]}`
 
 ### Integration Conventions
 

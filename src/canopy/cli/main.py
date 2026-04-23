@@ -62,22 +62,31 @@ def cmd_init(args: argparse.Namespace) -> None:
     """Auto-detect repos and generate canopy.toml."""
     from ..workspace.discovery import discover_repos, generate_toml
     from ..workspace.config import load_config, ConfigNotFoundError
+    from .ui import console, spinner, print_error, print_warning
 
     root = Path(args.path).resolve() if args.path else Path.cwd().resolve()
 
     # Check if canopy.toml already exists
     toml_path = root / "canopy.toml"
     if toml_path.exists() and not args.force:
-        print(f"canopy.toml already exists at {toml_path}", file=sys.stderr)
-        print("Use --force to overwrite.", file=sys.stderr)
+        print_error(f"canopy.toml already exists at [path]{toml_path}[/]")
+        console.print(f"  [muted]Use [info]--force[/] to overwrite.[/]")
         sys.exit(1)
 
-    repos = discover_repos(root)
+    is_reinit = toml_path.exists() and args.force
+    scan_msg = "Rescanning workspace..." if is_reinit else "Scanning for repos..."
+
+    with spinner(scan_msg):
+        repos = discover_repos(root)
+
     if not repos:
-        print(f"No Git repositories found in {root}", file=sys.stderr)
+        print_error(f"No Git repositories found in [path]{root}[/]")
         sys.exit(1)
 
     toml_content = generate_toml(root, workspace_name=args.name)
+
+    if is_reinit:
+        print_warning("Overwriting existing canopy.toml")
 
     if args.json:
         all_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
@@ -107,14 +116,19 @@ def cmd_init(args: argparse.Namespace) -> None:
         print(toml_content)
         return
 
+    from .ui import console, print_success, print_warning, separator, SYM_ARROW, SYM_CHECK
+
     toml_path.write_text(toml_content)
-    print(f"Created {toml_path}")
 
     # Count non-git dirs that were skipped
     all_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
     skipped = [d.name for d in all_dirs if not (d / ".git").exists()]
 
-    print(f"Found {len(repos)} repos:")
+    console.print()
+    print_success(f"Created [path]{toml_path}[/]")
+    console.print()
+    console.print(f"  [header]Found {len(repos)} repos[/]")
+
     for r in repos:
         tags = []
         if r.role:
@@ -122,12 +136,12 @@ def cmd_init(args: argparse.Namespace) -> None:
         if r.lang:
             tags.append(r.lang)
         if r.is_worktree:
-            tags.append(f"worktree → {r.worktree_main}")
-        tag_str = f" ({', '.join(tags)})" if tags else ""
-        print(f"  {r.name}{tag_str}")
+            tags.append(f"worktree {SYM_ARROW} {r.worktree_main}")
+        tag_str = f"  [muted]{', '.join(tags)}[/]" if tags else ""
+        console.print(f"  [repo]{r.name}[/]{tag_str}")
 
     if skipped:
-        print(f"Skipped {len(skipped)} non-git dirs: {', '.join(skipped)}")
+        console.print(f"  [muted]Skipped {len(skipped)} non-git dirs: {', '.join(skipped)}[/]")
 
     # Report existing feature worktrees under .canopy/
     canopy_dir = root / ".canopy"
@@ -137,17 +151,21 @@ def cmd_init(args: argparse.Namespace) -> None:
             d.name for d in worktrees_dir.iterdir() if d.is_dir()
         )
         if features_with_wt:
-            print(f"Active worktrees ({len(features_with_wt)}):")
+            console.print()
+            console.print(f"  [header]Active worktrees ({len(features_with_wt)})[/]")
             for feat in features_with_wt:
                 feat_dir = worktrees_dir / feat
                 wt_repos = sorted(
                     d.name for d in feat_dir.iterdir() if d.is_dir()
                 )
-                print(f"  {feat} → {', '.join(wt_repos)}")
+                console.print(f"  [feature]{feat}[/] [muted]{SYM_ARROW}[/] {', '.join(wt_repos)}")
+    console.print()
 
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Show cross-repo workspace status."""
+    from .ui import console, separator, SYM_BRANCH
+
     workspace = _load_workspace()
     workspace.refresh()
 
@@ -155,32 +173,34 @@ def cmd_status(args: argparse.Namespace) -> None:
         _print_json(workspace.to_dict())
         return
 
-    print(f"\n  Workspace: {workspace.config.name}")
-    print(f"  Root: {workspace.config.root}")
-    print(f"  {'─' * 60}")
+    console.print()
+    console.print(f"  [header]{workspace.config.name}[/]  [path]{workspace.config.root}[/]")
+    separator()
 
     for state in workspace.repos:
-        indicators = []
+        role = f"  [muted]{state.config.role}[/]" if state.config.role else ""
+        console.print(f"\n  [repo]{state.config.name}[/]{role}")
+
+        # Branch line with status indicators
+        parts = []
         if state.is_dirty:
-            indicators.append(f"{state.dirty_count} dirty")
+            parts.append(f"[dirty]{state.dirty_count} dirty[/]")
         if state.ahead_of_default:
-            indicators.append(f"+{state.ahead_of_default}")
+            parts.append(f"[ahead]↑{state.ahead_of_default}[/]")
         if state.behind_default:
-            indicators.append(f"-{state.behind_default}")
+            parts.append(f"[behind]↓{state.behind_default}[/]")
+        status_str = f"  {' '.join(parts)}" if parts else ""
 
-        tag = f"  ({', '.join(indicators)})" if indicators else ""
-        role = f" [{state.config.role}]" if state.config.role else ""
-
-        print(f"\n  {state.config.name}{role}")
-        print(f"    branch: {state.current_branch}{tag}")
-        print(f"    head:   {state.head_sha}")
+        console.print(f"    {SYM_BRANCH} [branch]{state.current_branch}[/]{status_str}")
+        console.print(f"    [muted]{state.head_sha}[/]")
 
     features = workspace.active_features()
     if features:
-        print(f"\n  {'─' * 60}")
-        print(f"  Active features: {', '.join(features)}")
+        separator()
+        feat_str = "  ".join(f"[feature]{f}[/]" for f in features)
+        console.print(f"  Active features: {feat_str}")
 
-    print()
+    console.print()
 
 
 def cmd_feature_create(args: argparse.Namespace) -> None:
@@ -219,6 +239,8 @@ def cmd_feature_create(args: argparse.Namespace) -> None:
 
 def cmd_feature_list(args: argparse.Namespace) -> None:
     """List active feature lanes."""
+    from .ui import console, separator, SYM_LINK
+
     workspace = _load_workspace()
     from ..features.coordinator import FeatureCoordinator
 
@@ -230,35 +252,43 @@ def cmd_feature_list(args: argparse.Namespace) -> None:
         return
 
     if not lanes:
-        print("No active feature lanes.")
-        print("Create one with: canopy feature create <name>")
+        console.print()
+        console.print("  [muted]No active feature lanes.[/]")
+        console.print(f"  [muted]Create one with:[/] [info]canopy worktree <name>[/]")
+        console.print()
         return
 
-    print(f"\n  Feature Lanes")
-    print(f"  {'─' * 60}")
+    console.print()
+    console.print(f"  [header]Feature Lanes ({len(lanes)})[/]")
 
     for lane in lanes:
-        print(f"\n  {lane.name}")
+        separator()
+        linear_str = ""
+        if lane.linear_issue:
+            title_bit = f" — {lane.linear_title}" if lane.linear_title else ""
+            linear_str = f"  [linear]{SYM_LINK} {lane.linear_issue}{title_bit}[/]"
+        console.print(f"  [feature]{lane.name}[/]{linear_str}")
+
         for repo_name, state in lane.repo_states.items():
             if "error" in state:
-                print(f"    {repo_name}: error — {state['error']}")
+                console.print(f"    [repo]{repo_name}[/]  [error]error — {state['error']}[/]")
                 continue
             if not state.get("has_branch"):
-                print(f"    {repo_name}: no branch")
+                console.print(f"    [repo]{repo_name}[/]  [muted]no branch[/]")
                 continue
             parts = []
             if state.get("ahead"):
-                parts.append(f"+{state['ahead']}")
+                parts.append(f"[ahead]↑{state['ahead']}[/]")
             if state.get("behind"):
-                parts.append(f"-{state['behind']}")
+                parts.append(f"[behind]↓{state['behind']}[/]")
             if state.get("dirty"):
-                parts.append("dirty")
+                parts.append("[dirty]dirty[/]")
             if state.get("changed_file_count"):
-                parts.append(f"{state['changed_file_count']} files")
-            info = ", ".join(parts) if parts else "up to date"
-            print(f"    {repo_name}: {info}")
+                parts.append(f"[muted]{state['changed_file_count']} files[/]")
+            status = " ".join(parts) if parts else "[clean]up to date[/]"
+            console.print(f"    [repo]{repo_name}[/]  {status}")
 
-    print()
+    console.print()
 
 
 def cmd_feature_switch(args: argparse.Namespace) -> None:
@@ -346,6 +376,8 @@ def cmd_feature_diff(args: argparse.Namespace) -> None:
 
 def cmd_feature_status(args: argparse.Namespace) -> None:
     """Show detailed feature lane status."""
+    from .ui import console, separator, print_success, SYM_CHECK, SYM_CROSS, SYM_LINK
+
     workspace = _load_workspace()
     from ..features.coordinator import FeatureCoordinator
 
@@ -354,57 +386,62 @@ def cmd_feature_status(args: argparse.Namespace) -> None:
     try:
         lane = coordinator.status(args.name)
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        from .ui import print_error
+        print_error(str(e))
         sys.exit(1)
 
     if args.json:
         _print_json(lane.to_dict())
         return
 
-    print(f"\n  Feature: {lane.name}")
-    print(f"  Status: {lane.status}")
+    console.print()
+    linear_str = ""
+    if lane.linear_issue:
+        title_bit = f" — {lane.linear_title}" if lane.linear_title else ""
+        linear_str = f"  [linear]{SYM_LINK} {lane.linear_issue}{title_bit}[/]"
+    console.print(f"  [feature]{lane.name}[/]{linear_str}")
+    console.print(f"  [muted]status: {lane.status}[/]")
     if lane.created_at:
-        print(f"  Created: {lane.created_at}")
-    print(f"  {'─' * 60}")
+        console.print(f"  [muted]created: {lane.created_at}[/]")
+    separator()
 
     for repo_name, state in lane.repo_states.items():
         if "error" in state:
-            print(f"\n  {repo_name}: error — {state['error']}")
+            console.print(f"\n  [repo]{repo_name}[/]  [error]error — {state['error']}[/]")
             continue
         if not state.get("has_branch"):
-            print(f"\n  {repo_name}: no branch")
+            console.print(f"\n  [repo]{repo_name}[/]  [muted]no branch[/]")
             continue
 
         parts = []
         if state.get("ahead"):
-            parts.append(f"+{state['ahead']} ahead")
+            parts.append(f"[ahead]↑{state['ahead']} ahead[/]")
         if state.get("behind"):
-            parts.append(f"-{state['behind']} behind")
+            parts.append(f"[behind]↓{state['behind']} behind[/]")
         if state.get("dirty"):
-            parts.append("uncommitted changes")
-        divergence = ", ".join(parts) if parts else "up to date"
+            parts.append("[dirty]uncommitted changes[/]")
+        divergence = "  ".join(parts) if parts else "[clean]up to date[/]"
 
-        print(f"\n  {repo_name}")
-        print(f"    divergence: {divergence}")
+        console.print(f"\n  [repo]{repo_name}[/]  {divergence}")
         files = state.get("changed_files", [])
         if files:
-            print(f"    files ({len(files)}):")
+            console.print(f"    [muted]files ({len(files)}):[/]")
             for f in files[:8]:
-                print(f"      {f}")
+                console.print(f"    [path]{f}[/]")
             if len(files) > 8:
-                print(f"      ... and {len(files) - 8} more")
+                console.print(f"    [muted]... and {len(files) - 8} more[/]")
 
     # Merge readiness
     readiness = coordinator.merge_readiness(lane.name)
-    print(f"\n  {'─' * 60}")
+    separator()
     if readiness["ready"]:
-        print("  Merge ready: yes")
+        console.print(f"  [success]{SYM_CHECK} Merge ready[/]")
     else:
-        print("  Merge ready: no")
+        console.print(f"  [error]{SYM_CROSS} Not merge ready[/]")
         for issue in readiness["issues"]:
-            print(f"    - {issue}")
+            console.print(f"    [muted]•[/] {issue}")
 
-    print()
+    console.print()
 
 
 def cmd_sync(args: argparse.Namespace) -> None:
@@ -610,6 +647,8 @@ def cmd_worktree(args: argparse.Namespace) -> None:
 
 def cmd_worktree_create(args: argparse.Namespace) -> None:
     """Create a feature with worktrees, optionally linked to a Linear issue."""
+    from .ui import console, spinner, print_success, print_warning, print_error, separator, SYM_ARROW, SYM_LINK
+
     workspace = _load_workspace()
     from ..features.coordinator import FeatureCoordinator
 
@@ -634,37 +673,35 @@ def cmd_worktree_create(args: argparse.Namespace) -> None:
 
         if is_linear_configured(workspace.config.root):
             try:
-                print(f"  Fetching {issue_id} from Linear...")
-                issue_data = get_issue(workspace.config.root, issue_id)
+                with spinner(f"Fetching {issue_id} from Linear..."):
+                    issue_data = get_issue(workspace.config.root, issue_id)
                 linear_issue = issue_data.get("identifier", issue_id)
                 linear_title = issue_data.get("title", "")
                 linear_url = issue_data.get("url", "")
                 if linear_title:
-                    print(f"  {linear_issue}: {linear_title}")
+                    console.print(f"  [linear]{SYM_LINK} {linear_issue}: {linear_title}[/]")
             except (LinearNotConfiguredError, LinearIssueNotFoundError, McpClientError) as e:
-                print(f"  Warning: could not fetch Linear issue: {e}", file=sys.stderr)
-                print(f"  Continuing without Linear link...", file=sys.stderr)
-                linear_issue = issue_id  # Store the ID even if we can't fetch details
+                print_warning(f"Could not fetch Linear issue: {e}")
+                console.print(f"  [muted]Continuing without Linear link...[/]")
+                linear_issue = issue_id
         else:
-            print(
-                f"  Linear MCP not configured — storing issue ID '{issue_id}' without fetching.",
-                file=sys.stderr,
-            )
+            print_warning(f"Linear MCP not configured — storing '{issue_id}' without fetching.")
             linear_issue = issue_id
 
     # ── Create the feature with worktrees ──
     coordinator = FeatureCoordinator(workspace)
     try:
-        lane = coordinator.create(
-            name,
-            repos=repos,
-            use_worktrees=True,
-            linear_issue=linear_issue,
-            linear_title=linear_title,
-            linear_url=linear_url,
-        )
+        with spinner(f"Creating worktrees for {name}..."):
+            lane = coordinator.create(
+                name,
+                repos=repos,
+                use_worktrees=True,
+                linear_issue=linear_issue,
+                linear_title=linear_title,
+                linear_url=linear_url,
+            )
     except (ValueError, RuntimeError) as e:
-        print(f"Error: {e}", file=sys.stderr)
+        print_error(str(e))
         sys.exit(1)
 
     result = lane.to_dict()
@@ -674,28 +711,32 @@ def cmd_worktree_create(args: argparse.Namespace) -> None:
         _print_json(result)
         return
 
-    print(f"\n  Created worktree: {name}")
-    if linear_issue:
-        title_str = f" — {linear_title}" if linear_title else ""
-        print(f"  Linear: {linear_issue}{title_str}")
-    print(f"  Repos:")
+    console.print()
     for repo_name, path in result["worktree_paths"].items():
-        print(f"    {repo_name} → {path}")
-    print()
-    print(f"  Open in IDE:")
-    print(f"    canopy code {name}")
-    print(f"    canopy cursor {name}")
-    print(f"    canopy fork {name}")
-    print()
+        print_success(f"[repo]{repo_name}[/] [muted]{SYM_ARROW}[/] [path]{path}[/]")
+
+    if linear_issue and not linear_title:
+        console.print(f"\n  [linear]{SYM_LINK} {linear_issue}[/]")
+
+    console.print()
+    console.print(f"  [muted]Open in IDE:[/]")
+    console.print(f"    [info]canopy code {name}[/]")
+    console.print(f"    [info]canopy cursor {name}[/]")
+    console.print(f"    [info]canopy fork {name}[/]")
+    console.print()
 
 
 def cmd_worktree_list(args: argparse.Namespace) -> None:
     """Show live worktree status — always reflects current filesystem."""
+    from .ui import console, spinner, separator, SYM_BRANCH, SYM_LINK
+
     workspace = _load_workspace()
     from ..features.coordinator import FeatureCoordinator
 
     coordinator = FeatureCoordinator(workspace)
-    data = coordinator.worktrees_live()
+
+    with spinner("Scanning worktrees..."):
+        data = coordinator.worktrees_live()
 
     if args.json:
         _print_json(data)
@@ -710,24 +751,27 @@ def cmd_worktree_list(args: argparse.Namespace) -> None:
     if not features and all(
         len(r.get("worktrees", [])) <= 1 for r in repos_wt.values()
     ):
-        print("\n  No active worktrees.")
-        print()
+        console.print()
+        console.print("  [muted]No active worktrees.[/]")
+        console.print(f"  [muted]Create one with:[/] [info]canopy worktree <name>[/]")
+        console.print()
         return
 
     # ── Feature worktrees ──
     if features:
-        print(f"\n  Feature worktrees ({len(features)}):")
+        console.print()
+        console.print(f"  [header]Worktrees ({len(features)})[/]")
         for feat_name, feat_data in features.items():
-            print(f"  {'─' * 50}")
+            separator()
             # Show Linear link if present
             meta = features_json.get(feat_name, {})
             linear_id = meta.get("linear_issue", "")
             linear_title = meta.get("linear_title", "")
             if linear_id:
                 title_str = f" — {linear_title}" if linear_title else ""
-                print(f"  {feat_name}  [{linear_id}{title_str}]")
+                console.print(f"  [feature]{feat_name}[/]  [linear]{SYM_LINK} {linear_id}{title_str}[/]")
             else:
-                print(f"  {feat_name}")
+                console.print(f"  [feature]{feat_name}[/]")
 
             for repo_name, info in feat_data.get("repos", {}).items():
                 branch = info.get("branch", "?")
@@ -736,17 +780,17 @@ def cmd_worktree_list(args: argparse.Namespace) -> None:
                 ahead = info.get("ahead", 0)
                 behind = info.get("behind", 0)
 
-                status_parts = []
+                parts = []
                 if dirty:
-                    status_parts.append(f"{dirty_count} dirty")
+                    parts.append(f"[dirty]{dirty_count} dirty[/]")
                 if ahead:
-                    status_parts.append(f"+{ahead}")
+                    parts.append(f"[ahead]↑{ahead}[/]")
                 if behind:
-                    status_parts.append(f"-{behind}")
+                    parts.append(f"[behind]↓{behind}[/]")
+                status_str = f"  {' '.join(parts)}" if parts else ""
 
-                status_str = f" ({', '.join(status_parts)})" if status_parts else ""
-                print(f"    {repo_name} [{branch}]{status_str}")
-                print(f"      {info.get('path', '?')}")
+                console.print(f"    [repo]{repo_name}[/]  {SYM_BRANCH} [branch]{branch}[/]{status_str}")
+                console.print(f"      [path]{info.get('path', '?')}[/]")
 
     # ── Per-repo git worktrees (only show if repo has >1 worktree) ──
     multi_wt = {
@@ -754,15 +798,16 @@ def cmd_worktree_list(args: argparse.Namespace) -> None:
         if len(info.get("worktrees", [])) > 1
     }
     if multi_wt:
-        print(f"\n  Git worktrees per repo:")
+        console.print()
+        console.print(f"  [subheader]Git worktrees per repo[/]")
         for repo_name, info in multi_wt.items():
-            print(f"  {'─' * 50}")
-            print(f"  {repo_name} (main: {info['main_path']})")
+            separator()
+            console.print(f"  [repo]{repo_name}[/]  [path]{info['main_path']}[/]")
             for wt in info["worktrees"]:
                 branch = wt.get("branch", "(detached)")
-                print(f"    {wt['path']}  [{branch}]")
+                console.print(f"    [path]{wt['path']}[/]  [branch]\\[{branch}][/]")
 
-    print()
+    console.print()
 
 
 def _open_ide(ide_cmd: str, args: argparse.Namespace) -> None:
@@ -988,12 +1033,22 @@ def cmd_stage(args: argparse.Namespace) -> None:
         })
         return
 
+    from .ui import console, print_success, separator, SYM_CHECK, SYM_DOT
+
+    console.print()
     if ctx.feature:
-        print(f"\n  Feature: {ctx.feature}")
-    print(f"  Message: {message}")
-    print()
+        console.print(f"  [feature]{ctx.feature}[/]  [muted]{message}[/]")
+    else:
+        console.print(f"  [muted]{message}[/]")
+    separator()
     for repo, result in results.items():
-        print(f"  {repo}: {result}")
+        if result == "clean":
+            console.print(f"  [repo]{repo}[/]  [muted]{SYM_DOT} clean[/]")
+        elif result.startswith("error:"):
+            console.print(f"  [repo]{repo}[/]  [error]{result}[/]")
+        else:
+            console.print(f"  [repo]{repo}[/]  [success]{SYM_CHECK} {result}[/]")
+    console.print()
     print()
 
 

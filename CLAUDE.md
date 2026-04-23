@@ -36,7 +36,7 @@ src/canopy/
 - **Feature metadata lives in `.canopy/features.json`** in the workspace root.
 - **Worktrees live in `.canopy/worktrees/<feature>/<repo>/`** when created with `--worktree`.
 - **canopy.toml is the workspace definition.** Source of truth for which repos are in the workspace.
-- **Context detection** (`workspace/context.py`) walks up from cwd to determine feature, repo, and branch — powers `canopy stage` and other context-aware commands.
+- **Context detection** (`workspace/context.py`) walks up from cwd to determine feature, repo, and branch — powers `canopy preflight` and other context-aware commands.
 - **MCP client** (`mcp/client.py`) enables canopy to call external MCP servers. Config lives in `.canopy/mcps.json`. Currently powers Linear integration.
 - **Integrations** (`integrations/`) are always MCP-based — canopy never calls external APIs directly. It spawns the relevant MCP server, calls a tool, and uses the result.
 - **Linear integration** (`integrations/linear.py`) fetches issue data via a configured Linear MCP server. `FeatureLane` stores `linear_issue`, `linear_title`, `linear_url` in `features.json`.
@@ -78,7 +78,7 @@ The MCP server at `mcp/server.py` exposes every canopy operation as a tool:
 ```
 workspace_status, workspace_context, workspace_config,
 feature_create, feature_list, feature_status, feature_switch, feature_diff, feature_merge_readiness, feature_paths, feature_done,
-checkout, commit, stage, log,
+checkout, commit, preflight, log,
 branch_list, branch_delete, branch_rename,
 stash_save, stash_pop, stash_list, stash_drop,
 worktree_info, worktree_create, sync,

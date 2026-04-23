@@ -23,8 +23,8 @@ Commands:
     worktree                     Show worktree info for repos
     list                         List all feature lanes
     switch <name>                Switch to a feature lane
-    stage <message>              Context-aware add + commit (from worktree dir)
-    review <feature>             Fetch PR comments + run pre-commit + stage
+    preflight                   Context-aware add + run hooks (from worktree dir)
+    review <feature>             Fetch PR comments + run pre-commit + preflight
     code <feature|.>             Open VS Code for feature or workspace
     cursor <feature|.>           Open Cursor for feature or workspace
     fork <feature|.>             Open Fork.app for feature or workspace
@@ -1000,18 +1000,21 @@ def cmd_fork(args: argparse.Namespace) -> None:
             time.sleep(0.5)
 
 
-def cmd_stage(args: argparse.Namespace) -> None:
-    """Context-aware stage + commit across repos in current feature.
+def cmd_preflight(args: argparse.Namespace) -> None:
+    """Context-aware pre-commit quality gate.
 
-    When run from inside a feature worktree directory, stages all
-    changes and commits with the given message across every repo
-    worktree in that feature.
+    Detects which feature/repos you're in, stages all changes (git add -A),
+    runs pre-commit hooks, and reports results. Does NOT commit — that's
+    your job when you're satisfied.
 
-    When run from inside a single repo worktree, stages + commits
-    just that repo.
+    When run from inside a feature worktree directory, checks all repo
+    worktrees in that feature.
+
+    When run from inside a single repo worktree, checks just that repo.
     """
     from ..workspace.context import detect_context
     from ..git import repo as git_repo
+    from ..integrations.precommit import run_precommit
 
     ctx = detect_context()
 
@@ -1024,63 +1027,96 @@ def cmd_stage(args: argparse.Namespace) -> None:
         print("Error: no repos found in current context.", file=sys.stderr)
         sys.exit(1)
 
-    message = args.message
-    results: dict[str, str] = {}
+    results: dict[str, dict] = {}
+    all_passed = True
 
     for repo_path, repo_name in zip(ctx.repo_paths, ctx.repo_names):
-        # Check if there are any changes to stage
+        # Check if there are any changes
         status = git_repo.status_porcelain(repo_path)
         if not status:
-            results[repo_name] = "clean"
+            results[repo_name] = {"status": "clean", "hooks": None}
             continue
 
-        # Stage everything
+        # Stage everything so hooks can inspect staged changes
         try:
-            # Stage all changes (new, modified, deleted)
             git_repo._run(["add", "-A"], cwd=repo_path)
-
-            # Commit
-            sha = git_repo.commit(repo_path, message)
-            results[repo_name] = sha[:12]
         except git_repo.GitError as e:
-            results[repo_name] = f"error: {e}"
+            results[repo_name] = {"status": "error", "error": str(e), "hooks": None}
+            all_passed = False
+            continue
+
+        # Run pre-commit hooks
+        hook_result = run_precommit(repo_path)
+        passed = hook_result["passed"]
+        if not passed:
+            all_passed = False
+
+        dirty_count = len(status.strip().splitlines())
+        results[repo_name] = {
+            "status": "staged" if passed else "hooks_failed",
+            "dirty_count": dirty_count,
+            "hooks": hook_result,
+        }
 
     if args.json:
         _print_json({
-            "message": message,
             "feature": ctx.feature,
             "context_type": ctx.context_type,
+            "all_passed": all_passed,
             "results": results,
         })
         return
 
-    from .ui import console, print_success, separator, SYM_CHECK, SYM_DOT
+    from .ui import console, separator, SYM_CHECK, SYM_DOT, SYM_CROSS
 
     console.print()
     if ctx.feature:
-        console.print(f"  [feature]{ctx.feature}[/]  [muted]{message}[/]")
+        console.print(f"  [feature]{ctx.feature}[/]  preflight")
     else:
-        console.print(f"  [muted]{message}[/]")
+        console.print(f"  preflight")
     separator()
+
     for repo, result in results.items():
-        if result == "clean":
+        status = result["status"]
+        if status == "clean":
             console.print(f"  [repo]{repo}[/]  [muted]{SYM_DOT} clean[/]")
-        elif result.startswith("error:"):
-            console.print(f"  [repo]{repo}[/]  [error]{result}[/]")
+        elif status == "error":
+            console.print(f"  [repo]{repo}[/]  [error]{SYM_CROSS} {result['error']}[/]")
+        elif status == "hooks_failed":
+            dirty = result["dirty_count"]
+            console.print(f"  [repo]{repo}[/]  [error]{SYM_CROSS} hooks failed[/]  [muted]{dirty} staged[/]")
+            # Show hook output indented
+            hook_output = result["hooks"]["output"]
+            if hook_output:
+                for line in hook_output.splitlines()[:20]:
+                    console.print(f"    [muted]{line}[/]")
+                if len(hook_output.splitlines()) > 20:
+                    console.print(f"    [muted]... ({len(hook_output.splitlines()) - 20} more lines)[/]")
         else:
-            console.print(f"  [repo]{repo}[/]  [success]{SYM_CHECK} {result}[/]")
+            # staged, hooks passed
+            dirty = result["dirty_count"]
+            hook_type = result["hooks"]["type"] if result["hooks"] else "none"
+            if hook_type == "none":
+                console.print(f"  [repo]{repo}[/]  [success]{SYM_CHECK} {dirty} staged[/]  [muted]no hooks[/]")
+            else:
+                console.print(f"  [repo]{repo}[/]  [success]{SYM_CHECK} {dirty} staged[/]  [success]hooks passed[/]")
+
+    console.print()
+    if all_passed:
+        console.print("  [success]Ready to commit.[/]")
+    else:
+        console.print("  [error]Fix hook failures, then run preflight again.[/]")
     console.print()
     print()
 
 
 def cmd_review(args: argparse.Namespace) -> None:
-    """Fetch PR review comments and prep for commit.
+    """Fetch PR review comments and run preflight.
 
     Full workflow:
     1. Check if PRs exist for the feature
     2. Fetch unresolved review comments
-    3. Run pre-commit hooks
-    4. Stage all changes
+    3. Run pre-commit hooks + stage changes (preflight)
     """
     from .ui import console, spinner, separator, print_success, print_warning, print_error, SYM_CHECK, SYM_CROSS, SYM_LINK
     from ..integrations.github import GitHubNotConfiguredError, PullRequestNotFoundError
@@ -1655,10 +1691,9 @@ def main() -> None:
     fork_p.add_argument("target", help="Feature name, or '.' for whole workspace")
     fork_p.add_argument("--json", action="store_true", help="Output paths as JSON")
 
-    # stage (context-aware add + commit)
-    stage_p = subparsers.add_parser("stage", help="Stage + commit in current feature context")
-    stage_p.add_argument("message", help="Commit message")
-    stage_p.add_argument("--json", action="store_true", help="Output as JSON")
+    # preflight (context-aware add + hooks)
+    preflight_p = subparsers.add_parser("preflight", help="Stage + run hooks (does not commit)")
+    preflight_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # list (top-level shortcut)
     list_p = subparsers.add_parser("list", help="List all feature lanes")
@@ -1724,7 +1759,7 @@ def main() -> None:
         "code": cmd_code,
         "cursor": cmd_cursor,
         "fork": cmd_fork,
-        "stage": cmd_stage,
+        "preflight": cmd_preflight,
         "list": cmd_list,
         "switch": cmd_switch,
         "review": cmd_review,

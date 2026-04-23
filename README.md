@@ -58,10 +58,10 @@ Working on a feature that spans multiple repos means coordinating branches, stas
 </details>
 
 <details>
-<summary><strong><code>canopy stage "feat: add token refresh"</code></strong> — context-aware commit</summary>
+<summary><strong><code>canopy preflight</code></strong> — pre-commit quality gate</summary>
 <br>
 <p align="center">
-  <img src="docs/cli-stage.svg" alt="canopy stage" width="600">
+  <img src="docs/cli-stage.svg" alt="canopy preflight" width="600">
 </p>
 </details>
 
@@ -138,7 +138,7 @@ canopy cursor ENG-412                              # open in Cursor
 canopy fork ENG-412                                # open in Fork.app
 
 canopy switch ENG-412                              # checkout feature across all repos
-canopy stage "feat: add token refresh"             # context-aware commit from any worktree
+canopy preflight                                       # stage + run hooks (does not commit)
 canopy done ENG-412                                # clean up when done
 ```
 
@@ -177,7 +177,7 @@ my-product/
 |---|---|
 | `canopy init` | Scan subdirectories, detect Git repos and worktrees, generate `canopy.toml` |
 | `canopy status` | Per-repo branch, dirty count, divergence from default branch |
-| `canopy stage <msg>` | Context-aware `git add -A && git commit` — detects feature from cwd |
+| `canopy preflight` | Context-aware `git add -A` + run pre-commit hooks — does not commit |
 | `canopy context` | Debug: show detected context type, feature, repos, paths |
 
 ### Feature Lanes
@@ -249,7 +249,7 @@ Register in Claude Code, Cursor, or any MCP-compatible client:
 }
 ```
 
-**Tools exposed:** `workspace_status`, `workspace_context`, `workspace_config`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `feature_done`, `checkout`, `commit`, `stage`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`, `review_status`, `review_comments`, `review_prep`.
+**Tools exposed:** `workspace_status`, `workspace_context`, `workspace_config`, `worktree_create`, `worktree_info`, `feature_create`, `feature_list`, `feature_status`, `feature_switch`, `feature_diff`, `feature_merge_readiness`, `feature_paths`, `feature_done`, `checkout`, `commit`, `preflight`, `log`, `branch_list`, `branch_delete`, `branch_rename`, `stash_save`, `stash_pop`, `stash_list`, `stash_drop`, `sync`, `review_status`, `review_comments`, `review_prep`.
 
 ## MCP Client
 
@@ -279,7 +279,7 @@ Currently powers:
 
 ## Context Detection
 
-`canopy stage` and other context-aware commands work by detecting where you are in the filesystem:
+`canopy preflight` and other context-aware commands work by detecting where you are in the filesystem:
 
 | Context | Detection | Scope |
 |---|---|---|
@@ -288,7 +288,7 @@ Currently powers:
 | `repo` | Inside a workspace repo directory | Single repo (feature = current branch if non-default) |
 | `workspace_root` | At the `canopy.toml` level | All repos |
 
-This is implemented in `workspace/context.py` and powers `canopy stage`, `canopy context`, and the MCP `stage` tool.
+This is implemented in `workspace/context.py` and powers `canopy preflight`, `canopy context`, and the MCP `preflight` tool.
 
 ## Alias Resolution
 

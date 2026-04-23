@@ -238,17 +238,18 @@ def commit(message: str, repos: list[str] | None = None) -> dict:
 
 
 @mcp.tool()
-def stage(message: str, cwd: str | None = None) -> dict:
-    """Context-aware stage + commit from a directory.
+def preflight(cwd: str | None = None) -> dict:
+    """Context-aware pre-commit quality gate.
 
     Detects which feature/repos you're in from the directory path,
-    stages all changes (git add -A), and commits across all repos
-    in that context.
+    stages all changes (git add -A), and runs pre-commit hooks.
+    Does NOT commit — reports whether the code is ready to commit.
 
     Args:
-        message: Commit message.
         cwd: Directory to detect context from. Defaults to CANOPY_ROOT.
     """
+    from ..integrations.precommit import run_precommit
+
     path = Path(cwd) if cwd else None
     if path is None:
         root = os.environ.get("CANOPY_ROOT")
@@ -259,22 +260,36 @@ def stage(message: str, cwd: str | None = None) -> dict:
         return {"error": "No repos found in context", "context": ctx.to_dict()}
 
     results = {}
+    all_passed = True
+
     for repo_path, repo_name in zip(ctx.repo_paths, ctx.repo_names):
         status = git.status_porcelain(repo_path)
         if not status:
-            results[repo_name] = "clean"
+            results[repo_name] = {"status": "clean", "hooks": None}
             continue
         try:
             git._run(["add", "-A"], cwd=repo_path)
-            sha = git.commit(repo_path, message)
-            results[repo_name] = sha[:12]
         except git.GitError as e:
-            results[repo_name] = f"error: {e}"
+            results[repo_name] = {"status": "error", "error": str(e), "hooks": None}
+            all_passed = False
+            continue
+
+        hook_result = run_precommit(repo_path)
+        passed = hook_result["passed"]
+        if not passed:
+            all_passed = False
+
+        dirty_count = len(status.strip().splitlines())
+        results[repo_name] = {
+            "status": "staged" if passed else "hooks_failed",
+            "dirty_count": dirty_count,
+            "hooks": hook_result,
+        }
 
     return {
-        "message": message,
         "feature": ctx.feature,
         "context_type": ctx.context_type,
+        "all_passed": all_passed,
         "results": results,
     }
 
@@ -598,7 +613,7 @@ def review_prep(
     4. Reports per-repo results
 
     Does NOT create a commit — it leaves the repos staged and ready.
-    Call the `stage` or `commit` tool afterwards to actually commit.
+    Call the `commit` tool afterwards to actually commit.
 
     Args:
         feature: Feature lane name.

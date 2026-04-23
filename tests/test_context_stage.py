@@ -1,5 +1,5 @@
 """
-Tests for context detection and canopy stage command.
+Tests for context detection and canopy preflight command.
 """
 import os
 import subprocess
@@ -155,18 +155,20 @@ class TestContextDict:
         assert len(d["repo_names"]) == 2
 
 
-# ── canopy stage: from feature directory ────────────────────────────────
+# ── canopy preflight: from feature directory ─────────────────────────────
 
-class TestStageFromFeatureDir:
-    def test_stage_all_repos_in_feature(self, canopy_toml):
-        """Stage from the feature dir should commit across all repo worktrees."""
+class TestPreflightFromFeatureDir:
+    def test_preflight_stages_all_repos(self, canopy_toml):
+        """Preflight from the feature dir should stage across all repo worktrees."""
+        from canopy.integrations.precommit import run_precommit
+
         feature_dir = _setup_feature_worktrees(canopy_toml)
 
         # Make changes in both worktree repos
         (feature_dir / "api" / "new_api.py").write_text("api change\n")
         (feature_dir / "ui" / "new_ui.ts").write_text("ui change\n")
 
-        # Simulate what cmd_stage does
+        # Simulate what cmd_preflight does
         ctx = detect_context(cwd=feature_dir)
         assert ctx.context_type == "feature_dir"
         assert len(ctx.repo_paths) == 2
@@ -175,24 +177,34 @@ class TestStageFromFeatureDir:
         for repo_path, repo_name in zip(ctx.repo_paths, ctx.repo_names):
             status = git.status_porcelain(repo_path)
             if not status:
-                results[repo_name] = "clean"
+                results[repo_name] = {"status": "clean"}
                 continue
             git._run(["add", "-A"], cwd=repo_path)
-            sha = git.commit(repo_path, "feat: stage test")
-            results[repo_name] = sha[:12]
+            hook_result = run_precommit(repo_path)
+            results[repo_name] = {
+                "status": "staged" if hook_result["passed"] else "hooks_failed",
+                "hooks": hook_result,
+            }
 
-        assert len(results["api"]) == 12  # sha
-        assert len(results["ui"]) == 12
+        # Both should be staged (no hooks in test repos = pass)
+        assert results["api"]["status"] == "staged"
+        assert results["ui"]["status"] == "staged"
 
-        # Verify commits exist
+        # Verify NO commits were made — preflight does not commit
         api_log = git.log_structured(feature_dir / "api", max_count=1)
-        assert api_log[0]["subject"] == "feat: stage test"
+        assert api_log[0]["subject"] != "new_api.py"  # no commit with our changes
 
-        ui_log = git.log_structured(feature_dir / "ui", max_count=1)
-        assert ui_log[0]["subject"] == "feat: stage test"
+        # But changes should be staged (in the index)
+        staged_api = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "api")
+        assert "new_api.py" in staged_api
 
-    def test_stage_single_repo_worktree(self, canopy_toml):
-        """Stage from inside a specific repo worktree should only commit that repo."""
+        staged_ui = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "ui")
+        assert "new_ui.ts" in staged_ui
+
+    def test_preflight_single_repo_worktree(self, canopy_toml):
+        """Preflight from inside a specific repo worktree should only check that repo."""
+        from canopy.integrations.precommit import run_precommit
+
         feature_dir = _setup_feature_worktrees(canopy_toml)
 
         # Change only api
@@ -202,14 +214,17 @@ class TestStageFromFeatureDir:
         assert ctx.context_type == "repo_worktree"
         assert len(ctx.repo_paths) == 1
 
-        # Stage just this repo
+        # Stage + run hooks
         git._run(["add", "-A"], cwd=ctx.repo_paths[0])
-        sha = git.commit(ctx.repo_paths[0], "feat: api only")
+        hook_result = run_precommit(ctx.repo_paths[0])
 
-        log = git.log_structured(feature_dir / "api", max_count=1)
-        assert log[0]["subject"] == "feat: api only"
+        assert hook_result["passed"] is True
 
-    def test_stage_clean_repos(self, canopy_toml):
+        # Should be staged, not committed
+        staged = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "api")
+        assert "api_only.py" in staged
+
+    def test_preflight_clean_repos(self, canopy_toml):
         """Clean repos should report 'clean' and not fail."""
         feature_dir = _setup_feature_worktrees(canopy_toml)
 
@@ -220,15 +235,14 @@ class TestStageFromFeatureDir:
             if not status:
                 results[repo_name] = "clean"
                 continue
-            git._run(["add", "-A"], cwd=repo_path)
-            sha = git.commit(repo_path, "should not happen")
-            results[repo_name] = sha[:12]
 
         assert results["api"] == "clean"
         assert results["ui"] == "clean"
 
-    def test_stage_partial_changes(self, canopy_toml):
-        """Only repos with changes should get commits."""
+    def test_preflight_partial_changes(self, canopy_toml):
+        """Only repos with changes should get staged."""
+        from canopy.integrations.precommit import run_precommit
+
         feature_dir = _setup_feature_worktrees(canopy_toml)
 
         # Only change api
@@ -242,8 +256,8 @@ class TestStageFromFeatureDir:
                 results[repo_name] = "clean"
                 continue
             git._run(["add", "-A"], cwd=repo_path)
-            sha = git.commit(repo_path, "feat: partial")
-            results[repo_name] = sha[:12]
+            hook_result = run_precommit(repo_path)
+            results[repo_name] = "staged" if hook_result["passed"] else "failed"
 
-        assert len(results["api"]) == 12
+        assert results["api"] == "staged"
         assert results["ui"] == "clean"

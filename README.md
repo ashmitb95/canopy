@@ -9,7 +9,7 @@
 <p align="center">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
   <img alt="Tests" src="https://img.shields.io/badge/tests-187%20passing-brightgreen?style=flat-square">
-  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-27-purple?style=flat-square">
+  <a href="#mcp-server"><img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-27-purple?style=flat-square"></a>
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-gray?style=flat-square">
 </p>
 

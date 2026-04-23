@@ -23,6 +23,7 @@ from canopy.mcp.client import (
 from canopy.integrations.linear import (
     is_linear_configured,
     format_branch_name,
+    list_my_issues,
     _normalize_issue,
     _parse_issue_result,
     LinearNotConfiguredError,
@@ -157,6 +158,64 @@ class TestLinearHelpers:
         result = FakeResult(content=[FakeBlock(text='{"identifier": "ENG-1", "title": "Test"}')])
         parsed = _parse_issue_result(result)
         assert parsed["identifier"] == "ENG-1"
+
+
+# ── list_my_issues ──────────────────────────────────────────────────────
+
+class TestListMyIssues:
+    def test_returns_empty_when_not_configured(self, tmp_path):
+        assert list_my_issues(tmp_path) == []
+
+    def test_returns_normalized_issues(self, tmp_path):
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        @dataclass
+        class FakeBlock:
+            text: str
+
+        @dataclass
+        class FakeResult:
+            content: list
+
+        fake_payload = json.dumps({
+            "issues": [
+                {
+                    "identifier": "ENG-518",
+                    "title": "Add SSO",
+                    "state": {"name": "Triage"},
+                    "url": "https://linear.app/x/ENG-518",
+                },
+                {
+                    "identifier": "ENG-522",
+                    "title": "Rate-limit auth",
+                    "state": "Backlog",
+                    "url": "https://linear.app/x/ENG-522",
+                },
+            ]
+        })
+        fake_result = FakeResult(content=[FakeBlock(text=fake_payload)])
+
+        with patch("canopy.integrations.linear.call_tool", return_value=fake_result):
+            issues = list_my_issues(tmp_path)
+
+        assert len(issues) == 2
+        assert issues[0]["identifier"] == "ENG-518"
+        assert issues[0]["title"] == "Add SSO"
+        assert issues[0]["state"] == "Triage"
+        assert issues[1]["identifier"] == "ENG-522"
+
+    def test_returns_empty_when_all_tools_fail(self, tmp_path):
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        with patch(
+            "canopy.integrations.linear.call_tool",
+            side_effect=McpClientError("nope"),
+        ):
+            assert list_my_issues(tmp_path) == []
 
 
 # ── Feature create with Linear metadata ─────────────────────────────────

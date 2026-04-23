@@ -149,6 +149,51 @@ def test_feature_diff_type_overlaps(canopy_toml, workspace_with_feature):
     assert isinstance(diff["type_overlaps"], list)
 
 
+def test_feature_changes(canopy_toml, workspace_with_feature):
+    config = load_config(workspace_with_feature)
+    ws = Workspace(config)
+    coord = FeatureCoordinator(ws)
+
+    result = coord.feature_changes("auth-flow")
+
+    assert result["feature"] == "auth-flow"
+    assert "api" in result["repos"]
+    assert "ui" in result["repos"]
+
+    api = result["repos"]["api"]
+    assert api["has_branch"] is True
+    api_paths = {c["path"]: c["status"] for c in api["changes"]}
+    assert "src/auth.py" in api_paths and api_paths["src/auth.py"] == "A"
+    assert "src/models.py" in api_paths and api_paths["src/models.py"] == "M"
+
+    ui = result["repos"]["ui"]
+    ui_paths = {c["path"]: c["status"] for c in ui["changes"]}
+    assert "src/Login.tsx" in ui_paths and ui_paths["src/Login.tsx"] == "A"
+    assert "src/types.ts" in ui_paths and ui_paths["src/types.ts"] == "M"
+
+
+def test_feature_changes_includes_uncommitted(canopy_toml, workspace_with_feature):
+    """Uncommitted edits in a worktree should appear in feature_changes."""
+    config = load_config(workspace_with_feature)
+    ws = Workspace(config)
+    coord = FeatureCoordinator(ws)
+
+    api = ws.get_repo("api")
+    # workspace_with_feature leaves api on auth-flow with a clean tree;
+    # add an uncommitted edit + an untracked file.
+    (api.abs_path / "src" / "models.py").write_text(
+        "class User:\n    name: str\n    email: str\n    token: str\n    role: str\n"
+    )
+    (api.abs_path / "src" / "scratch.py").write_text("# wip\n")
+
+    result = coord.feature_changes("auth-flow")
+    api_paths = {c["path"]: c["status"] for c in result["repos"]["api"]["changes"]}
+    # Path must be preserved exactly — porcelain output has leading spaces
+    # that `.strip()` would clobber (reported paths like "rc/scratch.py").
+    assert "src/scratch.py" in api_paths and api_paths["src/scratch.py"] == "?"
+    assert api_paths.get("src/models.py") in {"M"}
+
+
 def test_merge_readiness(canopy_toml, workspace_with_feature):
     config = load_config(workspace_with_feature)
     ws = Workspace(config)

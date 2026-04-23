@@ -129,6 +129,54 @@ def changed_files(repo_path: Path, branch: str, base: str) -> list[str]:
     return [f for f in output.split("\n") if f.strip()]
 
 
+def changed_files_with_status(repo_path: Path, branch: str, base: str) -> list[dict]:
+    """Get files changed between base and branch, with M/A/D status.
+
+    Includes uncommitted changes (working tree + index) so the listing
+    matches what the user sees when editing files in a worktree.
+
+    Returns:
+        List of {path, status} where status is one of:
+          "M" modified, "A" added, "D" deleted, "R" renamed,
+          "C" copied, "T" type-changed, "?" untracked.
+    """
+    entries: dict[str, str] = {}
+
+    committed = _run_ok(
+        ["diff", "--name-status", f"{base}...{branch}"], cwd=repo_path,
+    )
+    for line in committed.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0][0].upper()
+        path = parts[-1]
+        entries[path] = status
+
+    # Porcelain output preserves leading spaces; don't use _run_ok (which strips).
+    raw = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True, text=True, cwd=repo_path,
+    ).stdout
+    for line in raw.splitlines():
+        if len(line) < 4:
+            continue
+        index_status = line[0]
+        worktree_status = line[1]
+        path = line[3:]
+        if index_status == "?" and worktree_status == "?":
+            entries[path] = "?"
+            continue
+        # Prefer index status when staged, otherwise worktree status.
+        status = index_status.strip() or worktree_status.strip()
+        if status:
+            entries[path] = status.upper()
+
+    return [{"path": p, "status": s} for p, s in sorted(entries.items())]
+
+
 def branches(repo_path: Path) -> list[str]:
     """List all local branch names."""
     output = _run_ok(["branch", "--format=%(refname:short)"], cwd=repo_path)

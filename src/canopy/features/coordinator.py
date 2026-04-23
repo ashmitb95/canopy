@@ -449,6 +449,70 @@ class FeatureCoordinator:
             "type_overlaps": overlaps,
         }
 
+    def feature_changes(self, name: str) -> dict:
+        """Get per-file change status (M/A/D/?) for each repo in a feature.
+
+        Includes uncommitted changes — uses the worktree path when one
+        exists so the listing matches what the user is editing.
+
+        Returns:
+            {
+                "feature": str,
+                "repos": {
+                    "<repo>": {
+                        "has_branch": bool,
+                        "path": str,            # repo or worktree path used
+                        "default_branch": str,
+                        "changes": [{path, status}, ...],
+                        "error": str | None,
+                    }
+                }
+            }
+        """
+        name = self._resolve_name(name)
+        lane = self.status(name)
+        result: dict[str, dict] = {}
+
+        for repo_name in lane.repos:
+            repo_state = lane.repo_states.get(repo_name, {})
+            try:
+                state = self.workspace.get_repo(repo_name)
+            except KeyError:
+                result[repo_name] = {"error": "repo not found"}
+                continue
+
+            base = repo_state.get("default_branch") or state.config.default_branch
+            wt_path = repo_state.get("worktree_path")
+            scan_path = Path(wt_path) if wt_path else state.abs_path
+
+            if not repo_state.get("has_branch"):
+                result[repo_name] = {
+                    "has_branch": False,
+                    "path": str(scan_path),
+                    "default_branch": base,
+                    "changes": [],
+                }
+                continue
+
+            try:
+                changes = git.changed_files_with_status(scan_path, name, base)
+                result[repo_name] = {
+                    "has_branch": True,
+                    "path": str(scan_path),
+                    "default_branch": base,
+                    "changes": changes,
+                }
+            except git.GitError as e:
+                result[repo_name] = {
+                    "has_branch": True,
+                    "path": str(scan_path),
+                    "default_branch": base,
+                    "changes": [],
+                    "error": str(e),
+                }
+
+        return {"feature": name, "repos": result}
+
     def merge_readiness(self, name: str) -> dict:
         """Check if a feature lane is ready to merge.
 

@@ -1,0 +1,235 @@
+{
+  "name": "canopy",
+  "displayName": "Canopy — Multi-Repo Worktree Manager",
+  "description": "Worktree-first workspace manager for multi-repo development. Features, worktrees, per-repo changes, and review readiness in one sidebar.",
+  "version": "0.1.6",
+  "publisher": "canopy",
+  "license": "MIT",
+  "icon": "media/canopy-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ashmitb95/canopy.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "worktree",
+    "multi-repo",
+    "monorepo",
+    "feature-branch",
+    "linear",
+    "github"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "canopy",
+          "title": "Canopy",
+          "icon": "media/canopy-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "canopy": [
+        {
+          "id": "canopy.features",
+          "name": "Features",
+          "icon": "media/canopy-icon.svg",
+          "contextualTitle": "Canopy Features"
+        },
+        {
+          "id": "canopy.worktrees",
+          "name": "Worktrees",
+          "icon": "media/canopy-icon.svg",
+          "contextualTitle": "Canopy Worktrees"
+        },
+        {
+          "id": "canopy.changes",
+          "name": "Changes",
+          "icon": "media/canopy-icon.svg",
+          "contextualTitle": "Canopy Changes"
+        },
+        {
+          "id": "canopy.review",
+          "name": "Review Readiness",
+          "icon": "media/canopy-icon.svg",
+          "contextualTitle": "Canopy Review Readiness"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "canopy.features",
+        "when": "canopy.state == 'no-workspace'",
+        "contents": "No Canopy workspace detected.\n\nA workspace is a directory containing a `canopy.toml` file.\n\n[Initialize Canopy here](command:canopy.init)\n\nLearn more about [Canopy](https://github.com/ashmitb95/canopy)."
+      },
+      {
+        "view": "canopy.features",
+        "when": "canopy.state == 'no-mcp'",
+        "contents": "Canopy detected a workspace, but can't start `canopy-mcp`.\n\n[Install Canopy for me](command:canopy.installBackend)\n\nOr wire up an existing install:\n\n[Set canopy-mcp Path](command:workbench.action.openSettings?%22canopy.canopyMcpPath%22)\n\n[Retry](command:canopy.retryConnect)\n\n[Show Log](command:canopy.showLog)"
+      },
+      {
+        "view": "canopy.features",
+        "when": "canopy.state == 'loading'",
+        "contents": "Starting canopy-mcp…"
+      }
+    ],
+    "commands": [
+      {
+        "command": "canopy.refresh",
+        "title": "Canopy: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "canopy.createFeature",
+        "title": "Canopy: Create Feature",
+        "icon": "$(add)"
+      },
+      {
+        "command": "canopy.switchFeature",
+        "title": "Canopy: Switch to Feature"
+      },
+      {
+        "command": "canopy.openDashboard",
+        "title": "Canopy: Open Feature Dashboard"
+      },
+      {
+        "command": "canopy.preflight",
+        "title": "Canopy: Run Preflight"
+      },
+      {
+        "command": "canopy.sync",
+        "title": "Canopy: Sync All Repos"
+      },
+      {
+        "command": "canopy.featureDone",
+        "title": "Canopy: Mark Feature Done"
+      },
+      {
+        "command": "canopy.openInIde",
+        "title": "Canopy: Open Feature Worktrees in New Window"
+      },
+      {
+        "command": "canopy.init",
+        "title": "Canopy: Initialize Workspace Here"
+      },
+      {
+        "command": "canopy.retryConnect",
+        "title": "Canopy: Retry Connect"
+      },
+      {
+        "command": "canopy.showLog",
+        "title": "Canopy: Show Log"
+      },
+      {
+        "command": "canopy.installBackend",
+        "title": "Canopy: Install Backend (create managed venv)"
+      },
+      {
+        "command": "canopy.reinit",
+        "title": "Canopy: Force Reinit Workspace (rescan & regenerate canopy.toml)",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "canopy.reinitDryRun",
+        "title": "Canopy: Preview Reinit (dry run)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "canopy.createFeature",
+          "when": "view == canopy.features",
+          "group": "navigation@1"
+        },
+        {
+          "command": "canopy.refresh",
+          "when": "view == canopy.features || view == canopy.worktrees || view == canopy.changes || view == canopy.review",
+          "group": "navigation@2"
+        },
+        {
+          "command": "canopy.reinit",
+          "when": "view == canopy.features",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "canopy.reinitDryRun",
+          "when": "view == canopy.features",
+          "group": "9_danger@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "canopy.openDashboard",
+          "when": "view == canopy.features && viewItem == feature",
+          "group": "1_open@1"
+        },
+        {
+          "command": "canopy.switchFeature",
+          "when": "view == canopy.features && viewItem == feature",
+          "group": "1_open@2"
+        },
+        {
+          "command": "canopy.openInIde",
+          "when": "view == canopy.features && viewItem == feature",
+          "group": "1_open@3"
+        },
+        {
+          "command": "canopy.featureDone",
+          "when": "view == canopy.features && viewItem == feature",
+          "group": "9_destructive@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Canopy",
+      "properties": {
+        "canopy.canopyMcpPath": {
+          "type": "string",
+          "default": "canopy-mcp",
+          "description": "Path to the canopy-mcp executable. Use 'canopy-mcp' if it's on PATH, otherwise an absolute path."
+        },
+        "canopy.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "How often to poll Canopy for refreshed state. Set to 0 to disable periodic refresh."
+        },
+        "canopy.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional: python3 path used by 'Install Backend'. Leave empty to auto-detect."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "compile-tests": "tsc -p ./",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

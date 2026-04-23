@@ -146,6 +146,69 @@ def _normalize_issue(data: dict, original_id: str) -> dict:
     }
 
 
+def list_my_issues(workspace_root: Path, limit: int = 25) -> list[dict]:
+    """Fetch open Linear issues assigned to the current user.
+
+    Used by the VSCode extension's "Create Feature" quick pick to populate
+    autocomplete suggestions. Returns an empty list (never raises) if the
+    Linear MCP isn't configured or doesn't expose a usable list tool — the
+    extension treats this as "no autocomplete available."
+
+    Returns:
+        List of {identifier, title, state, url}.
+    """
+    if not is_linear_configured(workspace_root):
+        return []
+
+    try:
+        config = _get_linear_config(workspace_root)
+    except LinearNotConfiguredError:
+        return []
+
+    tool_attempts = [
+        ("list_my_issues", {}),
+        ("linear_list_my_issues", {}),
+        ("get_my_issues", {}),
+        ("list_issues", {"assignee": "me", "state": "open"}),
+        ("linear_list_issues", {"assignee": "me", "state": "open"}),
+        ("search_issues", {"query": "assignee:me state:open"}),
+    ]
+
+    for tool_name, args in tool_attempts:
+        try:
+            result = call_tool(config, tool_name, args, timeout=15.0)
+        except McpClientError:
+            continue
+        parsed = _parse_issue_result(result)
+        if parsed is None:
+            continue
+
+        items = parsed
+        if isinstance(items, dict):
+            for key in ("issues", "results", "data", "items"):
+                if isinstance(items.get(key), list):
+                    items = items[key]
+                    break
+        if not isinstance(items, list):
+            continue
+
+        normalized = []
+        for entry in items[:limit]:
+            if not isinstance(entry, dict):
+                continue
+            issue = _normalize_issue(entry, entry.get("identifier", ""))
+            normalized.append({
+                "identifier": issue["identifier"],
+                "title": issue["title"],
+                "state": issue["state"],
+                "url": issue["url"],
+            })
+        if normalized:
+            return normalized
+
+    return []
+
+
 def format_branch_name(issue_id: str, title: str = "", custom_name: str = "") -> str:
     """Format a branch name from a Linear issue.
 

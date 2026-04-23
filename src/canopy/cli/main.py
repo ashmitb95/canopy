@@ -376,6 +376,41 @@ def cmd_feature_diff(args: argparse.Namespace) -> None:
     print()
 
 
+def cmd_feature_changes(args: argparse.Namespace) -> None:
+    """Show per-file change status (M/A/D/?) for each repo in a feature."""
+    workspace = _load_workspace()
+    from ..features.coordinator import FeatureCoordinator
+
+    coordinator = FeatureCoordinator(workspace)
+
+    try:
+        result = coordinator.feature_changes(args.name)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    print(f"\n  Feature: {result['feature']}")
+    print(f"  {'─' * 60}")
+
+    for repo_name, data in result["repos"].items():
+        if data.get("error"):
+            print(f"\n  {repo_name}: error — {data['error']}")
+            continue
+        if not data.get("has_branch"):
+            print(f"\n  {repo_name}: (no branch)")
+            continue
+        changes = data.get("changes", [])
+        print(f"\n  {repo_name} ({len(changes)} change{'s' if len(changes) != 1 else ''})")
+        for c in changes:
+            print(f"    {c['status']}  {c['path']}")
+
+    print()
+
+
 def cmd_feature_status(args: argparse.Namespace) -> None:
     """Show detailed feature lane status."""
     from .ui import console, separator, print_success, SYM_CHECK, SYM_CROSS, SYM_LINK
@@ -1577,6 +1612,11 @@ def main() -> None:
     fst.add_argument("name", help="Feature name")
     fst.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # feature changes
+    fch = feature_sub.add_parser("changes", help="Per-file change status across repos")
+    fch.add_argument("name", help="Feature name")
+    fch.add_argument("--json", action="store_true", help="Output as JSON")
+
     # sync
     sync_p = subparsers.add_parser("sync", help="Pull + rebase across repos")
     sync_p.add_argument("--strategy", choices=["rebase", "merge"], default="rebase")
@@ -1755,6 +1795,7 @@ def main() -> None:
             "switch": cmd_feature_switch,
             "diff": cmd_feature_diff,
             "status": cmd_feature_status,
+            "changes": cmd_feature_changes,
         }
         feature_commands[args.feature_command](args)
     elif args.command == "branch":

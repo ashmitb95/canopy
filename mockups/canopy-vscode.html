@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Canopy — VSCode extension mockups</title>
+<style>
+  :root {
+    --bg-editor: #1e1e1e;
+    --bg-sidebar: #252526;
+    --bg-activitybar: #333333;
+    --bg-statusbar: #007acc;
+    --bg-panel: #1e1e1e;
+    --bg-titlebar: #3c3c3c;
+    --bg-hover: #2a2d2e;
+    --bg-selected: #094771;
+    --bg-input: #3c3c3c;
+    --fg: #cccccc;
+    --fg-muted: #858585;
+    --fg-bright: #ffffff;
+    --border: #2d2d30;
+    --accent: #007acc;
+    --green: #4ec9b0;
+    --yellow: #dcdcaa;
+    --red: #f48771;
+    --orange: #ce9178;
+    --purple: #c586c0;
+    --blue: #569cd6;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #181818;
+    color: var(--fg);
+    font: 13px/1.4 -apple-system, "Segoe UI", "SF Pro", system-ui, sans-serif;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px 0;
+    background: #181818;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 8px 16px;
+    background: var(--bg-sidebar);
+    color: var(--fg-muted);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tab.active { background: var(--bg-editor); color: var(--fg-bright); }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* VSCode shell */
+  .vscode {
+    display: grid;
+    grid-template-columns: 48px 320px 1fr;
+    grid-template-rows: 30px 1fr 22px;
+    height: 720px;
+    margin: 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-editor);
+  }
+  .titlebar {
+    grid-column: 1 / -1;
+    background: var(--bg-titlebar);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    color: var(--fg-muted);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .traffic { display: flex; gap: 6px; margin-right: 14px; }
+  .traffic span { width: 12px; height: 12px; border-radius: 50%; }
+  .traffic .r { background: #ff5f57; }
+  .traffic .y { background: #febc2e; }
+  .traffic .g { background: #28c840; }
+  .activitybar {
+    background: var(--bg-activitybar);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    gap: 4px;
+    border-right: 1px solid var(--border);
+  }
+  .ab-icon {
+    width: 48px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    color: var(--fg-muted);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    font-size: 18px;
+  }
+  .ab-icon.active { color: var(--fg-bright); border-left-color: var(--fg-bright); }
+  .ab-icon:hover { color: var(--fg); }
+  .ab-icon .badge {
+    position: absolute;
+    margin: 16px 0 0 16px;
+    background: var(--bg-statusbar);
+    color: white;
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 8px;
+    line-height: 1;
+  }
+  .sidebar {
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+  .sb-title {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--fg);
+  }
+  .section { border-top: 1px solid var(--border); }
+  .section:first-child { border-top: none; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 4px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--fg);
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: var(--bg-hover); }
+  .chev { color: var(--fg-muted); font-size: 9px; margin-right: 4px; }
+  .section-actions { display: flex; gap: 6px; opacity: 0.85; }
+  .section-actions span { cursor: pointer; padding: 0 2px; }
+  .section-actions span:hover { color: var(--fg-bright); }
+  .tree-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px 2px 24px;
+    cursor: pointer;
+    user-select: none;
+    line-height: 22px;
+    font-size: 13px;
+    color: var(--fg);
+  }
+  .tree-row.indent-2 { padding-left: 40px; }
+  .tree-row.indent-3 { padding-left: 56px; }
+  .tree-row:hover { background: var(--bg-hover); }
+  .tree-row.selected { background: var(--bg-selected); color: var(--fg-bright); }
+  .tree-row .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree-row .meta { color: var(--fg-muted); font-size: 11px; }
+  .pill {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 600;
+  }
+  .pill.active { background: #16825d; color: white; }
+  .pill.linear { background: #5e6ad2; color: white; }
+  .pill.pr { background: #6f42c1; color: white; }
+  .pill.warn { background: #b58900; color: black; }
+  .pill.muted { background: #3c3c3c; color: var(--fg-muted); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dot.green { background: var(--green); }
+  .dot.yellow { background: var(--yellow); }
+  .dot.red { background: var(--red); }
+  .icon { width: 16px; text-align: center; color: var(--fg-muted); font-size: 13px; }
+  .icon.folder { color: var(--blue); }
+  .icon.feature { color: var(--green); }
+  .icon.repo { color: var(--orange); }
+  .change-tag {
+    font-size: 10px;
+    color: var(--fg-muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .change-tag.m { color: var(--yellow); }
+  .change-tag.a { color: var(--green); }
+  .change-tag.d { color: var(--red); }
+  .change-tag.u { color: var(--purple); }
+
+  /* Main editor area */
+  .editor {
+    background: var(--bg-editor);
+    overflow-y: auto;
+    position: relative;
+  }
+  .editor-tabs {
+    display: flex;
+    background: #2d2d30;
+    border-bottom: 1px solid var(--border);
+    height: 35px;
+  }
+  .editor-tab {
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #2d2d30;
+    color: var(--fg-muted);
+    border-right: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .editor-tab.active {
+    background: var(--bg-editor);
+    color: var(--fg-bright);
+    border-bottom: 1px solid var(--bg-editor);
+    margin-bottom: -1px;
+  }
+  .editor-body { padding: 24px 32px; }
+  .editor-empty {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: var(--fg-muted);
+    font-size: 14px;
+    text-align: center;
+  }
+  .editor-empty .kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    background: #2d2d30;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    margin: 0 2px;
+  }
+
+  .statusbar {
+    grid-column: 1 / -1;
+    background: var(--bg-statusbar);
+    color: white;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    padding: 0 8px;
+  }
+  .sb-item { padding: 0 8px; display: flex; align-items: center; gap: 4px; height: 100%; }
+  .sb-item:hover { background: rgba(255,255,255,0.12); cursor: pointer; }
+  .sb-spacer { flex: 1; }
+
+  /* Dashboard webview */
+  .dash {
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .dash h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--fg-bright);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .dash .subhead {
+    color: var(--fg-muted);
+    font-size: 13px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card {
+    background: #252526;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .card h3 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--fg-muted);
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .card .row:last-child { border-bottom: none; }
+  .card .row .left { display: flex; gap: 10px; align-items: center; }
+  .card .row .right { color: var(--fg-muted); font-size: 12px; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  .commit {
+    display: grid;
+    grid-template-columns: 70px 1fr auto;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .commit:last-child { border-bottom: none; }
+  .commit .sha { color: var(--yellow); font-family: ui-monospace, Menlo, monospace; }
+  .commit .msg { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .commit .when { color: var(--fg-muted); }
+  .warn-box {
+    background: #3a2c1a;
+    border: 1px solid #a37a26;
+    border-radius: 4px;
+    padding: 10px 12px;
+    color: #f0d590;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+  .btn {
+    padding: 6px 12px;
+    background: var(--accent);
+    border: none;
+    color: white;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .btn.secondary { background: #3c3c3c; color: var(--fg); }
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+  /* Quick pick overlay */
+  .overlay {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 640px;
+    background: #252526;
+    border: 1px solid #454545;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    border-radius: 4px;
+    z-index: 10;
+  }
+  .qp-input {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--accent);
+    color: var(--fg-bright);
+    font-size: 13px;
+    outline: none;
+  }
+  .qp-list { max-height: 360px; overflow-y: auto; }
+  .qp-item {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 10px;
+    padding: 8px 12px;
+    align-items: center;
+    cursor: pointer;
+    border-top: 1px solid var(--border);
+  }
+  .qp-item:hover, .qp-item.selected { background: var(--bg-selected); }
+  .qp-item .title { color: var(--fg-bright); font-size: 13px; }
+  .qp-item .desc { color: var(--fg-muted); font-size: 11px; }
+  .qp-item .kbd-hint { color: var(--fg-muted); font-size: 10px; }
+  .qp-section {
+    padding: 4px 12px;
+    background: #2d2d30;
+    color: var(--fg-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .legend {
+    margin: 16px 24px 32px;
+    color: var(--fg-muted);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .legend code {
+    background: #2d2d30;
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--orange);
+  }
+</style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" data-tab="sidebar">1. Sidebar (primary view)</div>
+  <div class="tab" data-tab="dashboard">2. Feature dashboard (webview)</div>
+  <div class="tab" data-tab="quickpick">3. Create feature (quick pick)</div>
+</div>
+
+<!-- ============================================================
+     SCREEN 1: Sidebar primary view
+     ============================================================ -->
+<div class="screen active" id="screen-sidebar">
+  <div class="vscode">
+    <div class="titlebar">
+      <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <span>canopy-workspace — auth-flow · api, ui, marketing</span>
+    </div>
+
+    <div class="activitybar">
+      <div class="ab-icon" title="Explorer">⎘</div>
+      <div class="ab-icon" title="Search">⌕</div>
+      <div class="ab-icon" title="Source Control">⑂</div>
+      <div class="ab-icon active" title="Canopy">
+        ⛺<span class="badge">3</span>
+      </div>
+      <div class="ab-icon" title="Run">▷</div>
+      <div class="ab-icon" title="Extensions">▦</div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sb-title">CANOPY</div>
+
+      <!-- FEATURES -->
+      <div class="section">
+        <div class="section-header">
+          <span><span class="chev">▾</span> FEATURES</span>
+          <span class="section-actions">
+            <span title="Create feature">＋</span>
+            <span title="Refresh">↻</span>
+            <span title="Filter">⚙</span>
+          </span>
+        </div>
+        <div class="tree-row selected">
+          <span class="icon feature">●</span>
+          <span class="label">auth-flow</span>
+          <span class="pill active">ACTIVE</span>
+          <span class="pill linear">ENG-412</span>
+        </div>
+        <div class="tree-row indent-2"><span class="icon repo">▣</span><span class="label">api</span><span class="meta">+24 −8</span></div>
+        <div class="tree-row indent-2"><span class="icon repo">▣</span><span class="label">ui</span><span class="meta">+102 −31</span></div>
+        <div class="tree-row indent-2"><span class="icon repo">▣</span><span class="label">marketing</span><span class="meta">+5 −0</span></div>
+
+        <div class="tree-row">
+          <span class="icon feature" style="color:var(--yellow)">●</span>
+          <span class="label">billing-fix</span>
+          <span class="pill linear">ENG-501</span>
+          <span class="pill pr">PR #87</span>
+        </div>
+        <div class="tree-row indent-2"><span class="icon repo">▣</span><span class="label">api</span><span class="meta">+18 −12</span></div>
+
+        <div class="tree-row">
+          <span class="icon feature" style="color:var(--fg-muted)">●</span>
+          <span class="label">dark-mode</span>
+          <span class="pill muted">stale 6d</span>
+        </div>
+        <div class="tree-row indent-2"><span class="icon repo">▣</span><span class="label">ui</span><span class="meta">+340 −22</span></div>
+        <div class="tree-row indent-2"><span class="icon repo">▣</span><span class="label">marketing</span><span class="meta">+12 −3</span></div>
+      </div>
+
+      <!-- WORKTREES -->
+      <div class="section">
+        <div class="section-header">
+          <span><span class="chev">▾</span> WORKTREES <span style="color:var(--fg-muted);font-weight:400;text-transform:none;letter-spacing:0">3 / 8</span></span>
+          <span class="section-actions">
+            <span title="Open in IDE">⎘</span>
+            <span title="Prune">🗑</span>
+          </span>
+        </div>
+        <div class="tree-row">
+          <span class="icon folder">▾</span>
+          <span class="label">auth-flow</span>
+          <span class="meta">.canopy/worktrees/auth-flow/</span>
+        </div>
+        <div class="tree-row indent-2"><span class="icon">↳</span><span class="label">api</span><span class="meta mono">3 ↑</span></div>
+        <div class="tree-row indent-2"><span class="icon">↳</span><span class="label">ui</span><span class="meta mono">7 ↑ 1 ↓</span></div>
+        <div class="tree-row indent-2"><span class="icon">↳</span><span class="label">marketing</span><span class="meta mono">1 ↑</span></div>
+
+        <div class="tree-row">
+          <span class="icon folder">▸</span>
+          <span class="label">billing-fix</span>
+          <span class="meta">.canopy/worktrees/billing-fix/</span>
+        </div>
+      </div>
+
+      <!-- SCM PER REPO -->
+      <div class="section">
+        <div class="section-header">
+          <span><span class="chev">▾</span> CHANGES — auth-flow</span>
+          <span class="section-actions">
+            <span title="Stage all">＋</span>
+            <span title="Discard">↶</span>
+            <span title="Refresh">↻</span>
+          </span>
+        </div>
+        <div class="tree-row"><span class="icon repo">▣</span><span class="label">api</span><span class="meta">4 changes</span></div>
+        <div class="tree-row indent-2"><span class="change-tag m">M</span><span class="label">routes/session.py</span></div>
+        <div class="tree-row indent-2"><span class="change-tag m">M</span><span class="label">middleware/auth.py</span></div>
+        <div class="tree-row indent-2"><span class="change-tag a">A</span><span class="label">tests/test_session.py</span></div>
+        <div class="tree-row indent-2"><span class="change-tag d">D</span><span class="label">routes/legacy_login.py</span></div>
+
+        <div class="tree-row"><span class="icon repo">▣</span><span class="label">ui</span><span class="meta">7 changes</span></div>
+        <div class="tree-row indent-2"><span class="change-tag m">M</span><span class="label">src/auth/LoginForm.tsx</span></div>
+        <div class="tree-row indent-2"><span class="change-tag m">M</span><span class="label">src/auth/SessionContext.tsx</span></div>
+        <div class="tree-row indent-2"><span class="change-tag a">A</span><span class="label">src/auth/useSession.ts</span></div>
+        <div class="tree-row indent-2"><span class="change-tag u">?</span><span class="label">src/auth/types.ts</span></div>
+
+        <div class="tree-row"><span class="icon repo">▣</span><span class="label">marketing</span><span class="meta">1 change</span></div>
+        <div class="tree-row indent-2"><span class="change-tag m">M</span><span class="label">pages/login.mdx</span></div>
+      </div>
+
+      <!-- REVIEW -->
+      <div class="section">
+        <div class="section-header">
+          <span><span class="chev">▾</span> REVIEW READINESS</span>
+        </div>
+        <div class="tree-row"><span class="dot yellow"></span><span class="label">auth-flow</span><span class="meta">2 unresolved · pre-commit ✓</span></div>
+        <div class="tree-row"><span class="dot green"></span><span class="label">billing-fix</span><span class="meta">PR #87 · ready</span></div>
+        <div class="tree-row"><span class="dot red"></span><span class="label">dark-mode</span><span class="meta">overlap warning</span></div>
+      </div>
+    </div>
+
+    <div class="editor">
+      <div class="editor-tabs">
+        <div class="editor-tab active">⛺ Welcome to Canopy</div>
+      </div>
+      <div class="editor-empty">
+        <div>
+          <div style="font-size:32px;margin-bottom:12px">⛺</div>
+          <div>Select a feature to open its dashboard.</div>
+          <div style="margin-top:16px;color:var(--fg-muted);font-size:12px">
+            <div><span class="kbd">⌘</span><span class="kbd">⇧</span><span class="kbd">P</span> → "Canopy: Create Feature"</div>
+            <div style="margin-top:6px"><span class="kbd">⌘</span><span class="kbd">K</span> <span class="kbd">F</span> → switch feature</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <div class="sb-item">⛺ auth-flow</div>
+      <div class="sb-item">⑂ 3 repos</div>
+      <div class="sb-item">↑ 11  ↓ 1</div>
+      <div class="sb-item">● 2 unresolved</div>
+      <div class="sb-spacer"></div>
+      <div class="sb-item">Linear: ENG-412</div>
+      <div class="sb-item">canopy 0.4.2</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div><strong>Sidebar contains 4 collapsible sections:</strong></div>
+    <div>• <strong>Features</strong> — every lane in <code>.canopy/features.json</code>. Click to open dashboard, right-click for switch / merge / done.</div>
+    <div>• <strong>Worktrees</strong> — header shows live <code>max_worktrees</code> usage (3/8). Per-worktree ahead/behind counts via <code>canopy worktree info --json</code>.</div>
+    <div>• <strong>Changes</strong> — per-repo SCM, scoped to the active feature's worktrees. Uses VSCode's native SCM API so diff/stage gestures work as usual.</div>
+    <div>• <strong>Review readiness</strong> — driven by <code>canopy review status --json</code>. Traffic-light per feature.</div>
+    <div style="margin-top:8px">Status bar items are clickable and trigger Canopy commands (switch feature, open dashboard, run preflight).</div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 2: Feature dashboard webview
+     ============================================================ -->
+<div class="screen" id="screen-dashboard">
+  <div class="vscode">
+    <div class="titlebar">
+      <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <span>canopy-workspace — auth-flow</span>
+    </div>
+    <div class="activitybar">
+      <div class="ab-icon">⎘</div>
+      <div class="ab-icon">⌕</div>
+      <div class="ab-icon">⑂</div>
+      <div class="ab-icon active">⛺<span class="badge">3</span></div>
+      <div class="ab-icon">▷</div>
+      <div class="ab-icon">▦</div>
+    </div>
+    <div class="sidebar">
+      <div class="sb-title">CANOPY</div>
+      <div class="section">
+        <div class="section-header"><span><span class="chev">▾</span> FEATURES</span></div>
+        <div class="tree-row selected">
+          <span class="icon feature">●</span><span class="label">auth-flow</span>
+          <span class="pill active">ACTIVE</span>
+        </div>
+        <div class="tree-row"><span class="icon feature" style="color:var(--yellow)">●</span><span class="label">billing-fix</span></div>
+        <div class="tree-row"><span class="icon feature" style="color:var(--fg-muted)">●</span><span class="label">dark-mode</span></div>
+      </div>
+    </div>
+
+    <div class="editor">
+      <div class="editor-tabs">
+        <div class="editor-tab">⛺ Welcome</div>
+        <div class="editor-tab active">● auth-flow — dashboard</div>
+      </div>
+      <div class="editor-body">
+        <div class="dash">
+          <h1>
+            <span style="color:var(--green)">●</span>
+            auth-flow
+            <span class="pill linear">ENG-412</span>
+            <span class="pill pr">PR #124</span>
+          </h1>
+          <div class="subhead">
+            <span>3 repos</span>
+            <span>·</span>
+            <span>created 2026-04-18 by ashmit</span>
+            <span>·</span>
+            <span>last commit 23m ago</span>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>Branches <span class="mono" style="color:var(--fg-muted)">git status</span></h3>
+              <div class="row">
+                <div class="left"><span class="icon repo">▣</span> api</div>
+                <div class="right mono">↑3 ↓0  ·  4 changed</div>
+              </div>
+              <div class="row">
+                <div class="left"><span class="icon repo">▣</span> ui</div>
+                <div class="right mono">↑7 ↓1  ·  7 changed</div>
+              </div>
+              <div class="row">
+                <div class="left"><span class="icon repo">▣</span> marketing</div>
+                <div class="right mono">↑1 ↓0  ·  1 changed</div>
+              </div>
+              <div class="btn-row">
+                <button class="btn">Sync all</button>
+                <button class="btn secondary">Open in iTerm</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Linear · ENG-412</h3>
+              <div class="row">
+                <div class="left">Status</div>
+                <div class="right" style="color:var(--blue)">In Progress</div>
+              </div>
+              <div class="row">
+                <div class="left">Assignee</div>
+                <div class="right">ashmit</div>
+              </div>
+              <div class="row">
+                <div class="left">Estimate</div>
+                <div class="right">3 pts</div>
+              </div>
+              <div class="row">
+                <div class="left">Sub-issues</div>
+                <div class="right">2 of 4 done</div>
+              </div>
+              <div class="btn-row">
+                <button class="btn secondary">Open in Linear ↗</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Review readiness <span class="pill warn">2 unresolved</span></h3>
+            <div class="row">
+              <div class="left"><span class="dot green"></span> Pre-commit hooks (api, ui, marketing)</div>
+              <div class="right">passing</div>
+            </div>
+            <div class="row">
+              <div class="left"><span class="dot yellow"></span> Unresolved review comments</div>
+              <div class="right">2 in PR #124 (ui)</div>
+            </div>
+            <div class="row">
+              <div class="left"><span class="dot green"></span> Tests</div>
+              <div class="right">last run 8m ago — 187 passed</div>
+            </div>
+            <div class="row">
+              <div class="left"><span class="dot red"></span> File overlap detection</div>
+              <div class="right">2 basenames shared with dark-mode</div>
+            </div>
+            <div class="warn-box">
+              ⚠ <strong>auth.types.ts</strong> and <strong>session.ts</strong> exist in both <code>auth-flow/ui</code> and <code>dark-mode/ui</code>. Likely merge conflict on integration.
+            </div>
+            <div class="btn-row">
+              <button class="btn">Run canopy preflight</button>
+              <button class="btn secondary">View overlaps</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Recent commits <span class="mono" style="color:var(--fg-muted)">across all worktrees</span></h3>
+            <div class="commit"><span class="sha">a4f2d1e</span><span class="msg">[ui] fix: persist session on tab focus</span><span class="when">23m ago</span></div>
+            <div class="commit"><span class="sha">8e1c3b9</span><span class="msg">[api] feat: add /session/refresh endpoint</span><span class="when">1h ago</span></div>
+            <div class="commit"><span class="sha">2d44a17</span><span class="msg">[ui] refactor: extract useSession hook</span><span class="when">3h ago</span></div>
+            <div class="commit"><span class="sha">c91ba50</span><span class="msg">[marketing] copy: update login page wording</span><span class="when">5h ago</span></div>
+            <div class="commit"><span class="sha">f0ee8a2</span><span class="msg">[api] test: cover session expiry edge case</span><span class="when">yesterday</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <div class="sb-item">⛺ auth-flow</div>
+      <div class="sb-item">⑂ 3 repos</div>
+      <div class="sb-item">↑ 11  ↓ 1</div>
+      <div class="sb-spacer"></div>
+      <div class="sb-item">canopy 0.4.2</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    Dashboard is a single VSCode webview, opened by clicking a feature in the tree. Data sources:
+    <code>canopy feature status --json</code>, <code>canopy review status --json</code>,
+    <code>canopy review comments --json</code>, <code>canopy log --json</code>,
+    plus the existing Linear/GitHub MCP integrations.
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 3: Quick pick
+     ============================================================ -->
+<div class="screen" id="screen-quickpick">
+  <div class="vscode">
+    <div class="titlebar">
+      <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <span>canopy-workspace</span>
+    </div>
+    <div class="activitybar">
+      <div class="ab-icon">⎘</div>
+      <div class="ab-icon">⌕</div>
+      <div class="ab-icon">⑂</div>
+      <div class="ab-icon active">⛺<span class="badge">3</span></div>
+      <div class="ab-icon">▷</div>
+      <div class="ab-icon">▦</div>
+    </div>
+    <div class="sidebar">
+      <div class="sb-title">CANOPY</div>
+      <div class="section">
+        <div class="section-header"><span><span class="chev">▾</span> FEATURES</span></div>
+        <div class="tree-row"><span class="icon feature">●</span><span class="label">auth-flow</span><span class="pill active">ACTIVE</span></div>
+        <div class="tree-row"><span class="icon feature" style="color:var(--yellow)">●</span><span class="label">billing-fix</span></div>
+        <div class="tree-row"><span class="icon feature" style="color:var(--fg-muted)">●</span><span class="label">dark-mode</span></div>
+      </div>
+    </div>
+
+    <div class="editor">
+      <div class="editor-tabs">
+        <div class="editor-tab active">⛺ Welcome</div>
+      </div>
+      <div class="overlay">
+        <input class="qp-input" placeholder="Type to filter, or pick a Linear issue..." value="ENG-" />
+        <div class="qp-section">Linear — assigned to you</div>
+        <div class="qp-list">
+          <div class="qp-item selected">
+            <span style="color:var(--purple)">●</span>
+            <div>
+              <div class="title">ENG-518 — Add SSO support to login flow</div>
+              <div class="desc">In Triage · auto-name: <span class="mono">eng-518-add-sso</span> · creates branch in: api, ui</div>
+            </div>
+            <div class="kbd-hint">↵ create</div>
+          </div>
+          <div class="qp-item">
+            <span style="color:var(--purple)">●</span>
+            <div>
+              <div class="title">ENG-522 — Rate-limit /auth endpoints</div>
+              <div class="desc">Backlog · auto-name: <span class="mono">eng-522-rate-limit-auth</span> · creates branch in: api</div>
+            </div>
+            <div class="kbd-hint">↵ create</div>
+          </div>
+          <div class="qp-item">
+            <span style="color:var(--purple)">●</span>
+            <div>
+              <div class="title">ENG-530 — Email verification UI states</div>
+              <div class="desc">Backlog · auto-name: <span class="mono">eng-530-email-verify</span> · creates branch in: ui, marketing</div>
+            </div>
+            <div class="kbd-hint">↵ create</div>
+          </div>
+          <div class="qp-section" style="border-top:1px solid var(--border)">Custom</div>
+          <div class="qp-item">
+            <span>＋</span>
+            <div>
+              <div class="title">Create custom feature lane "ENG-"</div>
+              <div class="desc">No Linear association · choose repos manually</div>
+            </div>
+            <div class="kbd-hint">⇧↵</div>
+          </div>
+        </div>
+      </div>
+      <div class="editor-empty">
+        <div style="opacity:0.4">
+          <div style="font-size:32px;margin-bottom:12px">⛺</div>
+          <div>Canopy: Create Feature</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <div class="sb-item">⛺ auth-flow</div>
+      <div class="sb-item">⑂ 3 repos</div>
+      <div class="sb-spacer"></div>
+      <div class="sb-item">canopy 0.4.2</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    Native VSCode QuickPick. Pulls open Linear issues via the Linear MCP server you've already wired into Canopy, suggests an auto-generated lane name, and detects which repos to create branches in based on labels / past behavior. <span class="kbd">⇧</span><span class="kbd">↵</span> falls back to a custom lane.
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('screen-' + t.dataset.tab).classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

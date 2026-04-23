@@ -178,6 +178,21 @@ def feature_diff(name: str) -> dict:
 
 
 @mcp.tool()
+def feature_changes(name: str) -> dict:
+    """Per-file change status (M/A/D/?) for each repo in a feature.
+
+    Includes uncommitted changes — uses the worktree path when one exists
+    so the listing matches what the user is actively editing.
+
+    Args:
+        name: Feature lane name.
+    """
+    ws = _get_workspace()
+    coordinator = FeatureCoordinator(ws)
+    return coordinator.feature_changes(name)
+
+
+@mcp.tool()
 def feature_merge_readiness(name: str) -> dict:
     """Check if a feature lane is ready to merge.
 
@@ -613,6 +628,93 @@ def review_prep(
     ws = _get_workspace()
     coordinator = FeatureCoordinator(ws)
     return coordinator.review_prep(feature, message=message)
+
+
+# ── Workspace lifecycle ──────────────────────────────────────────────────
+
+@mcp.tool()
+def workspace_reinit(name: str | None = None, dry_run: bool = False) -> dict:
+    """Re-run Canopy's repo/worktree discovery and regenerate canopy.toml.
+
+    Useful when repos or worktrees have been added/removed outside Canopy.
+    Always overwrites canopy.toml (no-op check is the caller's job). Set
+    `dry_run=True` to preview the new TOML without writing.
+
+    Args:
+        name: Override the workspace name (defaults to the existing one or
+            the directory basename).
+        dry_run: If True, return the new TOML without writing.
+
+    Returns:
+        { root, repos, skipped, active_worktrees, toml, written }
+    """
+    from ..workspace.discovery import discover_repos, generate_toml
+
+    root = Path(os.environ.get("CANOPY_ROOT") or os.getcwd()).resolve()
+    repos = discover_repos(root)
+    if not repos:
+        raise ValueError(f"No Git repositories found in {root}")
+
+    toml_content = generate_toml(root, workspace_name=name)
+
+    toml_path = root / "canopy.toml"
+    written = False
+    if not dry_run:
+        toml_path.write_text(toml_content)
+        written = True
+
+    all_dirs = [
+        d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")
+    ]
+    skipped = [d.name for d in all_dirs if not (d / ".git").exists()]
+    worktrees_dir = root / ".canopy" / "worktrees"
+    active_worktrees: dict[str, list[str]] = {}
+    if worktrees_dir.is_dir():
+        for feat_dir in worktrees_dir.iterdir():
+            if feat_dir.is_dir():
+                active_worktrees[feat_dir.name] = sorted(
+                    d.name for d in feat_dir.iterdir() if d.is_dir()
+                )
+
+    return {
+        "root": str(root),
+        "repos": [
+            {
+                "name": r.name,
+                "path": r.path,
+                "role": r.role,
+                "lang": r.lang,
+                "is_worktree": r.is_worktree,
+                "worktree_main": r.worktree_main,
+            }
+            for r in repos
+        ],
+        "skipped": skipped,
+        "active_worktrees": active_worktrees,
+        "toml": toml_content,
+        "written": written,
+    }
+
+
+# ── Linear ───────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def linear_my_issues(limit: int = 25) -> list[dict]:
+    """List open Linear issues assigned to the current user.
+
+    Returns an empty list if the Linear MCP isn't configured — callers
+    (e.g. the VSCode extension's Create Feature quick pick) treat this
+    as "no autocomplete available."
+
+    Args:
+        limit: Maximum issues to return (default 25).
+
+    Returns:
+        List of {identifier, title, state, url}.
+    """
+    from ..integrations.linear import list_my_issues as _list_my_issues
+    ws = _get_workspace()
+    return _list_my_issues(ws.config.root, limit=limit)
 
 
 # ── Sync ─────────────────────────────────────────────────────────────────

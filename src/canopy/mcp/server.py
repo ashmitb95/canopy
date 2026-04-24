@@ -87,6 +87,32 @@ def workspace_context(cwd: str | None = None) -> dict:
 
 
 @mcp.tool()
+def run(repo: str, command: str, feature: str | None = None,
+        timeout_seconds: int = 60) -> dict:
+    """Run a shell command in a canopy-managed repo, with directory resolution.
+
+    Eliminates "cd to wrong path" agent mistakes. Pass the repo name and
+    canopy resolves the working directory: if ``feature`` is set and a
+    worktree exists for ``(feature, repo)``, runs in the worktree;
+    otherwise runs in the repo's main path.
+
+    Returns ``{exit_code, stdout, stderr, cwd, duration_ms}``. Confirm
+    ``cwd`` matches your expectation in any post-call reasoning.
+
+    Args:
+        repo: name of the repo as configured in canopy.toml.
+        command: shell command to run (e.g. ``"git status"``).
+        feature: optional feature name; selects worktree path if applicable.
+        timeout_seconds: kills the process after this many seconds (default 60).
+    """
+    from ..agent.runner import run_in_repo
+
+    ws = _get_workspace()
+    return run_in_repo(ws, repo=repo, command=command, feature=feature,
+                       timeout_seconds=timeout_seconds)
+
+
+@mcp.tool()
 def drift(feature: str | None = None) -> dict:
     """Compare recorded HEAD state vs feature lane expectations.
 

@@ -1632,6 +1632,44 @@ def cmd_hooks(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_run(args: argparse.Namespace) -> None:
+    """Run a shell command in a canopy-managed repo, with directory resolution."""
+    from ..agent.runner import run_in_repo
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = run_in_repo(
+            workspace,
+            repo=args.repo,
+            command=args.cmd,
+            feature=getattr(args, "feature", None),
+            timeout_seconds=getattr(args, "timeout", 60),
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="run")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    if result["stdout"]:
+        sys.stdout.write(result["stdout"])
+        if not result["stdout"].endswith("\n"):
+            sys.stdout.write("\n")
+    if result["stderr"]:
+        sys.stderr.write(result["stderr"])
+        if not result["stderr"].endswith("\n"):
+            sys.stderr.write("\n")
+    sys.exit(result["exit_code"])
+
+
 def cmd_drift(args: argparse.Namespace) -> None:
     """Compare recorded HEAD state vs feature lane expectations across repos."""
     from ..actions.drift import detect_drift
@@ -1902,6 +1940,21 @@ def main() -> None:
                          help="Limit to a specific feature lane")
     drift_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # run
+    run_p = subparsers.add_parser(
+        "run",
+        help="Run a shell command in a canopy-managed repo (resolves cwd safely)",
+    )
+    run_p.add_argument("repo", help="Repo name (from canopy.toml)")
+    # NB: positional named "cmd" not "command" — the top-level subparser
+    # dispatch uses dest="command" and would clobber it.
+    run_p.add_argument("cmd", help="Shell command to run")
+    run_p.add_argument("--feature", default=None,
+                       help="Feature lane (selects worktree path if applicable)")
+    run_p.add_argument("--timeout", type=int, default=60,
+                       help="Kill the process after N seconds (default 60)")
+    run_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # hooks
     hooks_p = subparsers.add_parser(
         "hooks",
@@ -1941,6 +1994,7 @@ def main() -> None:
         "context": cmd_context,
         "hooks": cmd_hooks,
         "drift": cmd_drift,
+        "run": cmd_run,
     }
 
     if args.command == "feature":

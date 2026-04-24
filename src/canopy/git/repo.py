@@ -527,6 +527,58 @@ def worktree_remove(repo_path: Path, worktree_path: Path, force: bool = False) -
 
 # ── Log ───────────────────────────────────────────────────────────────────
 
+def commit_iso_date(repo_path: Path, ref: str = "HEAD") -> str:
+    """Return the committer date of a ref as ISO 8601 (e.g. ``2026-04-25T12:34:56Z``).
+
+    Used by the review-comment temporal filter to know how old the latest
+    commit on the branch is. Returns empty string if the ref doesn't resolve.
+    """
+    try:
+        return _run_ok(
+            ["log", "-1", "--format=%cI", ref], cwd=repo_path,
+        ).strip()
+    except GitError:
+        return ""
+
+
+def commits_touching_path(
+    repo_path: Path,
+    ref: str,
+    path: str,
+    since: str | None = None,
+) -> list[dict]:
+    """Return commits on ``ref`` that touched ``path``, optionally since a date.
+
+    Each entry: ``{sha, short_sha, committed_at, subject}``. Newest first.
+    ``since`` should be ISO 8601; commits with committer date ``> since``
+    are returned (used to ask: did anything happen after the comment?).
+    """
+    sep = "\x1f"
+    fmt = f"%H{sep}%h{sep}%cI{sep}%s"
+    args = ["log", ref, f"--format={fmt}"]
+    if since:
+        args.append(f"--since={since}")
+    args.extend(["--", path])
+    try:
+        output = _run_ok(args, cwd=repo_path)
+    except GitError:
+        return []
+    if not output:
+        return []
+    entries = []
+    for line in output.splitlines():
+        parts = line.split(sep)
+        if len(parts) < 4:
+            continue
+        entries.append({
+            "sha": parts[0],
+            "short_sha": parts[1],
+            "committed_at": parts[2],
+            "subject": parts[3],
+        })
+    return entries
+
+
 def log_structured(
     repo_path: Path,
     ref: str = "HEAD",

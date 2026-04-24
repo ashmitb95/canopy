@@ -257,6 +257,32 @@ class TestWorktreeAddAndQuery:
         # Cleanup
         git.worktree_remove(api, wt_path)
 
+    def test_worktree_add_does_not_inherit_upstream(self, workspace_dir, tmp_path):
+        """New branches created via worktree_add must not inherit upstream."""
+        api = workspace_dir / "api"
+        # Set up a bare remote and push so origin/main exists.
+        remote = tmp_path / "remote.git"
+        remote.mkdir()
+        _git(["init", "--bare", "-b", "main"], cwd=remote)
+        _git(["remote", "add", "origin", str(remote)], cwd=api)
+        _git(["push", "-u", "origin", "main"], cwd=api)
+        _git(["config", "branch.autoSetupMerge", "always"], cwd=api)
+
+        wt_path = workspace_dir / "api-no-inherit-wt"
+        git.worktree_add(api, wt_path, "wt-no-inherit", create_branch=True)
+
+        result = subprocess.run(
+            ["git", "config", "--get", "branch.wt-no-inherit.remote"],
+            cwd=api, capture_output=True, text=True,
+        )
+        assert result.returncode != 0, (
+            f"new worktree branch unexpectedly has upstream tracking: "
+            f"branch.wt-no-inherit.remote = {result.stdout.strip()!r}"
+        )
+
+        # Cleanup
+        git.worktree_remove(api, wt_path)
+
 
 # ── worktrees_live() ──────────────────────────────────────────────────
 

@@ -79,6 +79,36 @@ def test_create_branch(git_repo):
     assert branch_exists(git_repo, "feature-x")
 
 
+def test_create_branch_does_not_inherit_upstream(git_repo, tmp_path):
+    """New branches must not inherit the start-point's upstream tracking.
+
+    Without --no-track, a user with branch.autoSetupMerge=always (or =inherit
+    matching a remote-tracking start_point) would silently get the new
+    branch tracking the start_point's remote. Then `git push` would push to
+    the wrong remote branch.
+    """
+    # Set up a bare remote and push main to it so origin/main exists.
+    remote = tmp_path / "remote.git"
+    remote.mkdir()
+    _git(["init", "--bare", "-b", "main"], cwd=remote)
+    _git(["remote", "add", "origin", str(remote)], cwd=git_repo)
+    _git(["push", "-u", "origin", "main"], cwd=git_repo)
+    # Aggressive auto-tracking: would normally inherit from any start point.
+    _git(["config", "branch.autoSetupMerge", "always"], cwd=git_repo)
+
+    create_branch(git_repo, "no-inherit")
+
+    # No upstream tracking should be configured on the new branch.
+    result = subprocess.run(
+        ["git", "config", "--get", "branch.no-inherit.remote"],
+        cwd=git_repo, capture_output=True, text=True,
+    )
+    assert result.returncode != 0, (
+        f"new branch unexpectedly has upstream tracking: "
+        f"branch.no-inherit.remote = {result.stdout.strip()!r}"
+    )
+
+
 def test_branch_exists_false(git_repo):
     assert branch_exists(git_repo, "nonexistent") is False
 

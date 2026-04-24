@@ -197,8 +197,16 @@ def branch_exists(repo_path: Path, branch: str) -> bool:
 # ── Write operations ─────────────────────────────────────────────────────
 
 def create_branch(repo_path: Path, name: str, start_point: str = "HEAD") -> None:
-    """Create a new branch."""
-    _run(["branch", name, start_point], cwd=repo_path)
+    """Create a new branch.
+
+    Uses --no-track so the new branch does not inherit the start_point's
+    upstream. Without this, a user gitconfig of branch.autoSetupMerge=inherit
+    (or =simple matching a remote-tracking start_point) would silently make
+    the new branch track origin/<start_point> — so a later `git push` would
+    push to the start_point's branch on the remote. Upstream gets set
+    explicitly on first push instead.
+    """
+    _run(["branch", "--no-track", name, start_point], cwd=repo_path)
 
 
 def checkout(repo_path: Path, branch: str) -> None:
@@ -500,7 +508,8 @@ def worktree_add(
     """
     args = ["worktree", "add"]
     if create_branch and not branch_exists(repo_path, branch):
-        args.extend(["-b", branch])
+        # --no-track: see create_branch() for rationale.
+        args.extend(["-b", branch, "--no-track"])
     args.append(str(dest_path))
     if not create_branch or branch_exists(repo_path, branch):
         args.append(branch)

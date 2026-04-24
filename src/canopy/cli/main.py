@@ -1632,6 +1632,41 @@ def cmd_hooks(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_drift(args: argparse.Namespace) -> None:
+    """Compare recorded HEAD state vs feature lane expectations across repos."""
+    from ..actions.drift import detect_drift
+    from .ui import console, print_warning, SYM_CHECK, SYM_CROSS
+
+    workspace = _load_workspace()
+    feature = getattr(args, "feature", None)
+    report = detect_drift(workspace, feature_name=feature)
+
+    if args.json:
+        _print_json(report.to_dict())
+        return
+
+    console.print()
+    if report.note:
+        console.print(f"  [muted]{report.note}[/]")
+        console.print()
+        return
+
+    for fd in report.features:
+        glyph = f"[success]{SYM_CHECK}[/]" if fd.aligned else f"[error]{SYM_CROSS}[/]"
+        console.print(f"  {glyph} [feature]{fd.feature}[/]")
+        for r in fd.repos:
+            if r.actual is None:
+                line = f"      [repo]{r.repo}[/]  [muted]→ no recorded state (expected {r.expected})[/]"
+            elif r.aligned:
+                line = f"      [repo]{r.repo}[/]  [muted]→ {r.actual}[/]"
+            else:
+                line = f"      [repo]{r.repo}[/]  [warning]→ {r.actual}[/]  [muted](expected {r.expected})[/]"
+            console.print(line)
+        if not fd.aligned:
+            console.print(f"      [muted]fix:[/] [info]canopy realign {fd.feature}[/]")
+        console.print()
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     """Show detected canopy context for current directory (debug)."""
     from ..workspace.context import detect_context
@@ -1858,6 +1893,15 @@ def main() -> None:
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # drift
+    drift_p = subparsers.add_parser(
+        "drift",
+        help="Show alignment between recorded HEADs and active feature lanes",
+    )
+    drift_p.add_argument("feature", nargs="?", default=None,
+                         help="Limit to a specific feature lane")
+    drift_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # hooks
     hooks_p = subparsers.add_parser(
         "hooks",
@@ -1896,6 +1940,7 @@ def main() -> None:
         "config": cmd_config,
         "context": cmd_context,
         "hooks": cmd_hooks,
+        "drift": cmd_drift,
     }
 
     if args.command == "feature":

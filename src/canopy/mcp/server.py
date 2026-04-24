@@ -86,6 +86,29 @@ def workspace_context(cwd: str | None = None) -> dict:
     return ctx.to_dict()
 
 
+@mcp.tool()
+def drift(feature: str | None = None) -> dict:
+    """Compare recorded HEAD state vs feature lane expectations.
+
+    Returns a structured report of which feature lanes are aligned (all
+    repos on the expected branch) vs drifted (one or more repos on a
+    different branch, or repos with no recorded HEAD state yet).
+
+    Use this as the precondition check before any multi-repo write op
+    (commit, push, ship). If any feature shows drift, the agent should
+    surface it and offer to run ``realign``.
+
+    Args:
+        feature: limit the report to one feature lane. If None, all
+            active feature lanes are reported.
+    """
+    from ..actions.drift import detect_drift
+
+    ws = _get_workspace()
+    ws.refresh()
+    return detect_drift(ws, feature_name=feature).to_dict()
+
+
 # ── Feature lane tools ───────────────────────────────────────────────────
 
 @mcp.tool()

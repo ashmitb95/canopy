@@ -4,16 +4,23 @@ import * as vscode from "vscode";
 
 import { CanopyClient } from "./canopyClient";
 import { runCreateFeature } from "./commands/createFeature";
+import { runCreateFeatureFromIssue } from "./commands/createFeatureFromIssue";
 import { runInstallBackend } from "./commands/installBackend";
 import { runSetupWizard } from "./commands/setupWizard";
+import { LinearIssue } from "./types";
 import { resolveCanopyMcp } from "./mcpResolver";
 import { StatusBarManager } from "./statusBar";
 import { ChangesProvider } from "./views/changesProvider";
 import { FeaturesProvider } from "./views/featuresProvider";
+import { LinearIssuesProvider } from "./views/linearIssuesProvider";
 import { ReviewProvider } from "./views/reviewProvider";
 import { WorktreesProvider } from "./views/worktreesProvider";
 import { createWatchers } from "./watchers";
-import { DashboardPanel } from "./webview/dashboardPanel";
+import {
+  DashboardPanel,
+  fetchDashboardPayload,
+  launchClaudeWorkflow,
+} from "./webview/dashboardPanel";
 
 interface Active {
   client: CanopyClient;
@@ -21,6 +28,7 @@ interface Active {
   worktrees: WorktreesProvider;
   changes: ChangesProvider;
   review: ReviewProvider;
+  linearIssues: LinearIssuesProvider;
   status: StatusBarManager;
   worktreesView: vscode.TreeView<unknown>;
   refresh: () => Promise<void>;
@@ -113,7 +121,12 @@ async function bootstrap(
   const worktrees = new WorktreesProvider(client);
   const changes = new ChangesProvider(client, () => status.activeFeature);
   const review = new ReviewProvider(client);
+  const linearIssues = new LinearIssuesProvider(client);
 
+  const linearIssuesView = vscode.window.createTreeView("canopy.linearIssues", {
+    treeDataProvider: linearIssues,
+    showCollapseAll: true,
+  });
   const featuresView = vscode.window.createTreeView("canopy.features", {
     treeDataProvider: features,
     showCollapseAll: true,
@@ -129,7 +142,13 @@ async function bootstrap(
   const reviewView = vscode.window.createTreeView("canopy.review", {
     treeDataProvider: review,
   });
-  context.subscriptions.push(featuresView, worktreesView, changesView, reviewView);
+  context.subscriptions.push(
+    linearIssuesView,
+    featuresView,
+    worktreesView,
+    changesView,
+    reviewView,
+  );
 
   const refresh = async () => {
     try {
@@ -142,6 +161,8 @@ async function bootstrap(
     worktrees.refresh();
     changes.refresh();
     review.refresh();
+    linearIssues.refresh();
+    void updateLinearState(client, root);
     worktreesView.description = worktrees.budgetLabel ?? "";
     featuresView.description = status.activeFeature
       ? `active: ${status.activeFeature}`
@@ -168,6 +189,7 @@ async function bootstrap(
     worktrees,
     changes,
     review,
+    linearIssues,
     status,
     worktreesView,
     refresh,
@@ -210,6 +232,104 @@ async function bootstrap(
       if (installed) {
         await vscode.commands.executeCommand("canopy.retryConnect");
       }
+    }),
+
+    vscode.commands.registerCommand(
+      "canopy.createFeatureFromIssue",
+      async (issue?: LinearIssue) => {
+        if (!issue || typeof issue !== "object" || !issue.identifier) {
+          void vscode.window.showInformationMessage(
+            "Canopy: open the Linear Issues panel and click an issue to start a feature from it.",
+          );
+          return;
+        }
+        const created = await runCreateFeatureFromIssue(client, issue);
+        if (created) {
+          await refresh();
+          DashboardPanel.show(context, client, created);
+        }
+      },
+    ),
+
+    vscode.commands.registerCommand(
+      "canopy.startWorkflowWithClaude",
+      async (arg?: unknown) => {
+        const name = coerceFeatureName(arg) ?? (await pickFeature(client));
+        if (!name) return;
+        try {
+          const payload = await fetchDashboardPayload(client, name);
+          await launchClaudeWorkflow(payload);
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Canopy: couldn't launch Claude workflow — ${(err as Error).message}`,
+          );
+        }
+      },
+    ),
+
+    vscode.commands.registerCommand("canopy.configureLinear", async () => {
+      const apiKey = await vscode.window.showInputBox({
+        title: "Connect Linear",
+        prompt: "Paste your Linear API key (lin_api_…). Get one at linear.app/settings/api",
+        password: true,
+        ignoreFocusOut: true,
+        validateInput: (v) =>
+          v && v.trim().length > 10 ? null : "Looks too short to be an API key",
+      });
+      if (!apiKey) return;
+
+      const mcpsPath = vscode.Uri.joinPath(root.uri, ".canopy", "mcps.json");
+      let existing: Record<string, unknown> = {};
+      try {
+        const buf = await vscode.workspace.fs.readFile(mcpsPath);
+        existing = JSON.parse(new TextDecoder().decode(buf));
+      } catch {
+        // no file yet — fine
+      }
+      existing.linear = {
+        command: "npx",
+        args: ["-y", "linear-mcp-server"],
+        env: { LINEAR_API_KEY: apiKey.trim() },
+      };
+      await vscode.workspace.fs.writeFile(
+        mcpsPath,
+        new TextEncoder().encode(JSON.stringify(existing, null, 2) + "\n"),
+      );
+      void vscode.window.showInformationMessage(
+        "Canopy: Linear connected. Refreshing issues…",
+      );
+      await refresh();
+    }),
+
+    vscode.commands.registerCommand("canopy.openMcpsConfig", async () => {
+      const mcpsPath = vscode.Uri.joinPath(
+        root.uri,
+        ".canopy",
+        "mcps.json",
+      );
+      const doc = await vscode.workspace.openTextDocument(mcpsPath).then(
+        (d) => d,
+        async () => {
+          // File doesn't exist — create a stub the user can fill in.
+          const stub = JSON.stringify(
+            {
+              linear: {
+                command: "npx",
+                args: ["-y", "linear-mcp-server"],
+                env: { LINEAR_API_KEY: "lin_api_..." },
+              },
+            },
+            null,
+            2,
+          );
+          await vscode.workspace.fs.writeFile(
+            mcpsPath,
+            new TextEncoder().encode(stub + "\n"),
+          );
+          return vscode.workspace.openTextDocument(mcpsPath);
+        },
+      );
+      await vscode.window.showTextDocument(doc);
     }),
 
     vscode.commands.registerCommand("canopy.reinitDryRun", async () => {
@@ -302,8 +422,8 @@ function registerCommands(
 
     vscode.commands.registerCommand(
       "canopy.openDashboard",
-      async (featureName?: string) => {
-        const name = featureName ?? (await pickFeature(client));
+      async (arg?: unknown) => {
+        const name = coerceFeatureName(arg) ?? (await pickFeature(client));
         if (!name) return;
         DashboardPanel.show(context, client, name);
       },
@@ -317,7 +437,7 @@ function registerCommands(
     }),
 
     vscode.commands.registerCommand("canopy.switchFeature", async (arg?: unknown) => {
-      const name = (typeof arg === "string" && arg) || (await pickFeature(client));
+      const name = coerceFeatureName(arg) ?? (await pickFeature(client));
       if (!name) return;
       try {
         await client.featureSwitch(name);
@@ -331,7 +451,7 @@ function registerCommands(
     }),
 
     vscode.commands.registerCommand("canopy.openInIde", async (arg?: unknown) => {
-      const name = (typeof arg === "string" && arg) || (await pickFeature(client));
+      const name = coerceFeatureName(arg) ?? (await pickFeature(client));
       if (!name) return;
       try {
         const paths = await client.featurePaths(name);
@@ -388,7 +508,7 @@ function registerCommands(
     }),
 
     vscode.commands.registerCommand("canopy.featureDone", async (arg?: unknown) => {
-      const name = (typeof arg === "string" && arg) || (await pickFeature(client));
+      const name = coerceFeatureName(arg) ?? (await pickFeature(client));
       if (!name) return;
       const choice = await vscode.window.showWarningMessage(
         `Mark ${name} as done? This removes its worktrees and deletes its branches.`,
@@ -431,6 +551,82 @@ async function pickFeature(client: CanopyClient): Promise<string | null> {
       `Canopy: ${(err as Error).message}`,
     );
     return null;
+  }
+}
+
+/**
+ * Tree-view commands receive different argument shapes depending on how they
+ * were triggered: a string when our own `item.command.arguments` fires on
+ * click, but the TreeDataProvider node itself when invoked from the
+ * right-click context menu. Extract a feature name from either shape.
+ */
+function coerceFeatureName(arg: unknown): string | undefined {
+  if (typeof arg === "string" && arg) return arg;
+  if (arg && typeof arg === "object") {
+    const obj = arg as {
+      kind?: unknown;
+      lane?: { name?: unknown };
+      featureName?: unknown;
+    };
+    if (obj.kind === "feature" && obj.lane && typeof obj.lane.name === "string") {
+      return obj.lane.name;
+    }
+    if (typeof obj.featureName === "string") return obj.featureName;
+  }
+  return undefined;
+}
+
+async function updateLinearState(
+  client: CanopyClient,
+  root: vscode.WorkspaceFolder,
+): Promise<void> {
+  const configured = await hasLinearConfig(root);
+  if (!configured) {
+    await vscode.commands.executeCommand(
+      "setContext",
+      "canopy.linearState",
+      "not-configured",
+    );
+    return;
+  }
+  try {
+    const issues = await client.linearMyIssues(1);
+    await vscode.commands.executeCommand(
+      "setContext",
+      "canopy.linearState",
+      issues.length > 0 ? "ok" : "empty",
+    );
+  } catch {
+    await vscode.commands.executeCommand(
+      "setContext",
+      "canopy.linearState",
+      "empty",
+    );
+  }
+}
+
+async function hasLinearConfig(root: vscode.WorkspaceFolder): Promise<boolean> {
+  // Precedence mirrors backend _load_mcp_configs: canopy-specific wins,
+  // then the shared .mcp.json (Claude Code convention).
+  const canopyPath = vscode.Uri.joinPath(root.uri, ".canopy", "mcps.json");
+  try {
+    const buf = await vscode.workspace.fs.readFile(canopyPath);
+    const parsed = JSON.parse(new TextDecoder().decode(buf));
+    if (parsed && typeof parsed === "object" && parsed.linear) return true;
+  } catch {
+    // fall through to .mcp.json
+  }
+
+  const sharedPath = vscode.Uri.joinPath(root.uri, ".mcp.json");
+  try {
+    const buf = await vscode.workspace.fs.readFile(sharedPath);
+    const parsed = JSON.parse(new TextDecoder().decode(buf));
+    const servers = parsed?.mcpServers;
+    return Boolean(
+      servers && typeof servers === "object" && servers.linear,
+    );
+  } catch {
+    return false;
   }
 }
 

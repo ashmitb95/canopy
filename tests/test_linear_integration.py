@@ -86,6 +86,56 @@ class TestMcpConfig:
         (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
         assert is_mcp_configured(tmp_path, "linear") is True
 
+    def test_load_from_dot_mcp_json(self, tmp_path):
+        """Entries in .mcp.json (Claude Code format) are picked up."""
+        shared = {
+            "mcpServers": {
+                "linear": {
+                    "command": "npx",
+                    "args": ["-y", "linear-mcp-server"],
+                    "env": {"LINEAR_API_KEY": "lin_shared"},
+                }
+            }
+        }
+        (tmp_path / ".mcp.json").write_text(json.dumps(shared))
+
+        result = _load_mcp_configs(tmp_path)
+        assert "linear" in result
+        assert result["linear"]["env"]["LINEAR_API_KEY"] == "lin_shared"
+
+    def test_canopy_mcps_overrides_dot_mcp_json(self, tmp_path):
+        """.canopy/mcps.json overrides .mcp.json on key collision."""
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "linear": {"command": "old", "env": {"LINEAR_API_KEY": "from-shared"}},
+                    }
+                }
+            )
+        )
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(
+            json.dumps({"linear": {"command": "new", "env": {"LINEAR_API_KEY": "from-canopy"}}})
+        )
+
+        result = _load_mcp_configs(tmp_path)
+        assert result["linear"]["command"] == "new"
+        assert result["linear"]["env"]["LINEAR_API_KEY"] == "from-canopy"
+
+    def test_merges_non_overlapping_servers(self, tmp_path):
+        """Both files contribute when they define different servers."""
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps({"mcpServers": {"linear": {"command": "linear-mcp-server"}}})
+        )
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(
+            json.dumps({"github": {"command": "github-mcp-server"}})
+        )
+
+        result = _load_mcp_configs(tmp_path)
+        assert set(result) == {"linear", "github"}
+
 
 # ── Linear helpers ──────────────────────────────────────────────────────
 

@@ -717,6 +717,28 @@ def linear_my_issues(limit: int = 25) -> list[dict]:
     return _list_my_issues(ws.config.root, limit=limit)
 
 
+@mcp.tool()
+def feature_link_linear(feature: str, issue: str) -> dict:
+    """Attach a Linear issue to an existing feature lane.
+
+    Fetches the issue via the configured Linear MCP and updates
+    features.json with its identifier, title, and URL. Use this from
+    the VSCode dashboard's "Pick from my Linear issues" action when a
+    lane was created without an issue attached.
+
+    Args:
+        feature: Feature lane name or alias.
+        issue: Linear issue identifier (e.g. "ENG-412").
+
+    Returns:
+        The updated feature lane dict.
+    """
+    ws = _get_workspace()
+    coordinator = FeatureCoordinator(ws)
+    lane = coordinator.link_linear_issue(feature, issue)
+    return lane.to_dict()
+
+
 # ── Sync ─────────────────────────────────────────────────────────────────
 
 @mcp.tool()

@@ -2,7 +2,7 @@
   "name": "canopy",
   "displayName": "Canopy — Multi-Repo Worktree Manager",
   "description": "Worktree-first workspace manager for multi-repo development. Features, worktrees, per-repo changes, and review readiness in one sidebar.",
-  "version": "0.1.9",
+  "version": "0.2.5",
   "publisher": "SingularityInc",
   "license": "MIT",
   "icon": "media/canopy-icon.png",
@@ -43,6 +43,13 @@
     "views": {
       "canopy": [
         {
+          "id": "canopy.linearIssues",
+          "name": "Linear Issues",
+          "icon": "media/canopy-icon.svg",
+          "contextualTitle": "Canopy Linear Issues",
+          "when": "canopy.state == 'ok'"
+        },
+        {
           "id": "canopy.features",
           "name": "Features",
           "icon": "media/canopy-icon.svg",
@@ -52,19 +59,22 @@
           "id": "canopy.worktrees",
           "name": "Worktrees",
           "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Worktrees"
+          "contextualTitle": "Canopy Worktrees",
+          "when": "canopy.state == 'ok'"
         },
         {
           "id": "canopy.changes",
           "name": "Changes",
           "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Changes"
+          "contextualTitle": "Canopy Changes",
+          "when": "canopy.state == 'ok'"
         },
         {
           "id": "canopy.review",
           "name": "Review Readiness",
           "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Review Readiness"
+          "contextualTitle": "Canopy Review Readiness",
+          "when": "canopy.state == 'ok'"
         }
       ]
     },
@@ -83,6 +93,16 @@
         "view": "canopy.features",
         "when": "canopy.state == 'loading'",
         "contents": "Starting canopy-mcp…"
+      },
+      {
+        "view": "canopy.linearIssues",
+        "when": "canopy.linearState == 'not-configured'",
+        "contents": "Linear isn't connected to this workspace yet.\n\nCanopy auto-detects Linear configs in `.mcp.json` (shared with Claude Code) and `.canopy/mcps.json`. If you've already set Linear up elsewhere, copy that entry in.\n\nOr let Canopy wire it up for you:\n\n[Connect Linear](command:canopy.configureLinear)\n\n[Edit mcps.json manually](command:canopy.openMcpsConfig)\n\nGet your API key at [linear.app/settings/api](https://linear.app/settings/api)."
+      },
+      {
+        "view": "canopy.linearIssues",
+        "when": "canopy.linearState == 'empty'",
+        "contents": "No Todo or In Progress issues showing up.\n\nThis could mean your Linear key is wrong, the MCP server failed to start, or you really have no active issues.\n\n[Refresh](command:canopy.refresh)\n\n[Reconnect Linear](command:canopy.configureLinear)\n\n[Show Log](command:canopy.showLog)"
       }
     ],
     "commands": [
@@ -144,6 +164,22 @@
       {
         "command": "canopy.reinitDryRun",
         "title": "Canopy: Preview Reinit (dry run)"
+      },
+      {
+        "command": "canopy.createFeatureFromIssue",
+        "title": "Canopy: Start Feature from Linear Issue"
+      },
+      {
+        "command": "canopy.startWorkflowWithClaude",
+        "title": "Canopy: Start Workflow with Claude"
+      },
+      {
+        "command": "canopy.openMcpsConfig",
+        "title": "Canopy: Open .canopy/mcps.json"
+      },
+      {
+        "command": "canopy.configureLinear",
+        "title": "Canopy: Connect Linear"
       }
     ],
     "menus": {
@@ -155,7 +191,7 @@
         },
         {
           "command": "canopy.refresh",
-          "when": "view == canopy.features || view == canopy.worktrees || view == canopy.changes || view == canopy.review",
+          "when": "view == canopy.features || view == canopy.worktrees || view == canopy.changes || view == canopy.review || view == canopy.linearIssues",
           "group": "navigation@2"
         },
         {
@@ -189,6 +225,11 @@
           "command": "canopy.featureDone",
           "when": "view == canopy.features && viewItem == feature",
           "group": "9_destructive@1"
+        },
+        {
+          "command": "canopy.createFeatureFromIssue",
+          "when": "view == canopy.linearIssues && viewItem == linear.issue",
+          "group": "1_open@1"
         }
       ]
     },

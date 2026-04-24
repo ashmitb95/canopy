@@ -263,6 +263,10 @@ export class CanopyClient {
     );
   }
 
+  featureLinkLinear(feature: string, issue: string) {
+    return this.call<FeatureLane>("feature_link_linear", { feature, issue });
+  }
+
   featureDone(feature: string, force = false) {
     return this.call<{
       feature: string;

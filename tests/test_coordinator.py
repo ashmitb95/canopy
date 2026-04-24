@@ -303,3 +303,82 @@ class TestResolveAlias:
         coord.create("ENG-600-cleanup", use_worktrees=True)
         result = coord.done("ENG-600", force=True)
         assert result["feature"] == "ENG-600-cleanup"
+
+
+class TestLinkLinearIssue:
+    """Tests for coordinator.link_linear_issue — attaches a Linear issue to an existing lane."""
+
+    def test_happy_path(self, canopy_toml, monkeypatch):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("payment-flow")
+
+        fake_issue = {
+            "identifier": "ENG-777",
+            "title": "Add Stripe webhook",
+            "state": "Todo",
+            "url": "https://linear.app/x/ENG-777",
+        }
+        monkeypatch.setattr(
+            "canopy.integrations.linear.get_issue",
+            lambda root, issue_id: fake_issue,
+        )
+
+        lane = coord.link_linear_issue("payment-flow", "ENG-777")
+        assert lane.linear_issue == "ENG-777"
+        assert lane.linear_title == "Add Stripe webhook"
+        assert lane.linear_url == "https://linear.app/x/ENG-777"
+
+        features_path = canopy_toml / ".canopy" / "features.json"
+        persisted = json.loads(features_path.read_text())
+        assert persisted["payment-flow"]["linear_issue"] == "ENG-777"
+        assert persisted["payment-flow"]["linear_title"] == "Add Stripe webhook"
+
+    def test_unknown_feature_raises(self, canopy_toml, monkeypatch):
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+
+        monkeypatch.setattr(
+            "canopy.integrations.linear.get_issue",
+            lambda root, issue_id: {"identifier": issue_id, "title": "x", "url": ""},
+        )
+
+        with pytest.raises(ValueError, match="not found in features.json"):
+            coord.link_linear_issue("nonexistent-feature", "ENG-123")
+
+    def test_linear_not_configured_propagates(self, canopy_toml):
+        from canopy.integrations.linear import LinearNotConfiguredError
+
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("needs-linking")
+
+        # No mcps.json → get_issue raises LinearNotConfiguredError, which should
+        # bubble up so the caller can surface a helpful message.
+        with pytest.raises(LinearNotConfiguredError):
+            coord.link_linear_issue("needs-linking", "ENG-123")
+
+    def test_alias_resolution(self, canopy_toml, monkeypatch):
+        """Linking with a prefix alias resolves to the full feature name."""
+        config = load_config(canopy_toml)
+        ws = Workspace(config)
+        coord = FeatureCoordinator(ws)
+        coord.create("ENG-900-long-name")
+
+        fake_issue = {
+            "identifier": "ENG-900",
+            "title": "Linked later",
+            "state": "In Progress",
+            "url": "https://linear.app/x/ENG-900",
+        }
+        monkeypatch.setattr(
+            "canopy.integrations.linear.get_issue",
+            lambda root, issue_id: fake_issue,
+        )
+
+        lane = coord.link_linear_issue("ENG-900", "ENG-900")
+        assert lane.name == "ENG-900-long-name"
+        assert lane.linear_issue == "ENG-900"

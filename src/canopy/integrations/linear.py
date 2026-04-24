@@ -36,7 +36,7 @@ def _get_linear_config(workspace_root: Path) -> dict:
             "  {\n"
             '    "linear": {\n'
             '      "command": "npx",\n'
-            '      "args": ["-y", "@modelcontextprotocol/server-linear"],\n'
+            '      "args": ["-y", "linear-mcp-server"],\n'
             '      "env": {"LINEAR_API_KEY": "lin_api_..."}\n'
             "    }\n"
             "  }"

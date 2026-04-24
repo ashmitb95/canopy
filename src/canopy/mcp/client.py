@@ -30,14 +30,42 @@ class McpClientError(Exception):
 
 
 def _load_mcp_configs(workspace_root: Path) -> dict[str, dict]:
-    """Load MCP server configs from .canopy/mcps.json."""
-    config_path = workspace_root / ".canopy" / "mcps.json"
-    if not config_path.exists():
-        return {}
-    try:
-        return json.loads(config_path.read_text())
-    except (json.JSONDecodeError, OSError) as e:
-        raise McpClientError(f"Failed to read {config_path}: {e}")
+    """Load MCP server configs.
+
+    Reads two sources, merging with .canopy/mcps.json taking precedence:
+
+    1. ``.mcp.json`` at workspace root — the Claude Code / portable
+       convention. Entries live under a top-level ``mcpServers`` key.
+    2. ``.canopy/mcps.json`` — canopy's own flat format. Overrides
+       anything in .mcp.json on key collision so users can customize
+       per-server configs without editing the shared file.
+    """
+    configs: dict[str, dict] = {}
+
+    shared_path = workspace_root / ".mcp.json"
+    if shared_path.exists():
+        try:
+            shared = json.loads(shared_path.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            raise McpClientError(f"Failed to read {shared_path}: {e}")
+        servers = shared.get("mcpServers") if isinstance(shared, dict) else None
+        if isinstance(servers, dict):
+            for name, cfg in servers.items():
+                if isinstance(cfg, dict):
+                    configs[name] = cfg
+
+    canopy_path = workspace_root / ".canopy" / "mcps.json"
+    if canopy_path.exists():
+        try:
+            canopy_cfg = json.loads(canopy_path.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            raise McpClientError(f"Failed to read {canopy_path}: {e}")
+        if isinstance(canopy_cfg, dict):
+            for name, cfg in canopy_cfg.items():
+                if isinstance(cfg, dict):
+                    configs[name] = cfg
+
+    return configs
 
 
 def get_mcp_config(workspace_root: Path, server_name: str) -> dict | None:

@@ -424,6 +424,43 @@ class FeatureCoordinator:
         self._enrich_lane(lane)
         return lane
 
+    def link_linear_issue(self, feature: str, issue: str) -> FeatureLane:
+        """Attach a Linear issue to an existing feature lane.
+
+        Fetches issue data via the Linear MCP server and writes linear_issue,
+        linear_title, linear_url onto the lane's record in features.json.
+        Overwrites any previously linked issue.
+
+        Args:
+            feature: Feature lane name or alias.
+            issue: Linear issue identifier (e.g. "ENG-412").
+
+        Returns:
+            The updated FeatureLane (with enriched repo_states).
+
+        Raises:
+            ValueError: Feature not found in features.json.
+            LinearNotConfiguredError: Linear MCP isn't set up.
+            LinearIssueNotFoundError: Issue can't be resolved.
+        """
+        from ..integrations.linear import get_issue
+
+        name = self._resolve_name(feature)
+        features = self._load_features()
+        if name not in features:
+            raise ValueError(
+                f"Feature '{name}' not found in features.json — "
+                f"link_linear_issue only works on explicitly created lanes."
+            )
+
+        issue_data = get_issue(self.workspace.config.root, issue)
+        features[name]["linear_issue"] = issue_data.get("identifier") or issue
+        features[name]["linear_title"] = issue_data.get("title", "")
+        features[name]["linear_url"] = issue_data.get("url", "")
+        self._save_features(features)
+
+        return self.status(name)
+
     def diff(self, name: str) -> dict:
         """Get aggregate diff for a feature lane across repos."""
         name = self._resolve_name(name)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import shutil
 import stat
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -122,13 +123,19 @@ def read_heads_state(workspace_root: Path) -> dict:
 def resolve_hooks_dir(repo_path: Path) -> Path:
     """Resolve the ``hooks`` dir git actually uses for this repo / worktree.
 
-    Hooks are shared across all worktrees of a repo: they live in the main
-    repo's ``.git/hooks``. For a linked worktree, ``.git`` is a file
-    pointing at ``<main>/.git/worktrees/<name>``; that dir's ``commondir``
-    file points back to the main ``.git``. We follow the chain so a hook
-    installed for any worktree path lands in the shared hooks dir and
-    fires for checkouts in every worktree.
+    Resolution order:
+      1. ``core.hooksPath`` if set in the repo's config (e.g., Husky uses
+         ``.husky/_``). Relative paths resolve against the repo root.
+         Without this we'd install a hook git would never run.
+      2. For a linked worktree, follow ``.git`` (file) → worktree gitdir →
+         ``commondir`` → main ``.git/hooks``. Hooks are shared across all
+         worktrees of a repo by default.
+      3. Otherwise ``<repo>/.git/hooks``.
     """
+    custom = _get_core_hooks_path(repo_path)
+    if custom is not None:
+        return custom
+
     git_path = repo_path / ".git"
     if git_path.is_file():
         contents = git_path.read_text().strip()
@@ -144,6 +151,21 @@ def resolve_hooks_dir(repo_path: Path) -> Path:
                 return common / "hooks"
             return worktree_gitdir / "hooks"
     return git_path / "hooks"
+
+
+def _get_core_hooks_path(repo_path: Path) -> Path | None:
+    """Read ``core.hooksPath`` from the repo's config. Returns None if unset."""
+    result = subprocess.run(
+        ["git", "config", "--get", "core.hooksPath"],
+        cwd=repo_path, capture_output=True, text=True, check=False,
+    )
+    value = result.stdout.strip()
+    if result.returncode != 0 or not value:
+        return None
+    p = Path(value)
+    if not p.is_absolute():
+        p = (repo_path / p).resolve()
+    return p
 
 
 def _make_executable(path: Path) -> None:

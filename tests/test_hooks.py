@@ -169,6 +169,35 @@ def test_hook_status(workspace):
     assert status["chained_present"] is False
 
 
+def test_resolve_hooks_dir_respects_core_hooks_path(workspace):
+    """Husky and similar tools set core.hooksPath; install must follow it
+    or git will silently never run our hook."""
+    root, api = workspace
+    custom_dir = api / ".husky" / "_"
+    _git(["config", "core.hooksPath", str(custom_dir.relative_to(api))], cwd=api)
+
+    resolved = resolve_hooks_dir(api).resolve()
+    assert resolved == custom_dir.resolve()
+
+
+def test_install_uses_core_hooks_path_when_set(workspace):
+    """End-to-end: with core.hooksPath set, install lands in custom dir
+    AND the hook fires on real checkouts."""
+    root, api = workspace
+    custom_dir = api / ".husky" / "_"
+    _git(["config", "core.hooksPath", str(custom_dir.relative_to(api))], cwd=api)
+
+    install_hook(api, "api", root)
+    assert (custom_dir / "post-checkout").exists()
+    assert not (api / ".git" / "hooks" / "post-checkout").exists(), (
+        "hook must not land in default location when core.hooksPath is set"
+    )
+
+    _git(["checkout", "-b", "from-husky-dir"], cwd=api)
+    state = read_heads_state(root)
+    assert state["api"]["branch"] == "from-husky-dir"
+
+
 def test_resolve_hooks_dir_for_worktree_points_at_main(workspace):
     """Worktrees share hooks with the main repo via commondir; resolver
     should follow that chain so installs land in the shared hooks dir."""

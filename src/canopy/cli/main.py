@@ -122,6 +122,10 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     toml_path.write_text(toml_content)
 
+    # Install drift-tracking post-checkout hooks in each non-worktree repo.
+    # Worktrees inherit hooks from their main repo via commondir.
+    hook_results = _install_hooks_for_repos(root, repos)
+
     # Count non-git dirs that were skipped
     all_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
     skipped = [d.name for d in all_dirs if not (d / ".git").exists()]
@@ -144,6 +148,16 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     if skipped:
         console.print(f"  [muted]Skipped {len(skipped)} non-git dirs: {', '.join(skipped)}[/]")
+
+    if hook_results:
+        installed = [h for h in hook_results if h["action"] in ("installed", "reinstalled")]
+        chained = [h for h in hook_results if h["action"] == "chained_existing"]
+        if installed or chained:
+            console.print()
+            console.print(f"  [header]Drift hooks ({len(installed) + len(chained)})[/]")
+            for h in installed + chained:
+                note = "" if h["action"] == "installed" else f" [muted]({h['action']})[/]"
+                console.print(f"  [repo]{h['repo']}[/]{note}")
 
     # Report existing feature worktrees under .canopy/
     canopy_dir = root / ".canopy"
@@ -1534,6 +1548,90 @@ def cmd_config(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _install_hooks_for_repos(root: Path, repos) -> list[dict]:
+    """Install canopy post-checkout hooks in each non-worktree repo.
+
+    Worktrees share their main repo's hooks dir, so they're skipped here.
+    Returns a list of {repo, action, path} dicts (one per non-worktree repo).
+    """
+    from ..git.hooks import install_hook
+
+    results = []
+    for r in repos:
+        if r.is_worktree:
+            continue
+        repo_abs = (root / r.path).resolve() if not Path(r.path).is_absolute() else Path(r.path)
+        try:
+            res = install_hook(repo_abs, r.name, root)
+            results.append({"repo": res.repo, "action": res.action, "path": res.path})
+        except Exception as e:
+            results.append({"repo": r.name, "action": "failed", "error": str(e)})
+    return results
+
+
+def cmd_hooks(args: argparse.Namespace) -> None:
+    """Manage drift-tracking post-checkout hooks across the workspace."""
+    from ..git.hooks import install_hook, uninstall_hook, hook_status, read_heads_state
+    from .ui import console, print_success, print_error, print_warning
+
+    workspace = _load_workspace()
+    root = workspace.config.root
+
+    sub = getattr(args, "hooks_command", None) or "status"
+    results: list[dict] = []
+
+    for state in workspace.repos:
+        if state.config.is_worktree:
+            continue
+        repo_abs = state.abs_path
+        try:
+            if sub == "install":
+                r = install_hook(repo_abs, state.config.name, root)
+                results.append({"repo": r.repo, "action": r.action, "path": r.path})
+            elif sub == "uninstall":
+                r = uninstall_hook(repo_abs, state.config.name)
+                results.append({
+                    "repo": r.repo, "action": r.action, "reason": r.reason,
+                })
+            elif sub == "status":
+                s = hook_status(repo_abs)
+                results.append({"repo": state.config.name, **s})
+            else:
+                print_error(f"Unknown hooks subcommand: {sub}")
+                sys.exit(2)
+        except Exception as e:
+            results.append({"repo": state.config.name, "action": "failed", "error": str(e)})
+
+    if args.json:
+        payload = {"command": sub, "repos": results}
+        if sub == "status":
+            payload["heads_state"] = read_heads_state(root)
+        _print_json(payload)
+        return
+
+    console.print()
+    if sub == "status":
+        heads = read_heads_state(root)
+        for r in results:
+            mark = "[green]✓[/]" if r.get("installed") else (
+                "[yellow]foreign[/]" if r.get("foreign_hook") else "[red]✗[/]"
+            )
+            head = heads.get(r["repo"], {})
+            head_note = f"  [muted]→ {head['branch']} @ {head['sha'][:8]}[/]" if head else ""
+            chained = "  [muted](chained user hook present)[/]" if r.get("chained_present") else ""
+            console.print(f"  {mark}  [repo]{r['repo']}[/]{head_note}{chained}")
+    else:
+        for r in results:
+            action = r.get("action", "unknown")
+            extra = ""
+            if action == "failed":
+                extra = f"  [red]{r.get('error', '')}[/]"
+            elif r.get("reason"):
+                extra = f"  [muted]({r['reason']})[/]"
+            console.print(f"  [repo]{r['repo']}[/] [muted]→[/] {action}{extra}")
+    console.print()
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     """Show detected canopy context for current directory (debug)."""
     from ..workspace.context import detect_context
@@ -1760,6 +1858,20 @@ def main() -> None:
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # hooks
+    hooks_p = subparsers.add_parser(
+        "hooks",
+        help="Manage drift-tracking post-checkout hooks (install/uninstall/status)",
+    )
+    hooks_sub = hooks_p.add_subparsers(dest="hooks_command")
+    hooks_install_p = hooks_sub.add_parser("install", help="Install hooks in all managed repos")
+    hooks_install_p.add_argument("--json", action="store_true", help="Output as JSON")
+    hooks_uninstall_p = hooks_sub.add_parser("uninstall", help="Remove canopy hooks; restore chained user hooks")
+    hooks_uninstall_p.add_argument("--json", action="store_true", help="Output as JSON")
+    hooks_status_p = hooks_sub.add_parser("status", help="Show hook + heads state per repo")
+    hooks_status_p.add_argument("--json", action="store_true", help="Output as JSON")
+    hooks_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1783,6 +1895,7 @@ def main() -> None:
         "done": cmd_done,
         "config": cmd_config,
         "context": cmd_context,
+        "hooks": cmd_hooks,
     }
 
     if args.command == "feature":

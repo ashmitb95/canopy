@@ -993,22 +993,34 @@ class FeatureCoordinator:
         }
 
     def review_comments(self, name: str) -> dict:
-        """Fetch unresolved PR review comments for a feature lane.
+        """Fetch PR review comments classified by temporal staleness.
 
-        Precondition: PR must exist. If no PR exists in any repo, this
-        returns an error.
+        Precondition: at least one repo in the lane must have a PR. If
+        none do, raises ``PullRequestNotFoundError``.
+
+        Per repo, threads are sorted into:
+          - ``actionable_threads``: full comment data; agent reads these
+          - ``likely_resolved_threads``: slim summary + addressing commit
+          - ``resolved_thread_count``: GitHub-flagged resolved (excluded)
+
+        See ``actions.review_filter.classify_threads`` for the algorithm
+        (validated against 4 real PRs in the research doc).
 
         Returns:
             {
                 "feature": str,
-                "total_comments": int,
+                "actionable_count": int,           # across all repos
+                "likely_resolved_count": int,
+                "resolved_thread_count": int,
                 "repos": {
                     "<repo>": {
                         "pr_number": int,
                         "pr_url": str,
-                        "comments": [
-                            {path, line, body, author, state, created_at, url}
-                        ]
+                        "pr_title": str,
+                        "latest_commit_at": str,    # ISO 8601 of branch HEAD
+                        "actionable_threads": [...],
+                        "likely_resolved_threads": [...],
+                        "resolved_thread_count": int,
                     }
                 }
             }
@@ -1022,6 +1034,7 @@ class FeatureCoordinator:
             PullRequestNotFoundError,
             GitHubNotConfiguredError,
         )
+        from ..actions.review_filter import classify_threads
 
         name = self._resolve_name(name)
         status = self.review_status(name)
@@ -1032,7 +1045,9 @@ class FeatureCoordinator:
             )
 
         results: dict[str, dict] = {}
-        total = 0
+        actionable_total = 0
+        likely_resolved_total = 0
+        resolved_total = 0
 
         for repo_name, info in status["repos"].items():
             pr = info.get("pr")
@@ -1044,31 +1059,44 @@ class FeatureCoordinator:
             pr_number = pr["number"]
 
             try:
-                comments = get_review_comments(
-                    self.workspace.config.root,
-                    owner,
-                    repo_slug,
-                    pr_number,
+                comments, resolved_count = get_review_comments(
+                    self.workspace.config.root, owner, repo_slug, pr_number,
                 )
-                total += len(comments)
+                repo_state = self.workspace.get_repo(repo_name)
+                branch = info.get("branch") or repo_state.current_branch
+                classification = classify_threads(
+                    comments, repo_state.abs_path, branch,
+                )
+                # Promote the GitHub-resolved count from upstream filtering.
+                classification["resolved_thread_count"] = resolved_count
+
+                actionable_total += len(classification["actionable_threads"])
+                likely_resolved_total += len(classification["likely_resolved_threads"])
+                resolved_total += resolved_count
+
                 results[repo_name] = {
                     "pr_number": pr_number,
                     "pr_url": pr.get("url", ""),
                     "pr_title": pr.get("title", ""),
-                    "comments": comments,
+                    **classification,
                 }
             except Exception as e:
                 results[repo_name] = {
                     "pr_number": pr_number,
                     "pr_url": pr.get("url", ""),
                     "pr_title": pr.get("title", ""),
-                    "comments": [],
+                    "actionable_threads": [],
+                    "likely_resolved_threads": [],
+                    "resolved_thread_count": 0,
+                    "latest_commit_at": "",
                     "error": str(e),
                 }
 
         return {
             "feature": name,
-            "total_comments": total,
+            "actionable_count": actionable_total,
+            "likely_resolved_count": likely_resolved_total,
+            "resolved_thread_count": resolved_total,
             "repos": results,
         }
 

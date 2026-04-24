@@ -207,11 +207,16 @@ def get_review_comments(
     owner: str,
     repo: str,
     pr_number: int,
-) -> list[dict]:
+) -> tuple[list[dict], int]:
     """Fetch review comments for a PR.
 
-    Returns list of comment dicts, each with:
-        path, line, body, author, state (if available), created_at, url
+    Returns ``(comments, resolved_count)``: comments are normalized with
+    fields ``path, line, body, author, author_type, state, created_at,
+    url, in_reply_to_id``. ``resolved_count`` is the number of threads
+    excluded because GitHub flagged them resolved.
+
+    Bot threads are kept (the temporal classifier downstream handles
+    staleness). If all tool-name attempts fail, returns ``([], 0)``.
     """
     config = _get_github_config(workspace_root)
 
@@ -247,13 +252,19 @@ def get_review_comments(
 
     # If all tool names failed, return empty (not an error — PR might
     # have no comments, or the MCP server uses unknown tool names)
-    return []
+    return [], 0
 
 
-def _normalize_comments(data: Any) -> list[dict]:
+def _normalize_comments(data: Any) -> tuple[list[dict], int]:
     """Normalize review comments from various MCP response shapes.
 
-    Filters to unresolved comments where possible.
+    Drops threads explicitly marked resolved (isResolved/state==RESOLVED).
+    Bot comments are NOT filtered: a claude[bot] thread may carry the
+    only actionable feedback. The temporal classifier downstream handles
+    staleness regardless of author.
+
+    Returns ``(comments, resolved_count)`` so callers can report how many
+    were excluded.
     """
     if isinstance(data, list):
         comments = data
@@ -267,33 +278,33 @@ def _normalize_comments(data: Any) -> list[dict]:
         if not isinstance(comments, list):
             comments = [data]
     else:
-        return []
+        return [], 0
 
     normalized = []
+    resolved_count = 0
     for c in comments:
-        # Skip resolved comments if the field is available
         if c.get("resolved", False) or c.get("state") == "RESOLVED":
+            resolved_count += 1
             continue
 
-        # Skip bot comments and system comments
         author = c.get("user", {})
         if isinstance(author, dict):
             author_login = author.get("login", "")
             author_type = author.get("type", "")
-            if author_type == "Bot":
-                continue
         else:
             author_login = str(author) if author else ""
+            author_type = ""
 
         normalized.append({
             "path": c.get("path") or c.get("file") or "",
             "line": c.get("line") or c.get("original_line") or c.get("position") or 0,
             "body": c.get("body") or "",
             "author": author_login or c.get("author", ""),
+            "author_type": author_type,
             "state": c.get("state") or "",
             "created_at": c.get("created_at") or c.get("createdAt") or "",
             "url": c.get("html_url") or c.get("url") or "",
             "in_reply_to_id": c.get("in_reply_to_id"),
         })
 
-    return normalized
+    return normalized, resolved_count

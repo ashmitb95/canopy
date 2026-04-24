@@ -116,39 +116,48 @@ class TestNormalizeComments:
                 "created_at": "2025-01-02T00:00:00Z",
             },
         ]
-        comments = _normalize_comments(raw)
+        comments, resolved = _normalize_comments(raw)
+        assert resolved == 0
         assert len(comments) == 2
         assert comments[0]["path"] == "src/auth.py"
         assert comments[0]["author"] == "reviewer1"
         assert comments[1]["body"] == "Missing docstring"
 
-    def test_resolved_comments_filtered(self):
+    def test_resolved_comments_filtered_and_counted(self):
         raw = [
             {"path": "a.py", "body": "fix this", "user": {"login": "r"}},
             {"path": "b.py", "body": "resolved", "user": {"login": "r"}, "state": "RESOLVED"},
             {"path": "c.py", "body": "also resolved", "user": {"login": "r"}, "resolved": True},
         ]
-        comments = _normalize_comments(raw)
+        comments, resolved = _normalize_comments(raw)
         assert len(comments) == 1
+        assert resolved == 2
         assert comments[0]["path"] == "a.py"
 
-    def test_bot_comments_filtered(self):
+    def test_bot_comments_kept(self):
+        """Per the research doc: bot threads can carry the only actionable
+        feedback. Don't filter by author; the temporal classifier handles
+        staleness."""
         raw = [
             {"path": "a.py", "body": "real comment", "user": {"login": "human", "type": "User"}},
             {"path": "b.py", "body": "bot comment", "user": {"login": "github-actions[bot]", "type": "Bot"}},
         ]
-        comments = _normalize_comments(raw)
-        assert len(comments) == 1
-        assert comments[0]["author"] == "human"
+        comments, _ = _normalize_comments(raw)
+        assert len(comments) == 2
+        authors = {c["author"] for c in comments}
+        assert authors == {"human", "github-actions[bot]"}
+        # author_type is preserved for downstream consumers that want it
+        bot = next(c for c in comments if c["author"] == "github-actions[bot]")
+        assert bot["author_type"] == "Bot"
 
     def test_empty_list(self):
-        assert _normalize_comments([]) == []
+        assert _normalize_comments([]) == ([], 0)
 
     def test_dict_wrapped_comments(self):
         raw = {"comments": [
             {"path": "a.py", "body": "fix", "user": {"login": "r"}},
         ]}
-        comments = _normalize_comments(raw)
+        comments, _ = _normalize_comments(raw)
         assert len(comments) == 1
 
 

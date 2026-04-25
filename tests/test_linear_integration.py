@@ -24,10 +24,14 @@ from canopy.integrations.linear import (
     is_linear_configured,
     format_branch_name,
     list_my_issues,
+    list_my_issues_strict,
+    get_issue,
     _normalize_issue,
     _parse_issue_result,
+    _looks_like_mcp_error,
     LinearNotConfiguredError,
     LinearIssueNotFoundError,
+    LinearCallError,
 )
 
 
@@ -266,6 +270,198 @@ class TestListMyIssues:
             side_effect=McpClientError("nope"),
         ):
             assert list_my_issues(tmp_path) == []
+
+
+# ── B1: inline MCP-error detection + canonical arg shapes ───────────────
+
+@dataclass
+class _Block:
+    text: str
+
+@dataclass
+class _Result:
+    content: list
+
+
+class TestInlineMcpErrorDetection:
+    """The Linear MCP returns validation errors as text content, not as
+    JSON-RPC errors. _parse_issue_result must treat those as failure so
+    get_issue/list_my_issues_strict fall through to the next attempt."""
+
+    def test_looks_like_mcp_error_variants(self):
+        assert _looks_like_mcp_error("Error: something broke")
+        assert _looks_like_mcp_error("MCP error -32602: Input validation error")
+        assert _looks_like_mcp_error("error: lower case is fine too")
+        assert _looks_like_mcp_error('{"x": 1} ... Input validation error somewhere')
+        assert not _looks_like_mcp_error('{"identifier": "ENG-1"}')
+        assert not _looks_like_mcp_error("")
+        assert not _looks_like_mcp_error("Error reading is part of the title")  # fine — leading "Error " not "Error:"
+
+    def test_parse_issue_result_treats_inline_error_as_failure(self):
+        """An MCP-error text response must NOT be normalized into a fake issue."""
+        err_text = (
+            "MCP error -32602: Input validation error: Invalid arguments for "
+            'tool get_issue: [\n  {"path": ["id"], "message": "Invalid input"}\n]'
+        )
+        result = _Result(content=[_Block(text=err_text)])
+        assert _parse_issue_result(result) is None
+
+    def test_parse_issue_result_succeeds_on_valid_json(self):
+        result = _Result(content=[_Block(text='{"id": "SIN-5", "title": "Test"}')])
+        parsed = _parse_issue_result(result)
+        assert parsed["id"] == "SIN-5"
+
+
+class TestGetIssueCanonicalShape:
+    """get_issue must try canonical Linear MCP shape ({id: ...}) first."""
+
+    def test_get_issue_with_canonical_id_arg_succeeds(self, tmp_path):
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        captured_calls = []
+
+        def fake_call_tool(_cfg, tool_name, args, **_kw):
+            captured_calls.append((tool_name, dict(args)))
+            if tool_name == "get_issue" and args == {"id": "SIN-5"}:
+                return _Result(content=[_Block(text=json.dumps(
+                    {"id": "SIN-5", "title": "Test", "state": "Todo",
+                     "url": "https://linear.app/x/SIN-5"},
+                ))])
+            raise McpClientError("nope")
+
+        with patch("canopy.integrations.linear.call_tool", side_effect=fake_call_tool):
+            issue = get_issue(tmp_path, "SIN-5")
+
+        # First attempt must be canonical {id: ...}
+        assert captured_calls[0] == ("get_issue", {"id": "SIN-5"})
+        assert issue["title"] == "Test"
+
+    def test_get_issue_propagates_inline_error_to_next_attempt(self, tmp_path):
+        """Inline MCP error from one attempt → fall through, not normalize as empty."""
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        err = _Result(content=[_Block(text="MCP error -32602: Input validation error")])
+        ok = _Result(content=[_Block(text=json.dumps({"id": "SIN-5", "title": "Real"}))])
+        responses = [err, ok]
+
+        def fake_call_tool(*_a, **_k):
+            return responses.pop(0)
+
+        with patch("canopy.integrations.linear.call_tool", side_effect=fake_call_tool):
+            issue = get_issue(tmp_path, "SIN-5")
+
+        assert issue["title"] == "Real"  # not "" from a normalized error
+
+
+class TestListMyIssuesStrict:
+    """The strict variant raises LinearCallError with a per-attempt log."""
+
+    def test_strict_raises_on_all_fail(self, tmp_path):
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        with patch(
+            "canopy.integrations.linear.call_tool",
+            side_effect=McpClientError("schema mismatch"),
+        ):
+            with pytest.raises(LinearCallError) as exc_info:
+                list_my_issues_strict(tmp_path)
+
+        # attempts log carries every attempted tool/args pair
+        assert len(exc_info.value.attempts) >= 1
+        assert all(isinstance(t, tuple) and len(t) == 3 for t in exc_info.value.attempts)
+        assert "schema mismatch" in str(exc_info.value)
+
+    def test_soft_returns_empty_when_strict_raises(self, tmp_path):
+        """list_my_issues (soft) preserves the no-autocomplete contract."""
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        with patch(
+            "canopy.integrations.linear.call_tool",
+            side_effect=McpClientError("nope"),
+        ):
+            assert list_my_issues(tmp_path) == []
+
+    def test_status_type_filter_drops_completed(self, tmp_path):
+        """Canonical Linear MCP includes statusType per issue; closed/canceled
+        get filtered agent-side since list_issues no longer accepts state."""
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        payload = json.dumps({
+            "issues": [
+                {"id": "SIN-1", "title": "open", "statusType": "started",
+                 "state": "In Progress", "url": "u1"},
+                {"id": "SIN-2", "title": "done", "statusType": "completed",
+                 "state": "Done", "url": "u2"},
+                {"id": "SIN-3", "title": "todo", "statusType": "unstarted",
+                 "state": "Todo", "url": "u3"},
+                {"id": "SIN-4", "title": "canceled", "statusType": "canceled",
+                 "state": "Canceled", "url": "u4"},
+            ],
+        })
+
+        with patch(
+            "canopy.integrations.linear.call_tool",
+            return_value=_Result(content=[_Block(text=payload)]),
+        ):
+            issues = list_my_issues_strict(tmp_path)
+
+        ids = [i["identifier"] for i in issues]
+        assert ids == ["SIN-1", "SIN-3"]
+
+    def test_status_type_absent_keeps_all(self, tmp_path):
+        """Legacy MCP responses without statusType pass through unfiltered."""
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        payload = json.dumps({
+            "issues": [
+                {"identifier": "ENG-1", "title": "a", "url": "u1"},
+                {"identifier": "ENG-2", "title": "b", "url": "u2"},
+            ],
+        })
+
+        with patch(
+            "canopy.integrations.linear.call_tool",
+            return_value=_Result(content=[_Block(text=payload)]),
+        ):
+            issues = list_my_issues_strict(tmp_path)
+
+        assert len(issues) == 2
+
+    def test_strict_prefers_canonical_call_first(self, tmp_path):
+        """First attempt is list_issues({assignee: 'me'}), not the legacy
+        list_issues({assignee: 'me', state: 'open'}) which Linear rejects."""
+        config = {"linear": {"command": "echo"}}
+        (tmp_path / ".canopy").mkdir()
+        (tmp_path / ".canopy" / "mcps.json").write_text(json.dumps(config))
+
+        captured = []
+
+        def fake(_cfg, tool, args, **_k):
+            captured.append((tool, dict(args)))
+            if tool == "list_issues" and args == {"assignee": "me"}:
+                return _Result(content=[_Block(text=json.dumps(
+                    {"issues": [{"id": "SIN-1", "title": "x", "statusType": "started",
+                                 "url": "u"}]},
+                ))])
+            raise McpClientError("not this one")
+
+        with patch("canopy.integrations.linear.call_tool", side_effect=fake):
+            issues = list_my_issues_strict(tmp_path)
+
+        assert captured[0] == ("list_issues", {"assignee": "me"})
+        assert len(issues) == 1
 
 
 # ── Feature create with Linear metadata ─────────────────────────────────

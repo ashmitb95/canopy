@@ -904,22 +904,53 @@ def workspace_reinit(name: str | None = None, dry_run: bool = False) -> dict:
 # ── Linear ───────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def linear_my_issues(limit: int = 25) -> list[dict]:
+def linear_my_issues(limit: int = 25) -> list[dict] | dict:
     """List open Linear issues assigned to the current user.
 
-    Returns an empty list if the Linear MCP isn't configured — callers
+    Returns an empty list when the Linear MCP isn't configured — callers
     (e.g. the VSCode extension's Create Feature quick pick) treat this
     as "no autocomplete available."
+
+    Returns a structured ``BlockerError``-shaped dict when Linear IS
+    configured but every call attempt failed (schema mismatch, network,
+    auth). The agent reads ``code='linear_call_failed'`` and the
+    ``attempts`` array instead of mistaking the empty list for "you have
+    no issues."
 
     Args:
         limit: Maximum issues to return (default 25).
 
     Returns:
-        List of {identifier, title, state, url}.
+        Either ``[{identifier, title, state, url}, ...]`` on success /
+        not-configured, or a ``BlockerError`` dict on call failure.
     """
-    from ..integrations.linear import list_my_issues as _list_my_issues
+    from ..integrations.linear import (
+        list_my_issues_strict, is_linear_configured, LinearCallError,
+    )
+    from ..actions.errors import BlockerError, FixAction
     ws = _get_workspace()
-    return _list_my_issues(ws.config.root, limit=limit)
+    if not is_linear_configured(ws.config.root):
+        return []
+    try:
+        return list_my_issues_strict(ws.config.root, limit=limit)
+    except LinearCallError as e:
+        return BlockerError(
+            code="linear_call_failed",
+            what="Every Linear MCP call attempt failed",
+            details={
+                "attempts": [
+                    {"tool": tool, "args": args, "error": err}
+                    for tool, args, err in e.attempts
+                ],
+            },
+            fix_actions=[
+                FixAction(
+                    action="configure_mcp", args={"server": "linear"},
+                    safe=True,
+                    preview="verify the linear entry in .canopy/mcps.json and OAuth tokens",
+                ),
+            ],
+        ).to_dict()
 
 
 @mcp.tool()

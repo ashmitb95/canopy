@@ -26,6 +26,42 @@ class LinearIssueNotFoundError(Exception):
     """Could not find the requested Linear issue."""
 
 
+class LinearCallError(Exception):
+    """Every attempt to call the Linear MCP server failed.
+
+    Carries the per-attempt log so callers (e.g. the MCP server tool wrapper)
+    can convert this into a structured ``BlockerError`` and the agent sees
+    why every attempt failed instead of an empty list.
+    """
+
+    def __init__(self, attempts: list[tuple[str, dict, str]]):
+        self.attempts = attempts
+        summary = "\n  ".join(
+            f"- {tool}({args}): {err}" for tool, args, err in attempts
+        )
+        super().__init__(f"All Linear MCP attempts failed:\n  {summary}")
+
+
+_MCP_ERROR_PATTERN = re.compile(r"^(error\s*:|mcp error -?\d+\s*:)", re.IGNORECASE)
+
+
+def _looks_like_mcp_error(text: str) -> bool:
+    """True when an MCP tool's text response is itself an error payload.
+
+    The Linear MCP returns validation errors as a normal text content block
+    rather than as a JSON-RPC error, so a naive parser sees them as success.
+    Detect the leading ``Error:``/``MCP error -32602:`` marker (and the
+    common ``Input validation error`` body) and treat as failure.
+    """
+    if not text:
+        return False
+    head = text.strip()[:200]
+    return bool(_MCP_ERROR_PATTERN.match(head)) or "Input validation error" in head
+
+
+_OPEN_STATUS_TYPES = {"backlog", "unstarted", "started", "triage"}
+
+
 def _get_linear_config(workspace_root: Path) -> dict:
     """Get Linear MCP config, raising if not configured."""
     config = get_mcp_config(workspace_root, "linear")
@@ -62,6 +98,12 @@ def _parse_issue_result(result: Any) -> dict | None:
     for block in result.content:
         if hasattr(block, "text") and block.text:
             text = block.text.strip()
+            # Inline MCP error surfaced as text content (Linear MCP does this
+            # for validation failures). Treat as failure so the caller falls
+            # through to the next tool/args attempt instead of normalizing
+            # into an empty issue.
+            if _looks_like_mcp_error(text):
+                return None
             # Try to parse as JSON
             if text.startswith("{") or text.startswith("["):
                 import json
@@ -87,9 +129,9 @@ def get_issue(workspace_root: Path, issue_id: str) -> dict:
     """
     config = _get_linear_config(workspace_root)
 
-    # Try common Linear MCP tool names
-    # Different Linear MCP servers use different tool names
+    # Canonical Linear MCP (mcp.linear.app) is first; legacy servers follow.
     tool_attempts = [
+        ("get_issue", {"id": issue_id}),
         ("get_issue", {"issue_id": issue_id}),
         ("linear_get_issue", {"issueId": issue_id}),
         ("get_issue", {"issueId": issue_id}),
@@ -146,26 +188,24 @@ def _normalize_issue(data: dict, original_id: str) -> dict:
     }
 
 
-def list_my_issues(workspace_root: Path, limit: int = 25) -> list[dict]:
-    """Fetch open Linear issues assigned to the current user.
+def list_my_issues_strict(workspace_root: Path, limit: int = 25) -> list[dict]:
+    """Fetch open Linear issues assigned to the current user; raise on failure.
 
-    Used by the VSCode extension's "Create Feature" quick pick to populate
-    autocomplete suggestions. Returns an empty list (never raises) if the
-    Linear MCP isn't configured or doesn't expose a usable list tool — the
-    extension treats this as "no autocomplete available."
+    Canonical Linear MCP (mcp.linear.app) attempts come first; legacy server
+    shapes follow as fallbacks. When the canonical attempt succeeds with a
+    full issue list, results are filtered agent-side to ``statusType in
+    {backlog, unstarted, started, triage}`` (Linear's ``state`` arg isn't
+    accepted on ``list_issues`` — filtering server-side is impossible).
 
-    Returns:
-        List of {identifier, title, state, url}.
+    Raises:
+        LinearNotConfiguredError: Linear MCP not in mcps.json.
+        LinearCallError: Every tool/args combination failed. Carries the
+            per-attempt log so the caller can build a structured error.
     """
-    if not is_linear_configured(workspace_root):
-        return []
-
-    try:
-        config = _get_linear_config(workspace_root)
-    except LinearNotConfiguredError:
-        return []
+    config = _get_linear_config(workspace_root)
 
     tool_attempts = [
+        ("list_issues", {"assignee": "me"}),
         ("list_my_issues", {}),
         ("linear_list_my_issues", {}),
         ("get_my_issues", {}),
@@ -173,14 +213,21 @@ def list_my_issues(workspace_root: Path, limit: int = 25) -> list[dict]:
         ("linear_list_issues", {"assignee": "me", "state": "open"}),
         ("search_issues", {"query": "assignee:me state:open"}),
     ]
+    attempts_log: list[tuple[str, dict, str]] = []
 
     for tool_name, args in tool_attempts:
         try:
-            result = call_tool(config, tool_name, args, timeout=15.0, server_name="linear")
-        except McpClientError:
+            result = call_tool(
+                config, tool_name, args, timeout=15.0, server_name="linear",
+            )
+        except McpClientError as e:
+            attempts_log.append((tool_name, args, str(e)))
             continue
         parsed = _parse_issue_result(result)
         if parsed is None:
+            attempts_log.append(
+                (tool_name, args, "no usable response (parse failed or inline MCP error)"),
+            )
             continue
 
         items = parsed
@@ -190,13 +237,21 @@ def list_my_issues(workspace_root: Path, limit: int = 25) -> list[dict]:
                     items = items[key]
                     break
         if not isinstance(items, list):
+            attempts_log.append(
+                (tool_name, args, f"unexpected response shape: {type(items).__name__}"),
+            )
             continue
 
         normalized = []
         for entry in items[:limit]:
             if not isinstance(entry, dict):
                 continue
-            issue = _normalize_issue(entry, entry.get("identifier", ""))
+            status_type = entry.get("statusType")
+            if status_type and str(status_type).lower() not in _OPEN_STATUS_TYPES:
+                continue
+            issue = _normalize_issue(
+                entry, entry.get("identifier", entry.get("id", "")),
+            )
             normalized.append({
                 "identifier": issue["identifier"],
                 "title": issue["title"],
@@ -205,8 +260,28 @@ def list_my_issues(workspace_root: Path, limit: int = 25) -> list[dict]:
             })
         if normalized:
             return normalized
+        attempts_log.append((tool_name, args, "no open issues in response"))
 
-    return []
+    raise LinearCallError(attempts_log)
+
+
+def list_my_issues(workspace_root: Path, limit: int = 25) -> list[dict]:
+    """Soft wrapper around :func:`list_my_issues_strict`.
+
+    Returns ``[]`` whenever Linear isn't configured or every attempt failed,
+    preserving the existing "no autocomplete available" contract for the
+    VSCode extension's Create Feature quick pick.
+
+    Agent-facing surfaces should call :func:`list_my_issues_strict` and
+    convert :class:`LinearCallError` into a structured ``BlockerError`` so
+    the agent sees the real reason instead of an empty list.
+    """
+    if not is_linear_configured(workspace_root):
+        return []
+    try:
+        return list_my_issues_strict(workspace_root, limit=limit)
+    except (LinearNotConfiguredError, LinearCallError):
+        return []
 
 
 def format_branch_name(issue_id: str, title: str = "", custom_name: str = "") -> str:

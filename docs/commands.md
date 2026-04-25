@@ -47,9 +47,8 @@ Write actions and execution.
 
 | Command | What it does |
 |---|---|
-| `canopy realign <feature> [--auto-stash]` | Bring all repos in the feature lane onto the feature's branch. Live drift-fixer. `--auto-stash` tags + stashes any dirty trees first. |
-| `canopy switch <feature>` / `canopy feature switch <name>` | Older-spelling switch. Prefer `realign` (same operation, better error reporting). |
-| `canopy checkout <branch>` | Plain checkout across all repos (no feature context). |
+| `canopy realign <feature> [--auto-stash]` | Bring all repos in the feature lane onto the feature's branch. Switch into a feature, fix drift after a manual `git checkout` — same operation. `--auto-stash` tags + stashes dirty trees first via P12. |
+| `canopy checkout <branch>` | Plain checkout across all repos — no feature context, no per-repo branch resolution. Use `realign` for feature-scoped switching. |
 | `canopy run <repo> <command> [--feature]` | Run a shell command in a canopy-managed repo with cwd resolved internally. The "agent never `cd`s" tool — also useful from a CLI in a deeply nested directory. |
 | `canopy code\|cursor\|fork <feature\|.>` | Open the feature in VS Code / Cursor / Fork.app (alias-aware; generates `.code-workspace` for the IDE ones). |
 | `canopy sync` | Pull default branch + rebase feature branches across repos. |

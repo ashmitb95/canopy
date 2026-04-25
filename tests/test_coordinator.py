@@ -66,38 +66,6 @@ def test_list_active(canopy_toml):
     assert "feat-b" in names
 
 
-def test_switch_feature(canopy_toml):
-    config = load_config(canopy_toml)
-    ws = Workspace(config)
-    coord = FeatureCoordinator(ws)
-
-    coord.create("switch-test")
-    result = coord.switch("switch-test")
-
-    assert result["feature"] == "switch-test"
-    assert result["repos"]["api"]["ok"] is True
-    assert result["repos"]["ui"]["ok"] is True
-    assert result["repos"]["api"]["branch"] == "switch-test"
-    assert isinstance(result["repos"]["api"]["path"], str)
-    assert isinstance(result["repos"]["api"]["dirty_count"], int)
-
-    # Verify branches are checked out
-    ws.refresh()
-    api = ws.get_repo("api")
-    ui = ws.get_repo("ui")
-    assert api.current_branch == "switch-test"
-    assert ui.current_branch == "switch-test"
-
-
-def test_switch_nonexistent(canopy_toml):
-    config = load_config(canopy_toml)
-    ws = Workspace(config)
-    coord = FeatureCoordinator(ws)
-
-    with pytest.raises(ValueError, match="not found"):
-        coord.switch("nonexistent")
-
-
 def test_feature_status(canopy_toml, workspace_with_feature):
     config = load_config(workspace_with_feature)
     ws = Workspace(config)
@@ -282,18 +250,6 @@ class TestResolveAlias:
         ws = Workspace(config)
         coord = FeatureCoordinator(ws)
         assert coord._resolve_name("nonexistent") == "nonexistent"
-
-    def test_switch_with_alias(self, canopy_toml):
-        """End-to-end: canopy switch works with a Linear ID alias."""
-        config = load_config(canopy_toml)
-        ws = Workspace(config)
-        coord = FeatureCoordinator(ws)
-        coord.create("ENG-500-refactor-api", linear_issue="ENG-500")
-        result = coord.switch("ENG-500")
-        assert result["feature"] == "ENG-500-refactor-api"
-        assert result["alias"] == "ENG-500"
-        assert result["repos"]["api"]["ok"] is True
-        assert result["repos"]["api"]["branch"] == "ENG-500-refactor-api"
 
     def test_done_with_alias(self, workspace_with_feature, canopy_toml):
         """End-to-end: canopy done works with a prefix alias."""

@@ -98,45 +98,6 @@ class TestFeatureCreateWorktree:
         assert not (wt_base / "ui").exists()
 
 
-# ── Worktree-smart switch ───────────────────────────────────────────────
-
-class TestWorktreeSmartSwitch:
-    def test_switch_detects_worktree(self, workspace_dir):
-        """Switch should report worktree path instead of failing."""
-        ws = _make_workspace(workspace_dir)
-        coordinator = FeatureCoordinator(ws)
-
-        # Create feature with worktrees
-        coordinator.create("wt-switch-test", use_worktrees=True)
-
-        # Try to switch — branches are in worktrees, can't checkout
-        result = coordinator.switch("wt-switch-test")
-
-        for repo_name, info in result["repos"].items():
-            assert info["ok"] is True
-            assert info["worktree"] is True
-            assert info["branch"] == "wt-switch-test"
-            assert isinstance(info["path"], str)
-
-    def test_switch_mixed_worktree_and_branch(self, workspace_dir):
-        """Some repos in worktrees, some not — should handle both."""
-        ws = _make_workspace(workspace_dir)
-        coordinator = FeatureCoordinator(ws)
-
-        # Create feature with worktree for api, regular branch for ui
-        coordinator.create("mixed-test", use_worktrees=True)
-
-        # Now switch — api and ui are both in worktrees
-        # Manually remove ui worktree and recreate as just a branch
-        wt_base = workspace_dir / ".canopy" / "worktrees" / "mixed-test"
-        git.worktree_remove(workspace_dir / "ui", wt_base / "ui")
-
-        # Now api has a worktree, ui has just a branch
-        result = coordinator.switch("mixed-test")
-        assert result["repos"]["api"]["worktree"] is True
-        assert result["repos"]["ui"]["ok"] is True
-
-
 # ── Worktree-smart enrich / status ──────────────────────────────────────
 
 class TestWorktreeSmartStatus:

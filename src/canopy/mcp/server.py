@@ -341,25 +341,6 @@ def feature_status(name: str) -> dict:
 
 
 @mcp.tool()
-def feature_switch(name: str) -> dict:
-    """Switch to a feature lane across repos.
-
-    Checks out the feature branch in each participating repo.
-    Returns rich context per repo: branch, local path, dirty count,
-    ahead/behind, and whether it's a worktree.
-
-    Supports alias resolution: pass a Linear issue ID (e.g. "ENG-412")
-    or a unique prefix to resolve to the full feature name.
-
-    Args:
-        name: Feature lane name, Linear issue ID, or unique prefix.
-    """
-    ws = _get_workspace()
-    coordinator = FeatureCoordinator(ws)
-    return coordinator.switch(name)
-
-
-@mcp.tool()
 def feature_diff(name: str) -> dict:
     """Get aggregate diff for a feature lane across all repos.
 

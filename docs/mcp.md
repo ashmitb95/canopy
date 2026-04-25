@@ -24,7 +24,7 @@ Register in any MCP-compatible client. `canopy init` writes this entry into the 
 
 `CANOPY_ROOT` scopes the server to one workspace. To use canopy in multiple workspaces simultaneously, register separate entries with different `CANOPY_ROOT` values (or scope MCP per-project via `.mcp.json` at each workspace root).
 
-### Tools (43)
+### Tools (42)
 
 Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 
@@ -44,7 +44,6 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 | `feature_create` | Create a new feature lane across repos |
 | `feature_list` | List active feature lanes |
 | `feature_status` | Detailed status for a feature lane |
-| `feature_switch` | Switch to a feature lane (alias-aware) |
 | `feature_diff` | Aggregate diff for a feature lane |
 | `feature_changes` | Per-repo file changes for a feature |
 | `feature_merge_readiness` | Pre-merge sanity check |

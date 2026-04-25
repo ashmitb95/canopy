@@ -326,39 +326,6 @@ def cmd_feature_list(args: argparse.Namespace) -> None:
     console.print()
 
 
-def cmd_feature_switch(args: argparse.Namespace) -> None:
-    """Switch to a feature lane."""
-    workspace = _load_workspace()
-    from ..features.coordinator import FeatureCoordinator
-
-    coordinator = FeatureCoordinator(workspace)
-
-    try:
-        results = coordinator.switch(args.name)
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    if args.json:
-        _print_json({"feature": args.name, "results": results})
-        return
-
-    has_worktrees = False
-    for repo, result in results.items():
-        if result is True:
-            print(f"  {repo}: ok")
-        elif isinstance(result, str) and result.startswith("already in worktree:"):
-            print(f"  {repo}: {result}")
-            has_worktrees = True
-        else:
-            print(f"  {repo}: failed: {result}")
-
-    if has_worktrees:
-        print(f"\nSome branches live in worktrees. Open them with:")
-        print(f"  canopy code {args.name}")
-        print(f"  canopy cursor {args.name}")
-
-
 def cmd_feature_diff(args: argparse.Namespace) -> None:
     """Show aggregate diff for a feature lane."""
     workspace = _load_workspace()
@@ -1455,84 +1422,6 @@ def cmd_list(args: argparse.Namespace) -> None:
     console.print()
 
 
-def cmd_switch(args: argparse.Namespace) -> None:
-    """Switch to a feature lane — checkout branches across repos."""
-    from .ui import console, print_success, print_error, print_warning, SYM_ARROW, SYM_CHECK, SYM_BRANCH, SYM_LINK
-
-    workspace = _load_workspace()
-    from ..features.coordinator import FeatureCoordinator
-
-    coordinator = FeatureCoordinator(workspace)
-    name = args.name
-
-    try:
-        result = coordinator.switch(name)
-    except ValueError as e:
-        print_error(str(e))
-        sys.exit(1)
-
-    if args.json:
-        _print_json(result)
-        return
-
-    feature = result["feature"]
-    alias = result.get("alias")
-
-    # Try to get PR info (best-effort, don't fail if GitHub isn't configured)
-    pr_map: dict[str, dict] = {}
-    try:
-        review = coordinator.review_status(feature)
-        for repo_name, info in review.get("repos", {}).items():
-            pr = info.get("pr")
-            if pr:
-                pr_map[repo_name] = pr
-    except Exception:
-        pass  # GitHub not configured or no PRs — that's fine
-
-    console.print()
-
-    # Show alias resolution
-    if alias:
-        console.print(f"  [muted]{alias} {SYM_ARROW}[/] [feature]{feature}[/]")
-        console.print()
-
-    has_worktree = False
-    for repo_name, info in result["repos"].items():
-        if not info["ok"]:
-            print_warning(f"[repo]{repo_name}[/]  {info.get('error', 'failed')}")
-            continue
-
-        # Line 1: repo + path
-        path = info["path"]
-        is_wt = info.get("worktree", False)
-        if is_wt:
-            has_worktree = True
-        print_success(f"[repo]{repo_name}[/]  [muted]{SYM_ARROW}[/] [path]{path}[/]")
-
-        # Line 2: branch + dirty + ahead/behind + PR
-        parts = [f"    [muted]{SYM_BRANCH}[/] [branch]{info['branch']}[/]"]
-        dirty = info.get("dirty_count", 0)
-        if dirty:
-            parts.append(f"[dirty]{dirty} dirty[/]")
-        ahead = info.get("ahead", 0)
-        behind = info.get("behind", 0)
-        if ahead:
-            parts.append(f"[ahead]↑{ahead}[/]")
-        if behind:
-            parts.append(f"[behind]↓{behind}[/]")
-        pr = pr_map.get(repo_name)
-        if pr:
-            parts.append(f"[linear]{SYM_LINK} #{pr.get('number', '')}[/]")
-        console.print("  ".join(parts))
-
-    if has_worktree:
-        console.print()
-        console.print(f"  [muted]Open in IDE:[/]")
-        console.print(f"    [info]canopy code {feature}[/]")
-        console.print(f"    [info]canopy cursor {feature}[/]")
-    console.print()
-
-
 def cmd_done(args: argparse.Namespace) -> None:
     """Clean up a completed feature — remove worktrees, branches, archive."""
     from .ui import console, spinner, print_success, print_error, print_warning, separator, SYM_CHECK, SYM_CROSS, SYM_ARROW
@@ -2379,11 +2268,6 @@ def main() -> None:
     fl = feature_sub.add_parser("list", help="List feature lanes")
     fl.add_argument("--json", action="store_true", help="Output as JSON")
 
-    # feature switch
-    fs = feature_sub.add_parser("switch", help="Switch to a feature lane")
-    fs.add_argument("name", help="Feature name")
-    fs.add_argument("--json", action="store_true", help="Output as JSON")
-
     # feature diff
     fd = feature_sub.add_parser("diff", help="Feature lane diff")
     fd.add_argument("name", help="Feature name")
@@ -2516,11 +2400,6 @@ def main() -> None:
     # list (top-level shortcut)
     list_p = subparsers.add_parser("list", help="List all feature lanes")
     list_p.add_argument("--json", action="store_true", help="Output as JSON")
-
-    # switch (top-level shortcut)
-    switch_p = subparsers.add_parser("switch", help="Switch to a feature lane")
-    switch_p.add_argument("name", help="Feature lane name")
-    switch_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # review
     review_p = subparsers.add_parser(
@@ -2686,7 +2565,6 @@ def main() -> None:
         "fork": cmd_fork,
         "preflight": cmd_preflight,
         "list": cmd_list,
-        "switch": cmd_switch,
         "review": cmd_review,
         "done": cmd_done,
         "config": cmd_config,
@@ -2710,7 +2588,6 @@ def main() -> None:
         feature_commands = {
             "create": cmd_feature_create,
             "list": cmd_feature_list,
-            "switch": cmd_feature_switch,
             "diff": cmd_feature_diff,
             "status": cmd_feature_status,
             "changes": cmd_feature_changes,

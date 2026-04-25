@@ -331,9 +331,18 @@ def merge_base(repo_path: Path, ref_a: str, ref_b: str) -> str:
 
 # ── Stash ─────────────────────────────────────────────────────────────────
 
-def stash_save(repo_path: Path, message: str = "") -> bool:
-    """Stash uncommitted changes. Returns True if anything was stashed."""
+def stash_save(
+    repo_path: Path, message: str = "", include_untracked: bool = False,
+) -> bool:
+    """Stash uncommitted changes. Returns True if anything was stashed.
+
+    ``include_untracked=True`` adds ``-u`` so untracked files are also
+    stashed (used by feature-scoped stashes where the user expects
+    "everything for this feature" to disappear cleanly).
+    """
     args = ["stash", "push"]
+    if include_untracked:
+        args.append("-u")
     if message:
         args.extend(["-m", message])
     output = _run(args, cwd=repo_path)

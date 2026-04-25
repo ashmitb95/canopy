@@ -207,6 +207,7 @@ def stash_save_all(
     workspace: Workspace,
     message: str = "",
     repos: list[str] | None = None,
+    include_untracked: bool = False,
 ) -> dict[str, str]:
     """Stash uncommitted changes across repos.
 
@@ -218,7 +219,9 @@ def stash_save_all(
 
     for state in targets:
         try:
-            stashed = git.stash_save(state.abs_path, message)
+            stashed = git.stash_save(
+                state.abs_path, message, include_untracked=include_untracked,
+            )
             results[state.config.name] = "stashed" if stashed else "clean"
         except git.GitError as e:
             results[state.config.name] = str(e)

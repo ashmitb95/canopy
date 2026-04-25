@@ -22,6 +22,7 @@ import {
   launchClaudeWorkflow,
 } from "./webview/dashboardPanel";
 import { CockpitPanel } from "./webview/cockpitPanel";
+import { NewFeaturePanel } from "./webview/newFeaturePanel";
 import { isSwitchBlocker } from "./canopyClient";
 
 interface Active {
@@ -444,6 +445,15 @@ function registerCommands(
      */
     vscode.commands.registerCommand("canopy.openCockpit", () => {
       CockpitPanel.show(context, client);
+    }),
+
+    /**
+     * Wave 7 phase E: Linear-driven new-feature form.
+     * Opens the new-feature panel; closes itself on successful create
+     * and refreshes the cockpit if open.
+     */
+    vscode.commands.registerCommand("canopy.openNewFeature", () => {
+      NewFeaturePanel.show(context, client);
     }),
 
     vscode.commands.registerCommand("canopy.switchFeature", async (arg?: unknown) => {

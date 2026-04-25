@@ -470,6 +470,208 @@ button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 .btn.ghost:hover { color: var(--color-fg); background: var(--color-bg-elev-2); }
 
+/* ── New-feature form ──────────────────────────────────────────── */
+.new-feature-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: calc(100vh - 42px);
+}
+.new-feature-inbox {
+  background: var(--color-bg-elev);
+  border-right: var(--shape-border-width) solid var(--color-border-soft);
+  overflow-y: auto;
+  padding: 14px 0;
+}
+.new-feature-inbox h3 {
+  margin: 0 16px 10px;
+  font-size: 11px; color: var(--color-fg-dim); font-weight: 600;
+}
+.new-feature-inbox h3 .count { color: var(--color-fg-muted); font-weight: 500; margin-left: 6px; }
+.new-feature-inbox .issue {
+  padding: 9px 16px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.new-feature-inbox .issue:hover { background: var(--color-bg-elev-2); }
+.new-feature-inbox .issue.selected {
+  background: var(--color-bg-elev-2);
+  border-left-color: var(--color-accent);
+}
+.new-feature-inbox .issue .key {
+  color: var(--color-warn);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.new-feature-inbox .issue .title {
+  color: var(--color-fg);
+  font-size: 12px;
+  margin-top: 1px;
+  line-height: 1.4;
+}
+.new-feature-inbox .issue.in-canopy { opacity: 0.45; cursor: not-allowed; }
+.new-feature-inbox .issue.in-canopy .key::after {
+  content: " · in canopy"; color: var(--color-ok); font-size: 9px;
+}
+
+.new-feature-form {
+  padding: 28px 36px;
+  overflow-y: auto;
+  max-width: 720px;
+}
+.new-feature-form .crumb {
+  color: var(--color-fg-dim);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.new-feature-form .crumb .here { color: var(--color-fg); }
+.new-feature-form .selected-issue {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: var(--shape-border-width) solid var(--color-border-soft);
+}
+.new-feature-form .selected-issue .key {
+  color: var(--color-warn);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+}
+.new-feature-form .selected-issue .title {
+  color: var(--color-fg);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.new-feature-form .selected-issue a { margin-left: auto; }
+
+.field { margin-bottom: 22px; }
+.field-label {
+  display: block; margin-bottom: 8px;
+  color: var(--color-fg-dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.input-group { display: flex; max-width: 520px; }
+.input-group .prefix {
+  background: var(--color-bg-elev-2);
+  border: var(--shape-border-width) solid var(--color-border);
+  border-right: none;
+  border-radius: var(--shape-radius-sm) 0 0 var(--shape-radius-sm);
+  padding: 8px 12px;
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.input-group .text-input {
+  flex: 1;
+  background: var(--color-bg);
+  border: var(--shape-border-width) solid var(--color-border);
+  border-radius: 0 var(--shape-radius-sm) var(--shape-radius-sm) 0;
+  color: var(--color-fg);
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.input-group .text-input:focus { outline: none; border-color: var(--color-accent); }
+
+.repos {
+  border: var(--shape-border-width) solid var(--color-border);
+  border-radius: var(--shape-radius-sm);
+  max-width: 520px;
+  overflow: hidden;
+}
+.repo {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.repo + .repo { border-top: var(--shape-border-width) solid var(--color-border-soft); }
+.repo:hover { background: var(--color-bg-elev-2); }
+.repo.checked { background: var(--color-bg-elev-2); }
+.repo .check {
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--color-fg-dim);
+  border-radius: 3px;
+  position: relative;
+}
+.repo.checked .check { background: var(--color-accent); border-color: var(--color-accent); }
+.repo.checked .check::after {
+  content: "";
+  position: absolute; left: 4px; top: 1px;
+  width: 5px; height: 9px;
+  border-right: 1.5px solid #fff;
+  border-bottom: 1.5px solid #fff;
+  transform: rotate(45deg);
+}
+.repo .name { color: var(--color-fg); font-weight: 500; font-size: 13px; }
+.repo .status {
+  color: var(--color-fg-dim);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.repo-quick {
+  display: flex; gap: 16px; margin-top: 10px;
+  color: var(--color-accent);
+  font-size: 12px;
+}
+.repo-quick button {
+  background: none; border: none; padding: 0; cursor: pointer; color: inherit;
+  font: inherit;
+}
+.repo-quick button:hover { text-decoration: underline; }
+.repo-quick .summary {
+  color: var(--color-fg-muted);
+  margin-left: auto;
+  font-family: var(--font-mono);
+}
+
+.slot-toggle {
+  display: inline-flex;
+  border: var(--shape-border-width) solid var(--color-border);
+  border-radius: var(--shape-radius-sm);
+  background: var(--color-bg-elev);
+}
+.slot-toggle button {
+  background: none; border: none; cursor: pointer;
+  color: var(--color-fg-muted);
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+}
+.slot-toggle button + button { border-left: var(--shape-border-width) solid var(--color-border-soft); }
+.slot-toggle button:hover { color: var(--color-fg); }
+.slot-toggle button.active {
+  background: var(--color-bg-elev-2);
+  color: var(--color-fg);
+}
+.slot-toggle button.active::before { content: "● "; color: var(--color-accent); }
+
+.preview {
+  margin: 24px 0 14px;
+  padding: 12px 14px;
+  background: var(--color-bg-elev);
+  border-left: 2px solid var(--color-ok);
+  border-radius: 0 var(--shape-radius-sm) var(--shape-radius-sm) 0;
+  color: var(--color-fg-muted);
+  font-size: 12px;
+  max-width: 720px;
+}
+.preview .glyph { color: var(--color-ok); margin-right: 6px; }
+.preview strong { color: var(--color-fg); font-weight: 600; }
+
+.actions {
+  display: flex; gap: 10px; align-items: center;
+  max-width: 720px;
+}
+
 /* ── Loading state ─────────────────────────────────────────────── */
 .skeleton {
   background: linear-gradient(

@@ -129,6 +129,10 @@
         "title": "Canopy: Open Cockpit (workspace dashboard)"
       },
       {
+        "command": "canopy.openNewFeature",
+        "title": "Canopy: Spin up a new feature from Linear"
+      },
+      {
         "command": "canopy.preflight",
         "title": "Canopy: Run Preflight"
       },

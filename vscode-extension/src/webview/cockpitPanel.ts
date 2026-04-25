@@ -325,8 +325,7 @@ ${renderBridge({
           );
           return;
         case "newFeature":
-          // Phase E
-          await vscode.commands.executeCommand("canopy.createFeature");
+          await vscode.commands.executeCommand("canopy.openNewFeature");
           return;
         case "address_review_comments":
         case "addressComments":

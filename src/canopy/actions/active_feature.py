@@ -13,8 +13,19 @@ Schema::
       "feature":          "doc-3029",
       "activated_at":     "2026-04-26T17:34:21Z",
       "previous_feature": "doc-3010" | null,
-      "per_repo_paths":   {"api": "/abs/...", "ui": "/abs/..."}
+      "per_repo_paths":   {"api": "/abs/...", "ui": "/abs/..."},
+      "last_touched":     {                       # since Wave 2.9
+        "doc-3029": "2026-04-26T17:34:21Z",       # canonical
+        "doc-3010": "2026-04-25T11:02:55Z",       # warm or cold
+        "doc-1003": "2026-04-21T08:14:09Z"
+      }
     }
+
+``last_touched`` is the per-feature recency map used to pick LRU
+warm worktrees for eviction when the worktree cap is reached. Updated
+on every ``switch`` so the active feature's timestamp is always now.
+Pre-2.9 workspaces are missing the field; switch fills it in lazily
+on first use (see ``switch_migration``).
 
 Path lookup tells you the mode by location: paths under
 ``.canopy/worktrees/`` are worktrees; everything else is main-tree.
@@ -27,6 +38,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -44,14 +56,18 @@ class ActiveFeature:
     activated_at: str
     per_repo_paths: dict[str, str]
     previous_feature: str | None = None
+    last_touched: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "feature": self.feature,
             "activated_at": self.activated_at,
             "previous_feature": self.previous_feature,
             "per_repo_paths": dict(self.per_repo_paths),
         }
+        if self.last_touched:
+            d["last_touched"] = dict(self.last_touched)
+        return d
 
 
 def read_active(workspace: Workspace) -> ActiveFeature | None:
@@ -80,11 +96,16 @@ def read_active(workspace: Workspace) -> ActiveFeature | None:
         if not Path(p).exists():
             return None
 
+    last_touched = data.get("last_touched") or {}
+    if not isinstance(last_touched, dict):
+        last_touched = {}
+
     return ActiveFeature(
         feature=data["feature"],
         activated_at=data.get("activated_at", ""),
         per_repo_paths=dict(per_repo_paths),
         previous_feature=data.get("previous_feature"),
+        last_touched={str(k): str(v) for k, v in last_touched.items()},
     )
 
 
@@ -92,11 +113,18 @@ def write_active(
     workspace: Workspace,
     feature: str,
     per_repo_paths: dict[str, str],
+    *,
+    touched_features: list[str] | None = None,
 ) -> ActiveFeature:
     """Persist the active feature. Atomic via temp + rename.
 
     Bumps the existing entry's feature into ``previous_feature`` so the
     user can ``canopy switch -`` (future) to swap back.
+
+    Updates ``last_touched`` for the new active feature (always) plus any
+    features named in ``touched_features`` (e.g. the previously-canonical
+    feature being evacuated to warm in the same switch). The new active
+    feature's timestamp is always now.
     """
     path = _state_path(workspace)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,17 +134,57 @@ def write_active(
         previous.previous_feature if previous else None
     )
 
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    last_touched = dict(previous.last_touched) if previous else {}
+    last_touched[feature] = now
+    for f in (touched_features or ()):
+        last_touched[f] = now
+
     entry = ActiveFeature(
         feature=feature,
-        activated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        activated_at=now,
         per_repo_paths={k: str(v) for k, v in per_repo_paths.items()},
         previous_feature=previous_feature,
+        last_touched=last_touched,
     )
 
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(entry.to_dict(), indent=2))
     tmp.replace(path)
     return entry
+
+
+def touch_features(
+    workspace: Workspace, features: list[str],
+) -> ActiveFeature | None:
+    """Bump ``last_touched`` for the given features without changing focus.
+
+    Used when LRU eviction needs to record activity (e.g. a feature was
+    just promoted out of cold via warming). Returns None if no active
+    state exists yet — callers should `write_active` first.
+    """
+    if not features:
+        return read_active(workspace)
+    current = read_active(workspace)
+    if current is None:
+        return None
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    last_touched = dict(current.last_touched)
+    for f in features:
+        last_touched[f] = now
+    updated = ActiveFeature(
+        feature=current.feature,
+        activated_at=current.activated_at,
+        per_repo_paths=dict(current.per_repo_paths),
+        previous_feature=current.previous_feature,
+        last_touched=last_touched,
+    )
+    path = _state_path(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(updated.to_dict(), indent=2))
+    tmp.replace(path)
+    return updated
 
 
 def clear_active(

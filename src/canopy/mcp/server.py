@@ -150,30 +150,45 @@ def triage(author: str = "@me", repos: list[str] | None = None) -> dict:
 
 
 @mcp.tool()
-def switch(feature: str, create_worktrees: bool = False,
-           auto_stash: bool = False) -> dict:
-    """Activate a feature as the workspace's current context.
+def switch(feature: str, release_current: bool = False,
+           no_evict: bool = False, evict: str | None = None) -> dict:
+    """Promote a feature to the canonical slot (Wave 2.9 canonical-slot model).
 
-    Three cases:
-      1. Feature has worktrees → mark active, return per_repo_paths pointing
-         at the worktrees. No git mutation.
-      2. Feature is main-tree only (branch exists in main repos) → call
-         realign internally (with auto_stash if passed) to bring repos
-         onto the branch, then mark active with main paths.
-      3. Feature has no worktrees AND no main branch:
-         - if create_worktrees=True: create worktrees on the fly, then case 1
-         - else: BlockerError(code='no_active_state') with fix_actions
+    Two modes for what happens to the previously-canonical feature X:
+
+      - **Active rotation (default)**: X evacuates to a warm worktree
+        at .canopy/worktrees/X/<repo>/ (with full stash → checkout →
+        pop). Use when X still needs your attention soon — switching
+        back is instant.
+      - **Wind-down (release_current=True)**: X goes straight to cold
+        (just the branch + a feature-tagged stash if there were dirty
+        changes). Use when X is parked / finished and Y is the new
+        focus.
+
+    When active-rotation would exceed the warm-slot cap (default 2),
+    canopy raises a structured BlockerError(code='worktree_cap_reached')
+    with fix_actions: switch in wind-down mode, evict a specific LRU
+    warm to cold (with auto-stash), or raise the cap. Use no_evict=True
+    to refuse auto-eviction (raises the same blocker for the user to
+    decide); use evict='<feature>' to override the LRU pick with a
+    specific feature.
+
+    See docs/concepts.md §4 for the full canonical-slot model.
 
     After this, calls without an explicit `feature` argument
     (canopy_run, feature_state, IDE openers) default to this feature.
 
-    Returns {feature, mode, per_repo_paths, previous_feature?, realign?,
-    worktrees_created?}.
+    Returns {feature, mode, per_repo_paths, previously_canonical?,
+    eviction?, branches_created?, migration?, per_repo, activated_at}.
     """
     from ..actions.switch import switch as _impl
     ws = _get_workspace()
-    return _impl(ws, feature, create_worktrees=create_worktrees,
-                 auto_stash=auto_stash)
+    return _impl(
+        ws, feature,
+        release_current=release_current,
+        no_evict=no_evict,
+        evict=evict,
+    )
 
 
 @mcp.tool()

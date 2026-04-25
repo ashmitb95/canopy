@@ -2045,7 +2045,7 @@ def cmd_triage(args: argparse.Namespace) -> None:
 
 
 def cmd_switch(args: argparse.Namespace) -> None:
-    """Activate a feature as the current workspace context."""
+    """Promote a feature to the canonical slot (canonical-slot model, Wave 2.9)."""
     from ..actions.errors import ActionError
     from ..actions.switch import switch as switch_impl
     from .render import render_blocker
@@ -2055,8 +2055,9 @@ def cmd_switch(args: argparse.Namespace) -> None:
     try:
         result = switch_impl(
             workspace, args.feature,
-            create_worktrees=getattr(args, "create_worktrees", False),
-            auto_stash=getattr(args, "auto_stash", False),
+            release_current=getattr(args, "release_current", False),
+            no_evict=getattr(args, "no_evict", False),
+            evict=getattr(args, "evict", None),
         )
     except ActionError as err:
         if args.json:
@@ -2070,26 +2071,39 @@ def cmd_switch(args: argparse.Namespace) -> None:
         return
 
     console.print()
-    mode = result["mode"]
     feature = result["feature"]
+    mode = result["mode"]
     glyph = "[success]✓[/]"
-    label = {"worktree": "worktree mode",
-              "main_tree": "main-tree mode",
-              "mixed": "mixed (worktree + main)"}.get(mode, mode)
-    console.print(f"  {glyph} active: [feature]{feature}[/]  [muted]({label})[/]")
-    if result.get("previous_feature"):
-        console.print(f"      [muted]previous: {result['previous_feature']}[/]")
-    if result.get("worktrees_created"):
-        console.print(f"      [muted]worktrees created on the fly[/]")
+    label = {"active_rotation": "active rotation",
+              "wind_down": "wind down"}.get(mode, mode)
+    console.print(f"  {glyph} canonical: [feature]{feature}[/]  [muted]({label})[/]")
+    if result.get("previously_canonical"):
+        prev = result["previously_canonical"]
+        if mode == "wind_down":
+            console.print(f"      [muted]previous '{prev}' → cold (stashed if dirty)[/]")
+        else:
+            console.print(f"      [muted]previous '{prev}' → warm worktree[/]")
+    if result.get("eviction"):
+        ev = result["eviction"]
+        stashed_repos = [r for r in ev["repos"] if r["stashed"]]
+        console.print(
+            f"      [warning]evicted '{ev['feature']}'[/] → cold "
+            f"({len(stashed_repos)}/{len(ev['repos'])} repos auto-stashed)"
+        )
+    if result.get("branches_created"):
+        for b in result["branches_created"]:
+            console.print(f"      [muted]created branch {b['repo']}/{b['branch']} from {b['base']}[/]")
     for repo, path in result["per_repo_paths"].items():
-        kind = "worktree" if ".canopy/worktrees" in path else "main"
-        console.print(f"      [repo]{repo}[/]  [muted]→ {path}  ({kind})[/]")
-    if result.get("realign"):
-        ra = result["realign"]
-        if not ra.get("aligned"):
-            console.print(f"      [warning]realign reported issues[/]")
+        console.print(f"      [repo]{repo}[/]  [muted]→ {path}[/]")
+    if result.get("migration"):
+        m = result["migration"]
+        if m.get("ran"):
+            detected = m.get("canonical_detected") or "(none)"
+            console.print(f"      [muted]migrated workspace to 2.9 schema; canonical detected: {detected}[/]")
     console.print()
-    console.print(f"  [muted]now: 'canopy state' / 'canopy run <repo> <cmd>' default to this feature[/]")
+    console.print(
+        "  [muted]now: 'canopy state' / 'canopy run <repo> <cmd>' default to this feature[/]"
+    )
     console.print()
 
 
@@ -2510,16 +2524,18 @@ def main() -> None:
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
 
-    # switch (worktree-context activator)
+    # switch (canonical-slot focus primitive — Wave 2.9)
     switch_p = subparsers.add_parser(
         "switch",
-        help="Activate a feature as the current workspace context (worktree- or main-tree-aware)",
+        help="Promote a feature to the canonical slot (canonical-slot model)",
     )
     switch_p.add_argument("feature", help="Feature alias (name or Linear ID)")
-    switch_p.add_argument("--create-worktrees", action="store_true",
-                           help="If feature has no worktrees and no main branch, create worktrees on the fly")
-    switch_p.add_argument("--auto-stash", action="store_true",
-                           help="(main-tree case) stash dirty trees with feature tag before realign")
+    switch_p.add_argument("--release-current", action="store_true",
+                           help="Wind-down mode: previous canonical goes cold (no warm worktree)")
+    switch_p.add_argument("--no-evict", action="store_true",
+                           help="Refuse to auto-evict an LRU warm worktree if cap would fire")
+    switch_p.add_argument("--evict", default=None,
+                           help="Explicit feature name to evict to cold (overrides LRU pick)")
     switch_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # realign

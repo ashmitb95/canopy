@@ -1821,6 +1821,67 @@ def cmd_comments(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_triage(args: argparse.Namespace) -> None:
+    """Show prioritized list of features needing attention."""
+    from ..actions.errors import ActionError
+    from ..actions.triage import triage as triage_impl
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = triage_impl(
+            workspace,
+            author=getattr(args, "author", "@me"),
+            repos=_split_csv(getattr(args, "repos", None)),
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="triage")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    console.print(f"  [header]triage[/]  [muted]author={result['author']}  ({len(result['features'])} features)[/]")
+    if not result["features"]:
+        console.print("  [muted]nothing needs attention[/]")
+        console.print()
+        return
+    glyphs = {
+        "changes_requested": "[error]●[/]",
+        "review_required_with_bot_comments": "[warning]●[/]",
+        "review_required": "[muted]●[/]",
+        "approved": "[success]●[/]",
+        "unknown": "[muted]?[/]",
+    }
+    for f in result["features"]:
+        glyph = glyphs.get(f["priority"], "[muted]?[/]")
+        label = f["feature"]
+        linear = f.get("linear_issue") or ""
+        title = f.get("linear_title") or ""
+        suffix = f"  [muted]{linear} {title}[/]".rstrip() if linear or title else ""
+        console.print()
+        console.print(f"  {glyph} [feature]{label}[/]  [muted]({f['priority']})[/]{suffix}")
+        for repo, info in f["repos"].items():
+            decision = info.get("review_decision") or "—"
+            counts = []
+            if info.get("actionable_count"):
+                counts.append(f"actionable: {info['actionable_count']}")
+            if info.get("likely_resolved_count"):
+                counts.append(f"likely_resolved: {info['likely_resolved_count']}")
+            count_str = "  [muted](" + ", ".join(counts) + ")[/]" if counts else ""
+            console.print(
+                f"      [repo]{repo}[/]  PR #{info['pr_number']}  "
+                f"[muted]{decision}[/]{count_str}"
+            )
+    console.print()
+
+
 def cmd_realign(args: argparse.Namespace) -> None:
     """Bring all repos in a feature lane onto the feature's branch."""
     from ..actions.errors import ActionError
@@ -2254,6 +2315,17 @@ def main() -> None:
                             help="Stash dirty trees with feature tag before checkout")
     realign_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # triage
+    triage_p = subparsers.add_parser(
+        "triage",
+        help="Prioritized list of features needing attention",
+    )
+    triage_p.add_argument("--author", default="@me",
+                           help="Filter PRs to this author (default: @me)")
+    triage_p.add_argument("--repos", default=None,
+                           help="Comma-separated subset of repos to scan")
+    triage_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # drift
     drift_p = subparsers.add_parser(
         "drift",
@@ -2348,6 +2420,7 @@ def main() -> None:
         "pr": cmd_pr,
         "comments": cmd_comments,
         "realign": cmd_realign,
+        "triage": cmd_triage,
     }
 
     if args.command == "feature":

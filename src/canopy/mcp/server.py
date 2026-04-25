@@ -113,6 +113,26 @@ def run(repo: str, command: str, feature: str | None = None,
 
 
 @mcp.tool()
+def triage(author: str = "@me", repos: list[str] | None = None) -> dict:
+    """Prioritized list of features needing user attention.
+
+    Enumerates open PRs across all configured repos, groups by feature
+    lane (explicit from features.json or implicit by shared branch),
+    classifies each via the temporal review-comment filter, and orders
+    by priority:
+
+      changes_requested > review_required_with_bot_comments
+                       > review_required > approved
+
+    The agent's morning daily-loop entry point. `author='@me'` filters
+    to the authenticated user's PRs (gh CLI shorthand).
+    """
+    from ..actions.triage import triage as _impl
+    ws = _get_workspace()
+    return _impl(ws, author=author, repos=repos)
+
+
+@mcp.tool()
 def realign(feature: str, auto_stash: bool = False,
             repos: list[str] | None = None) -> dict:
     """Bring all repos in the feature lane onto the feature's branch.

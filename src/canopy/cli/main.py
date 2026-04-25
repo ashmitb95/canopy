@@ -604,6 +604,11 @@ def cmd_branch_rename(args: argparse.Namespace) -> None:
 
 def cmd_stash_save(args: argparse.Namespace) -> None:
     """Stash uncommitted changes across repos."""
+    # Route to the feature-tagged path when --feature is passed.
+    if getattr(args, "feature", None):
+        cmd_stash_save_feature(args)
+        return
+
     workspace = _load_workspace()
     from ..git.multi import stash_save_all
 
@@ -620,6 +625,11 @@ def cmd_stash_save(args: argparse.Namespace) -> None:
 
 def cmd_stash_pop(args: argparse.Namespace) -> None:
     """Pop stash across repos."""
+    # Route to feature-tagged pop when --feature is passed.
+    if getattr(args, "feature", None):
+        cmd_stash_pop_feature(args)
+        return
+
     workspace = _load_workspace()
     from ..git.multi import stash_pop_all
 
@@ -636,6 +646,12 @@ def cmd_stash_pop(args: argparse.Namespace) -> None:
 
 def cmd_stash_list(args: argparse.Namespace) -> None:
     """List stashes across repos."""
+    # Route to grouped list whenever --feature is passed (or always if you
+    # want grouping by default; for now keep flat list as default).
+    if getattr(args, "feature", None):
+        cmd_stash_list_grouped(args)
+        return
+
     workspace = _load_workspace()
     from ..git.multi import stash_list_all
 
@@ -1805,6 +1821,152 @@ def cmd_comments(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_realign(args: argparse.Namespace) -> None:
+    """Bring all repos in a feature lane onto the feature's branch."""
+    from ..actions.errors import ActionError
+    from ..actions.realign import realign as realign_impl
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = realign_impl(
+            workspace, args.feature,
+            auto_stash=getattr(args, "auto_stash", False),
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="realign")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    glyph = "[success]✓[/]" if result["aligned"] else "[error]✗[/]"
+    console.print(f"  {glyph} [feature]{result['feature']}[/]")
+    for repo, info in result["repos"].items():
+        status = info["status"]
+        if status == "already_aligned":
+            console.print(f"      [repo]{repo}[/]  [muted]→ already on {info['after']}[/]")
+        elif status == "checkout_ok":
+            stash_note = f"  [muted](stashed: {info['stash_ref']})[/]" if info.get("stash_ref") else ""
+            console.print(f"      [repo]{repo}[/]  [muted]→ {info['before']} → {info['after']}[/]{stash_note}")
+        elif status == "skipped":
+            console.print(f"      [repo]{repo}[/]  [warning]skipped: {info.get('reason','')}[/]")
+        else:
+            console.print(f"      [repo]{repo}[/]  [error]failed: {info.get('reason','')}[/]")
+    console.print()
+
+
+def cmd_stash_save_feature(args: argparse.Namespace) -> None:
+    """Feature-tagged stash save (extends `canopy stash save --feature`)."""
+    from ..actions.errors import ActionError
+    from ..actions.stash import save_for_feature
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = save_for_feature(
+            workspace, args.feature, args.message or "",
+            repos=_split_csv(getattr(args, "repos", None)),
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="stash save")
+        sys.exit(1)
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    console.print(f"  [muted]message:[/] {result['message']}")
+    for repo, status in result["repos"].items():
+        glyph = "[success]✓[/]" if status == "stashed" else (
+            "[muted]·[/]" if status == "clean" else "[error]✗[/]"
+        )
+        console.print(f"  {glyph} [repo]{repo}[/]  [muted]{status}[/]")
+    console.print()
+
+
+def cmd_stash_list_grouped(args: argparse.Namespace) -> None:
+    """Grouped stash list (extends `canopy stash list [--feature]`)."""
+    from ..actions.errors import ActionError
+    from ..actions.stash import list_grouped
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = list_grouped(workspace, feature=getattr(args, "feature", None))
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="stash list")
+        sys.exit(1)
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    if not result["by_feature"] and not result["untagged"]:
+        console.print("  [muted]no stashes[/]")
+        console.print()
+        return
+    for feature, entries in result["by_feature"].items():
+        console.print(f"  [feature]{feature}[/]  [muted]({len(entries)})[/]")
+        for e in entries:
+            console.print(f"      [repo]{e['repo']}[/]  {e['ref']}  [muted]{e.get('ts','')}[/]  {e.get('user_message','')}")
+    if result["untagged"]:
+        console.print(f"  [header]untagged[/]  [muted]({len(result['untagged'])})[/]")
+        for e in result["untagged"]:
+            console.print(f"      [repo]{e['repo']}[/]  {e['ref']}  [muted]{e.get('message','')}[/]")
+    console.print()
+
+
+def cmd_stash_pop_feature(args: argparse.Namespace) -> None:
+    """Pop most recent feature-tagged stash per repo."""
+    from ..actions.errors import ActionError
+    from ..actions.stash import pop_feature
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = pop_feature(
+            workspace, args.feature,
+            repos=_split_csv(getattr(args, "repos", None)),
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="stash pop")
+        sys.exit(1)
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    for repo, info in result["repos"].items():
+        if info["status"] == "popped":
+            console.print(f"  [success]✓[/] [repo]{repo}[/]  [muted]{info.get('user_message') or info.get('message','')}[/]")
+        elif info["status"] == "no_match":
+            console.print(f"  [muted]·[/] [repo]{repo}[/]  [muted]no matching stash[/]")
+        else:
+            console.print(f"  [error]✗[/] [repo]{repo}[/]  [error]{info.get('error','')}[/]")
+    console.print()
+
+
+def _split_csv(value: str | None) -> list[str] | None:
+    if value is None or value == "":
+        return None
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
 def cmd_drift(args: argparse.Namespace) -> None:
     """Compare recorded HEAD state vs feature lane expectations across repos."""
     from ..actions.drift import detect_drift
@@ -1975,14 +2137,21 @@ def main() -> None:
     ss = stash_sub.add_parser("save", help="Stash changes")
     ss.add_argument("-m", "--message", default="", help="Stash message")
     ss.add_argument("--repos", default=None, help="Comma-separated repo names")
+    ss.add_argument("--feature", default=None,
+                     help="Tag stash with this feature (canopy:<f>:...) and "
+                          "include untracked files")
     ss.add_argument("--json", action="store_true", help="Output as JSON")
 
     sp = stash_sub.add_parser("pop", help="Pop stash")
     sp.add_argument("--index", type=int, default=0, help="Stash index")
     sp.add_argument("--repos", default=None, help="Comma-separated repo names")
+    sp.add_argument("--feature", default=None,
+                     help="Pop the most recent stash tagged with this feature")
     sp.add_argument("--json", action="store_true", help="Output as JSON")
 
     sl = stash_sub.add_parser("list", help="List stashes")
+    sl.add_argument("--feature", default=None,
+                     help="Group/filter by feature tag")
     sl.add_argument("--json", action="store_true", help="Output as JSON")
 
     sd = stash_sub.add_parser("drop", help="Drop stash")
@@ -2074,6 +2243,16 @@ def main() -> None:
     # context (debug)
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # realign
+    realign_p = subparsers.add_parser(
+        "realign",
+        help="Bring all repos onto a feature's branch (fix drift / switch to feature)",
+    )
+    realign_p.add_argument("feature", help="Feature alias (name or Linear ID)")
+    realign_p.add_argument("--auto-stash", action="store_true",
+                            help="Stash dirty trees with feature tag before checkout")
+    realign_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # drift
     drift_p = subparsers.add_parser(
@@ -2168,6 +2347,7 @@ def main() -> None:
         "issue": cmd_issue,
         "pr": cmd_pr,
         "comments": cmd_comments,
+        "realign": cmd_realign,
     }
 
     if args.command == "feature":

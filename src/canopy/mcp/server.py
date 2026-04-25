@@ -113,6 +113,59 @@ def run(repo: str, command: str, feature: str | None = None,
 
 
 @mcp.tool()
+def realign(feature: str, auto_stash: bool = False,
+            repos: list[str] | None = None) -> dict:
+    """Bring all repos in the feature lane onto the feature's branch.
+
+    Reads actual git state per repo (not heads.json) so it's
+    self-correcting even if the post-checkout hook missed an update.
+
+    Dirty trees: by default raises BlockerError(code='dirty_tree').
+    Pass `auto_stash=True` to stash with a feature tag before checkout
+    (the stash ref is included in the per-repo result).
+
+    Returns per-repo {status, before, after, stash_ref?, reason?} with
+    status in {already_aligned, checkout_ok, failed, skipped}.
+    """
+    from ..actions.realign import realign as _impl
+    ws = _get_workspace()
+    return _impl(ws, feature, auto_stash=auto_stash, repos=repos)
+
+
+@mcp.tool()
+def stash_save_feature(feature: str, message: str = "",
+                        repos: list[str] | None = None) -> dict:
+    """Stash dirty changes (incl. untracked) with a feature tag.
+
+    Stash message becomes '[canopy <feature> @ <iso_ts>] <message>',
+    parseable by stash_list_grouped / stash_pop_feature.
+    """
+    from ..actions.stash import save_for_feature
+    ws = _get_workspace()
+    return save_for_feature(ws, feature, message, repos=repos)
+
+
+@mcp.tool()
+def stash_list_grouped(feature: str | None = None) -> dict:
+    """List stashes across repos, grouped by feature tag.
+
+    Returns {by_feature: {<f>: [...]}, untagged: [...]}. Optional
+    `feature` filter scopes to a single feature (untagged excluded).
+    """
+    from ..actions.stash import list_grouped
+    ws = _get_workspace()
+    return list_grouped(ws, feature=feature)
+
+
+@mcp.tool()
+def stash_pop_feature(feature: str, repos: list[str] | None = None) -> dict:
+    """Pop the most recent feature-tagged stash per repo."""
+    from ..actions.stash import pop_feature
+    ws = _get_workspace()
+    return pop_feature(ws, feature, repos=repos)
+
+
+@mcp.tool()
 def linear_get_issue(alias: str) -> dict:
     """Fetch a Linear issue by alias.
 

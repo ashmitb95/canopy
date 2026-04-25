@@ -125,6 +125,10 @@
         "title": "Canopy: Open Feature Dashboard"
       },
       {
+        "command": "canopy.openCockpit",
+        "title": "Canopy: Open Cockpit (workspace dashboard)"
+      },
+      {
         "command": "canopy.preflight",
         "title": "Canopy: Run Preflight"
       },

@@ -21,6 +21,7 @@ import {
   fetchDashboardPayload,
   launchClaudeWorkflow,
 } from "./webview/dashboardPanel";
+import { CockpitPanel } from "./webview/cockpitPanel";
 
 interface Active {
   client: CanopyClient;
@@ -434,6 +435,14 @@ function registerCommands(
       const name = ctx?.feature ?? (await pickFeature(client));
       if (!name) return;
       DashboardPanel.show(context, client, name);
+    }),
+
+    /**
+     * Wave 7: workspace-scope cockpit dashboard.
+     * Singleton panel; theme-pluggable (canopy.dashboard.theme).
+     */
+    vscode.commands.registerCommand("canopy.openCockpit", () => {
+      CockpitPanel.show(context, client);
     }),
 
     vscode.commands.registerCommand("canopy.switchFeature", async (arg?: unknown) => {

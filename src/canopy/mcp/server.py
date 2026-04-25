@@ -113,6 +113,64 @@ def run(repo: str, command: str, feature: str | None = None,
 
 
 @mcp.tool()
+def linear_get_issue(alias: str) -> dict:
+    """Fetch a Linear issue by alias.
+
+    Accepts:
+      - Linear issue ID directly (e.g. 'ENG-412', 'DOC-3029')
+      - Feature alias whose lane has a linked linear_issue
+    """
+    from ..actions.reads import linear_get_issue as _impl
+    ws = _get_workspace()
+    return _impl(ws, alias)
+
+
+@mcp.tool()
+def github_get_pr(alias: str) -> dict:
+    """Fetch PR data per repo for an alias.
+
+    Accepts:
+      - Feature alias (e.g. 'DOC-3029') -> all PRs in the lane
+      - <repo>#<pr_number> (e.g. 'docsum-api#1287') -> specific PR
+      - GitHub PR URL -> specific PR
+    """
+    from ..actions.reads import github_get_pr as _impl
+    ws = _get_workspace()
+    return _impl(ws, alias)
+
+
+@mcp.tool()
+def github_get_branch(alias: str, repo: str | None = None) -> dict:
+    """Fetch branch info (HEAD sha, ahead/behind, upstream) per repo.
+
+    Accepts:
+      - Feature alias -> per-repo branches from the feature lane
+      - <repo>:<branch> -> specific branch in specific repo
+
+    Pass `repo` to filter feature-alias results to one repo.
+    """
+    from ..actions.reads import github_get_branch as _impl
+    ws = _get_workspace()
+    return _impl(ws, alias, repo=repo)
+
+
+@mcp.tool()
+def github_get_pr_comments(alias: str) -> dict:
+    """Fetch temporally classified PR review comments per repo.
+
+    Same shape as `review_comments` (per-repo actionable_threads /
+    likely_resolved_threads / resolved_thread_count / latest_commit_at)
+    but accepts the full alias surface — feature alias, <repo>#<n>, or PR URL.
+
+    Bot threads are kept; the temporal classifier handles staleness regardless
+    of author.
+    """
+    from ..actions.reads import github_get_pr_comments as _impl
+    ws = _get_workspace()
+    return _impl(ws, alias)
+
+
+@mcp.tool()
 def drift(feature: str | None = None) -> dict:
     """Compare recorded HEAD state vs feature lane expectations.
 

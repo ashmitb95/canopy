@@ -15,6 +15,7 @@ from .aliases import (
     BranchTarget, PRTarget,
     resolve_branch_targets, resolve_linear_id, resolve_pr_targets,
 )
+from .errors import BlockerError, FixAction
 
 
 def linear_get_issue(workspace: Workspace, alias: str) -> dict:
@@ -23,9 +24,33 @@ def linear_get_issue(workspace: Workspace, alias: str) -> dict:
     Accepts:
       - Linear ID directly (e.g. ``ENG-412``)
       - Feature alias whose lane has a linked ``linear_issue``
+
+    Raises ``BlockerError`` if the Linear MCP is not configured or the
+    issue can't be fetched. Linear-side exceptions are wrapped so callers
+    only have to handle ``ActionError``.
     """
     issue_id = resolve_linear_id(workspace, alias)
-    issue = ln.get_issue(workspace.config.root, issue_id)
+    try:
+        issue = ln.get_issue(workspace.config.root, issue_id)
+    except ln.LinearNotConfiguredError as e:
+        raise BlockerError(
+            code="linear_not_configured",
+            what="Linear MCP is not configured",
+            details={"alias": alias, "issue_id": issue_id, "error": str(e)},
+            fix_actions=[
+                FixAction(
+                    action="configure_mcp", args={"server": "linear"},
+                    safe=True,
+                    preview="add a 'linear' entry to .canopy/mcps.json",
+                ),
+            ],
+        )
+    except ln.LinearIssueNotFoundError as e:
+        raise BlockerError(
+            code="linear_issue_not_found",
+            what=f"Linear issue '{issue_id}' not found",
+            details={"alias": alias, "issue_id": issue_id, "error": str(e)},
+        )
     return {
         "alias": alias,
         "issue_id": issue_id,

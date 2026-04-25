@@ -1670,6 +1670,141 @@ def cmd_run(args: argparse.Namespace) -> None:
     sys.exit(result["exit_code"])
 
 
+def _read_command(impl, args, action_label: str, *extra_kwargs_keys):
+    """Run a read primitive with structured error rendering. Returns the result dict
+    (or None on failure — caller should sys.exit after this)."""
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+
+    workspace = _load_workspace()
+    kwargs = {k: getattr(args, k) for k in extra_kwargs_keys if hasattr(args, k)}
+    try:
+        return impl(workspace, args.alias, **kwargs)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action=action_label)
+        sys.exit(1)
+
+
+def cmd_issue(args: argparse.Namespace) -> None:
+    """Fetch a Linear issue by alias."""
+    from ..actions.reads import linear_get_issue
+    from .ui import console
+
+    result = _read_command(linear_get_issue, args, "issue")
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    console.print(f"  [feature]{result['issue_id']}[/]  [muted]{result.get('state','')}[/]")
+    if result.get("title"):
+        console.print(f"  {result['title']}")
+    if result.get("url"):
+        console.print(f"  [muted]{result['url']}[/]")
+    if result.get("description"):
+        desc = result["description"].strip()
+        if len(desc) > 400:
+            desc = desc[:400] + "…"
+        console.print()
+        console.print(f"  [muted]{desc}[/]")
+    console.print()
+
+
+def cmd_pr(args: argparse.Namespace) -> None:
+    """Fetch PR data per repo for an alias."""
+    from ..actions.reads import github_get_pr
+    from .ui import console
+
+    result = _read_command(github_get_pr, args, "pr")
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    for repo, info in result["repos"].items():
+        if not info.get("found"):
+            console.print(f"  [repo]{repo}[/]  [muted]PR #{info['pr_number']} not found[/]")
+            continue
+        decision = info.get("review_decision") or "—"
+        draft = " [muted](draft)[/]" if info.get("draft") else ""
+        console.print(f"  [repo]{repo}[/]  PR #{info['pr_number']}  [muted]{decision}[/]{draft}")
+        if info.get("title"):
+            console.print(f"    {info['title']}")
+        if info.get("url"):
+            console.print(f"    [muted]{info['url']}[/]")
+    console.print()
+
+
+def cmd_branch(args: argparse.Namespace) -> None:
+    """Fetch branch info (HEAD, divergence, upstream) per repo."""
+    from ..actions.reads import github_get_branch
+    from .ui import console
+
+    workspace = _load_workspace()
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    try:
+        result = github_get_branch(workspace, args.alias, repo=args.repo)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="branch")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    for repo, info in result["repos"].items():
+        if not info.get("exists_locally"):
+            console.print(f"  [repo]{repo}[/]  [muted]{info['branch']} (not present locally)[/]")
+            continue
+        sha = info.get("head_sha", "")
+        ahead = info.get("ahead", 0)
+        behind = info.get("behind", 0)
+        upstream = "↑" if info.get("has_upstream") else "no upstream"
+        suffix = f"  [muted]{upstream}"
+        if info.get("has_upstream"):
+            suffix += f"  ↑{ahead} ↓{behind}"
+        suffix += "[/]"
+        console.print(f"  [repo]{repo}[/]  {info['branch']}  [muted]@ {sha[:8]}[/]{suffix}")
+    console.print()
+
+
+def cmd_comments(args: argparse.Namespace) -> None:
+    """Fetch temporally classified PR review comments per repo."""
+    from ..actions.reads import github_get_pr_comments
+    from .ui import console
+
+    result = _read_command(github_get_pr_comments, args, "comments")
+    if args.json:
+        _print_json(result)
+        return
+    console.print()
+    console.print(
+        f"  [header]actionable: {result['actionable_count']}[/]  "
+        f"[muted]likely resolved: {result['likely_resolved_count']}  "
+        f"resolved: {result['resolved_thread_count']}[/]"
+    )
+    for repo, info in result["repos"].items():
+        console.print()
+        console.print(f"  [repo]{repo}[/]  PR #{info['pr_number']}  [muted]{info.get('pr_url','')}[/]")
+        actionable = info.get("actionable_threads") or []
+        if not actionable:
+            console.print("    [muted]no actionable threads[/]")
+            continue
+        for t in actionable:
+            line = f"{t.get('path','')}:{t.get('line','')}" if t.get("path") else "(general)"
+            console.print(f"    [warning]•[/] [muted]{line}[/]  {t.get('author','')}")
+            body = (t.get("body") or "").strip().split("\n")[0]
+            if len(body) > 120:
+                body = body[:120] + "…"
+            console.print(f"      {body}")
+    console.print()
+
+
 def cmd_drift(args: argparse.Namespace) -> None:
     """Compare recorded HEAD state vs feature lane expectations across repos."""
     from ..actions.drift import detect_drift
@@ -1824,6 +1959,15 @@ def main() -> None:
     br.add_argument("--repos", default=None, help="Comma-separated repo names")
     br.add_argument("--json", action="store_true", help="Output as JSON")
 
+    binfo = branch_sub.add_parser(
+        "info",
+        help="Branch info per repo (alias = feature or <repo>:<branch>)",
+    )
+    binfo.add_argument("alias", help="Feature alias or <repo>:<branch>")
+    binfo.add_argument("--repo", default=None,
+                        help="Filter feature-alias result to one repo")
+    binfo.add_argument("--json", action="store_true", help="Output as JSON")
+
     # stash (with subcommands)
     stash_p = subparsers.add_parser("stash", help="Stash operations across repos")
     stash_sub = stash_p.add_subparsers(dest="stash_command")
@@ -1940,6 +2084,32 @@ def main() -> None:
                          help="Limit to a specific feature lane")
     drift_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # issue (Linear)
+    issue_p = subparsers.add_parser(
+        "issue",
+        help="Fetch a Linear issue (alias = ID like ENG-412 or feature alias)",
+    )
+    issue_p.add_argument("alias", help="Linear ID or feature alias")
+    issue_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # pr (GitHub)
+    pr_p = subparsers.add_parser(
+        "pr",
+        help="Fetch PR data per repo (alias = feature, <repo>#<n>, or PR URL)",
+    )
+    pr_p.add_argument("alias", help="Feature alias, <repo>#<n>, or PR URL")
+    pr_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # branch info (read tool — sits alongside branch list/delete/rename)
+
+    # comments (PR review comments)
+    comments_p = subparsers.add_parser(
+        "comments",
+        help="Temporally classified PR review comments (alias = feature, <repo>#<n>, URL)",
+    )
+    comments_p.add_argument("alias", help="Feature alias, <repo>#<n>, or PR URL")
+    comments_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # run
     run_p = subparsers.add_parser(
         "run",
@@ -1995,6 +2165,9 @@ def main() -> None:
         "hooks": cmd_hooks,
         "drift": cmd_drift,
         "run": cmd_run,
+        "issue": cmd_issue,
+        "pr": cmd_pr,
+        "comments": cmd_comments,
     }
 
     if args.command == "feature":
@@ -2018,6 +2191,7 @@ def main() -> None:
             "list": cmd_branch_list,
             "delete": cmd_branch_delete,
             "rename": cmd_branch_rename,
+            "info": cmd_branch,
         }
         branch_commands[args.branch_command](args)
     elif args.command == "stash":

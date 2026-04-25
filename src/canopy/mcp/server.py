@@ -649,6 +649,18 @@ def worktree_create(
             issue title and URL. The issue ID is stored in feature
             metadata either way.
         repos: Subset of repo names. Default: all repos.
+
+    Returns:
+        Lane dict with ``worktree_paths``. When ``issue`` was passed,
+        also includes ``linear_lookup: {status, reason?}`` so the agent
+        sees whether the Linear fetch succeeded:
+
+          - ``ok`` — title/url populated.
+          - ``not_configured`` — no linear entry in mcps.json; lane has
+            just the issue ID.
+          - ``failed`` — Linear MCP responded but the fetch errored or
+            returned an empty title/url (often a tool-arg schema
+            mismatch); ``reason`` carries the detail.
     """
     ws = _get_workspace()
     coordinator = FeatureCoordinator(ws)
@@ -656,6 +668,7 @@ def worktree_create(
     linear_issue = ""
     linear_title = ""
     linear_url = ""
+    linear_lookup: dict = {"status": "skipped"}
 
     if issue:
         from ..integrations.linear import (
@@ -672,9 +685,30 @@ def worktree_create(
                 linear_issue = issue_data.get("identifier", issue)
                 linear_title = issue_data.get("title", "")
                 linear_url = issue_data.get("url", "")
-            except (LinearNotConfiguredError, LinearIssueNotFoundError, McpClientError):
+                if linear_title or linear_url:
+                    linear_lookup = {"status": "ok"}
+                else:
+                    # get_issue returned but with no title/url — treat as
+                    # a lookup failure so the agent sees the lane was
+                    # created with just the bare issue ID.
+                    linear_lookup = {
+                        "status": "failed",
+                        "reason": (
+                            "Linear MCP responded but returned no title or URL"
+                            " (likely a tool-arg schema mismatch)"
+                        ),
+                    }
+                    linear_issue = issue
+                    linear_title = ""
+                    linear_url = ""
+            except LinearIssueNotFoundError as e:
+                linear_lookup = {"status": "failed", "reason": f"issue not found: {e}"}
+                linear_issue = issue
+            except (LinearNotConfiguredError, McpClientError) as e:
+                linear_lookup = {"status": "failed", "reason": str(e)}
                 linear_issue = issue
         else:
+            linear_lookup = {"status": "not_configured"}
             linear_issue = issue
 
     from ..features.coordinator import WorktreeLimitError
@@ -698,6 +732,8 @@ def worktree_create(
 
     result = lane.to_dict()
     result["worktree_paths"] = coordinator.resolve_paths(name)
+    if issue:
+        result["linear_lookup"] = linear_lookup
     return result
 
 

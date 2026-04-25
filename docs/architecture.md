@@ -19,17 +19,21 @@ src/canopy/
 │       └── post-checkout.py   # hook script template (CANOPY_REPO + CANOPY_WORKSPACE_ROOT subbed in)
 ├── features/
 │   └── coordinator.py         # FeatureLane + lifecycle (status, switch, diff, done, review_*)
-├── actions/                   # Wave 2: action layer — completion-driven recipes over primitives
+├── actions/                   # Wave 2+: action layer — completion-driven recipes over primitives
 │   ├── errors.py              # ActionError / BlockerError / FailedError / FixAction
 │   ├── aliases.py             # universal alias resolver (feature, repo#n, repo:branch, URL)
+│   ├── active_feature.py      # .canopy/state/active_feature.json reader/writer + last_touched LRU
 │   ├── drift.py               # detect_drift + assert_aligned (cached path)
-│   ├── realign.py             # bring all repos to feature branch (handles dirty trees + auto-stash)
-│   ├── triage.py              # cross-repo PR enumeration + priority tiers
+│   ├── evacuate.py            # WAVE 2.9: per-repo evacuate primitive (stash → wt-add → pop)
+│   ├── feature_state.py       # 8-state machine + next_actions (dashboard backend, worktree-aware)
+│   ├── preflight_state.py     # .canopy/state/preflight.json read/write + freshness check
 │   ├── reads.py               # linear_get_issue / github_get_pr / github_get_branch / github_get_pr_comments
-│   ├── stash.py               # feature-tagged stash save/list/pop
+│   ├── realign.py             # internal helper used by switch (deprecated from CLI/MCP in Wave 2.9)
 │   ├── review_filter.py       # temporal classifier (actionable vs likely_resolved threads)
-│   ├── feature_state.py       # 8-state machine + next_actions (dashboard backend, live git)
-│   └── preflight_state.py     # .canopy/state/preflight.json read/write + freshness check
+│   ├── stash.py               # feature-tagged stash save/list/pop
+│   ├── switch.py              # WAVE 2.9: canonical-slot focus primitive (active rotation + wind-down)
+│   ├── switch_preflight.py    # WAVE 2.9: predictable-failure detection for switch
+│   └── triage.py              # cross-repo PR enumeration + canonical-slot enrichment
 ├── agent/
 │   └── runner.py              # canopy_run — directory-safe shell exec (no path management)
 ├── agent_setup/               # ships the using-canopy skill + sets up MCP per workspace
@@ -40,7 +44,7 @@ src/canopy/
 │   ├── github.py              # GitHub PR + review comments (MCP or gh CLI fallback)
 │   └── precommit.py           # detect + run pre-commit hooks (framework or git hooks)
 └── mcp/
-    ├── server.py              # MCP server — 43 tools, stdio transport
+    ├── server.py              # MCP server — 41 tools, stdio transport
     └── client.py              # MCP client — stdio + HTTP+OAuth transports
 ```
 
@@ -92,11 +96,20 @@ A typical session through canopy MCP. Every arrow is one MCP call. Note the agen
 
    ── read next_actions[0] ──
 
-   realign(feature)                  ─→  per repo:
-                                           git.current_branch
-                                           git.checkout (if needed)
-                                           post-checkout hook updates heads.json
-                                     ←─  per-repo {status, before, after, stash_ref?}
+   switch(feature)                   ─→  switch_preflight (no state change):
+                                           branch existence, leftover paths,
+                                           git lock, cap-reached prediction
+                                         per repo (Wave 2.9 canonical-slot):
+                                           if Y warm   → worktree_remove(Y)
+                                           if X exists → evacuate_repo(X):
+                                                            git.stash (if dirty)
+                                                            git.checkout(target Y)
+                                                            git.worktree_add(X)
+                                                            git.stash_pop in worktree
+                                           else        → git.stash + git.checkout
+                                         active_feature.write (canonical + last_touched)
+                                     ←─  {feature, mode, per_repo_paths,
+                                          previously_canonical, eviction?, branches_created?}
 
    feature_state(feature)            ─→  …
                                      ←─  state advanced (e.g. drifted → in_progress)

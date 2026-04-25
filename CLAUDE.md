@@ -2,7 +2,9 @@
 
 ## What This Project Is
 
-Canopy is the **context contract** between an AI coding agent and a multi-repo workspace, plus a **drift-proof CLI** for the human. Every operation takes semantic context (`feature`, `repo`, alias) and resolves paths internally — the agent literally can't `cd` to the wrong directory because it never specifies a directory. Multi-repo drift is detected in real time via per-repo post-checkout hooks and surfaced as a structured `BlockerError` with a `realign` fix action. PR review comments are temporally classified into `actionable_threads` vs `likely_resolved_threads`, so the agent's context budget goes to comprehension, not orchestration.
+Canopy is the **context contract** between an AI coding agent and a multi-repo workspace, plus a **drift-proof CLI** for the human. Every operation takes semantic context (`feature`, `repo`, alias) and resolves paths internally — the agent literally can't `cd` to the wrong directory because it never specifies a directory. Multi-repo drift is detected in real time via per-repo post-checkout hooks and surfaced as a structured `BlockerError`. PR review comments are temporally classified into `actionable_threads` vs `likely_resolved_threads`, so the agent's context budget goes to comprehension, not orchestration.
+
+**`canopy switch` is the focus primitive (Wave 2.9 canonical-slot model).** Each feature lives in one of three states: **canonical** (checked out in main repo), **warm** (worktree at `.canopy/worktrees/<f>/<r>/`), **cold** (branch only). `switch(Y)` promotes Y to canonical; previously-canonical X either evacuates to warm (active rotation, default — instant to switch back) or goes cold with a feature-tagged stash (wind-down via `--release-current`). Cap (`max_worktrees`, default 2) protects against unbounded growth via LRU eviction or a `worktree_cap_reached` BlockerError. See [docs/concepts.md §4](docs/concepts.md#4-the-canonical-slot-model).
 
 ## Architecture
 
@@ -21,17 +23,21 @@ src/canopy/
 │   ├── hooks.py             # install/uninstall post-checkout hook + heads.json reader
 │   └── templates/post-checkout.py   # hook script (Python, fcntl-locked, never blocks git)
 ├── features/coordinator.py   # FeatureLane, FeatureCoordinator (+ branches map for per-repo branches)
-├── actions/                 # WAVE 2: action layer — completion-driven recipes
+├── actions/                 # WAVE 2+: action layer — completion-driven recipes
 │   ├── errors.py            # ActionError / BlockerError / FailedError / FixAction
 │   ├── aliases.py           # universal alias resolver + repos_for_feature helper
+│   ├── active_feature.py    # .canopy/state/active_feature.json reader/writer + last_touched LRU
 │   ├── drift.py             # detect_drift + assert_aligned (cached path)
-│   ├── realign.py           # bring repos onto feature branch (auto_stash for dirty trees)
-│   ├── triage.py            # cross-repo PR enumeration + priority tiers
+│   ├── evacuate.py          # WAVE 2.9: per-repo evacuate primitive (stash → wt-add → pop)
+│   ├── feature_state.py     # 8-state machine, dashboard backend (live git, worktree-aware)
+│   ├── preflight_state.py   # records preflight result for state machine
 │   ├── reads.py             # 4 alias-aware read primitives
+│   ├── realign.py           # internal helper used by switch (deprecated from CLI/MCP in Wave 2.9)
+│   ├── review_filter.py     # temporal classifier
 │   ├── stash.py             # feature-tagged stash save/list/pop
-│   ├── review_filter.py     # temporal classifier (validated against 4 real PRs)
-│   ├── feature_state.py     # 8-state machine, dashboard backend (live git)
-│   └── preflight_state.py   # records preflight result for state machine
+│   ├── switch.py            # WAVE 2.9: canonical-slot focus primitive
+│   ├── switch_preflight.py  # WAVE 2.9: predictable-failure detection for switch
+│   └── triage.py            # cross-repo PR enumeration + priority tiers (canonical-slot enriched)
 ├── agent/
 │   └── runner.py            # canopy_run — directory-safe shell exec
 ├── agent_setup/             # ships using-canopy skill + setup_agent installer
@@ -42,7 +48,7 @@ src/canopy/
 │   ├── github.py            # GitHub PR + comments (MCP or gh CLI fallback)
 │   └── precommit.py         # detect + run pre-commit hooks
 └── mcp/
-    ├── server.py            # MCP server — 43 tools, stdio transport
+    ├── server.py            # MCP server — 41 tools, stdio transport
     └── client.py            # MCP client — stdio + HTTP+OAuth transports
 ```
 
@@ -56,7 +62,7 @@ src/canopy/
 - **Per-repo branches map** — `FeatureLane.branches: dict[repo, branch]` overrides "branch == feature name" for legacy mismatched-naming features. Use `lane.branch_for(repo)` or `repos_for_feature(workspace, feature)` everywhere — never recompute as `[r for r in feature.repos]` with feature name as branch (regresses Gap 2).
 - **Feature lanes use real Git branches and worktrees.** No virtual branches.
 - **Feature metadata lives in `.canopy/features.json`.** Worktrees in `.canopy/worktrees/<feature>/<repo>/` (only when created with `--worktree`).
-- **State files** at `.canopy/state/heads.json` (post-checkout hook output) and `.canopy/state/preflight.json` (preflight tracker). OAuth tokens at `~/.canopy/mcp-tokens/`.
+- **State files** at `.canopy/state/heads.json` (post-checkout hook output), `.canopy/state/preflight.json` (preflight tracker), and `.canopy/state/active_feature.json` (current canonical + per-repo paths + `last_touched` LRU map for switch eviction). OAuth tokens at `~/.canopy/mcp-tokens/`.
 - **MCP client supports two transports.** Stdio (existing) for npm/python servers. HTTP+OAuth (new) for hosted servers like Linear's `mcp.linear.app`. Tokens cache per server.
 - **GitHub fallback to gh CLI.** When no `github` MCP server is configured, `integrations/github.py` falls back to `gh api` / `gh pr` for the same return shapes. If neither is available, raises `BlockerError(code='github_not_configured')` with platform-aware install hints.
 - **Single source of truth for state.** `feature_state` uses live git (not heads.json) so it's correct even when the hook hasn't fired. `drift` uses heads.json for the fast cached path.
@@ -66,7 +72,7 @@ src/canopy/
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 354 tests, ~60s
+pytest tests/ -v          # 401 tests, ~60s
 ```
 
 ## Test Fixtures
@@ -83,11 +89,11 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 - **Python 3.10+ compat:** `tomli` on 3.10, `tomllib` on 3.11+. See `config.py`.
 - **Drift detection:** post-checkout hook installed by `canopy init` (or `canopy hooks install`). Hook is Python; uses `fcntl.flock` + atomic rename so concurrent fires across repos don't race. Respects `core.hooksPath` (Husky-friendly). Chains pre-existing user hooks. Worktrees inherit hooks via `commondir` resolution.
 - **`--no-track` on branch creation:** `git/repo.py:create_branch` and `worktree_add` always pass `--no-track` so a `branch.autoSetupMerge=inherit` gitconfig doesn't accidentally set the new branch's upstream to `dev`.
-- **Worktree limits:** `max_worktrees` in canopy.toml caps active worktrees. `WorktreeLimitError` includes stale candidates.
+- **Worktree limits:** `max_worktrees` in canopy.toml caps explicit `worktree_create` calls (`WorktreeLimitError` includes stale candidates). For `switch`'s canonical-slot logic, the same field is interpreted as the warm-slot cap; if unset (0), the new default is **2** (1 canonical + 2 warm = 3 live trees max). See `actions/switch_preflight.py:warm_slot_cap`.
 - **Action contract:** `actions/protocol.py` (planned) will formalize the per-repo `{status, before, after, reason?}` shape. For now, each action returns it ad-hoc.
 - **Skill bundling:** `src/canopy/agent_setup/skill.md` ships in the wheel; `canopy setup-agent` (or `canopy init`) copies it to `~/.claude/skills/using-canopy/SKILL.md`. Foreign skills with the same path are not overwritten without `--reinstall`.
 
-## MCP Server (43 tools)
+## MCP Server (41 tools)
 
 Grouped by topic. Run with `canopy-mcp` (entry point) or `python -m canopy.mcp.server`.
 
@@ -96,7 +102,7 @@ Workspace:    workspace_status, workspace_context, workspace_config, workspace_r
 Feature:      feature_create, feature_list, feature_status, feature_diff,
               feature_changes, feature_merge_readiness, feature_paths, feature_done,
               feature_link_linear, feature_state
-Actions:      triage, realign, drift
+Actions:      switch, triage, drift          # realign deprecated from MCP; internal helper
 Reads:        linear_get_issue, github_get_pr, github_get_branch, github_get_pr_comments,
               linear_my_issues
 Run/Pre:      run, preflight, review_status, review_comments, review_prep

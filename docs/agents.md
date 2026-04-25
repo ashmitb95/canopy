@@ -6,7 +6,7 @@ How AI coding agents (Claude Code primarily; others by analogy) integrate with c
 
 Three pieces, all installed in one step by `canopy init`:
 
-1. **Canopy MCP server** (`canopy-mcp` binary) — 43 tools exposing every canopy operation. Registered in `<workspace>/.mcp.json`.
+1. **Canopy MCP server** (`canopy-mcp` binary) — 41 tools exposing every canopy operation. Registered in `<workspace>/.mcp.json`.
 2. **`using-canopy` skill** at `~/.claude/skills/using-canopy/SKILL.md` — tells the agent *when* to prefer canopy MCP over raw bash.
 3. **Per-workspace MCP config** in `<workspace>/.mcp.json` with `CANOPY_ROOT` set so the server scopes to the right workspace.
 
@@ -48,7 +48,8 @@ The skill encodes this matrix; the agent reads it on session start. Mirror here 
 |---|---|---|
 | What feature should I work on? | `mcp__canopy__triage` | per-repo `gh pr list` + manual grouping |
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads |
-| Switch / fix branches across repos | `mcp__canopy__realign` | `cd repo && git checkout` |
+| Promote a feature to canonical (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout`, or guessing paths |
+| Wind down current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` | manual stash + checkout dance |
 | Check HEAD alignment | `mcp__canopy__drift` | `git branch --show-current` per repo |
 | PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + custom filter |
 | PR data (title, decision, draft) | `mcp__canopy__github_get_pr` | `gh pr view --json` per repo |
@@ -71,31 +72,31 @@ Demo (output from a real test workspace, MCP-only — no bash):
 
 ```
 STEP 1: triage
-  • doc-1001-paired   priority=review_required
-      test-api  PR#1  actionable=1
-      test-ui   PR#1  actionable=1
+  canonical_feature: SIN-12-search
+  • SIN-12-search        is_canonical=true   physical_state=canonical
+      backend  PR#7  actionable=1
+      frontend PR#3  actionable=1
+  • SIN-13-empty-state   is_canonical=false  physical_state=warm
+      frontend PR#4  actionable=0
+  • SIN-14-stale-count   is_canonical=false  physical_state=cold
 
-STEP 2: feature_state("doc-1001-paired")
+STEP 2: feature_state("SIN-12-search")
   state: ready_to_commit
   next:
-    PRIMARY  commit({"feature": "doc-1001-paired"})
+    PRIMARY  commit({"feature": "SIN-12-search"})
 
-STEP 3: github_get_pr_comments("doc-1001-paired")
+STEP 3: github_get_pr_comments("SIN-12-search")
   total actionable: 2
-  [test-api] src/app.py:18 (reviewer) — add a docstring with example response
-  [test-ui]  src/UnarchiveButton.tsx:4 (reviewer) — prefer a discriminated union
+  [backend]  src/app.py:18 (reviewer) — add a docstring with example response
+  [frontend] src/EmptyState.tsx:4 (reviewer) — prefer a discriminated union
 
-STEP 4 (manual git switch elsewhere → drift)
+STEP 4: agent decides to pivot to SIN-13-empty-state (currently warm)
+  switch({"feature": "SIN-13-empty-state"})
+    mode=active_rotation
+    previously_canonical=SIN-12-search   (evacuated to warm worktree)
+    per_repo_paths.frontend=/.../canopy-test/frontend  (now on SIN-13)
 
-STEP 5: feature_state("doc-1001-paired")
-  state: drifted
-  primary fix: realign({"feature": "doc-1001-paired"})
-
-STEP 6: realign("doc-1001-paired")
-  aligned: True
-  test-ui: status=checkout_ok before=main after=doc-1001-paired
-
-STEP 7: feature_state confirms ready_to_commit
+STEP 5: feature_state("SIN-13-empty-state") confirms in_progress
 ```
 
 `next_actions` is canopy's recommendation. Trust it unless you have a specific reason not to. Same data the [VSCode dashboard](https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy) renders as the primary button.
@@ -107,13 +108,23 @@ Canopy errors come back as structured `BlockerError` / `FailedError`:
 ```json
 {
   "status": "blocked",
-  "code": "drift_detected",
-  "what": "branches don't match feature lane 'doc-3029'",
-  "expected": {...},
-  "actual":   {...},
+  "code": "worktree_cap_reached",
+  "what": "adding 'SIN-12-search' as warm would exceed warm_slot_cap=2",
+  "expected": {"warm_slot_cap": 2},
+  "actual":   {"warm_now": ["SIN-13-empty-state", "SIN-14-stale-count"]},
   "fix_actions": [
-    {"action": "realign", "args": {"feature": "doc-3029"},
-     "safe": true, "preview": "checkout doc-3029 in ui (clean)"}
+    {"action": "switch",
+     "args": {"feature": "SIN-15-cache", "release_current": true},
+     "safe": false,
+     "preview": "wind-down mode: SIN-12-search goes cold (with stash), no eviction needed"},
+    {"action": "switch",
+     "args": {"feature": "SIN-15-cache", "evict": "SIN-14-stale-count"},
+     "safe": false,
+     "preview": "evict LRU warm worktree 'SIN-14-stale-count' to cold"},
+    {"action": "workspace_config",
+     "args": {"max_worktrees": 3},
+     "safe": true,
+     "preview": "raise warm_slot_cap to 3"}
   ]
 }
 ```

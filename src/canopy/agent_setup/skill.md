@@ -45,13 +45,13 @@ The `next_actions` array is canopy's recommendation. Trust it unless you have a 
 ## Aliases
 
 Every tool that takes a feature accepts the same alias forms — learn one rule, use everywhere:
-- **Feature name**: `doc-3029-paired`
-- **Linear issue ID**: `ENG-412` (resolves through the lane's `linear_issue` field)
-- **Specific PR**: `<repo>#<n>` like `docsum-api#1287`
-- **PR URL**: `https://github.com/owner/repo/pull/1287`
-- **Specific branch**: `<repo>:<branch>` like `docsum-api:feature/x`
+- **Feature name**: `SIN-12-search`
+- **Linear issue ID**: `SIN-12` (resolves through the lane's `linear_issue` field)
+- **Specific PR**: `<repo>#<n>` like `backend#142`
+- **PR URL**: `https://github.com/owner/repo/pull/142`
+- **Specific branch**: `<repo>:<branch>` like `backend:feature/x`
 
-For features whose branch name differs across repos (e.g. `doc-3010-fixes` in api vs `DOC-3010-fixes-v2` in ui), the lane's `branches` map handles this transparently. You pass the canonical feature alias; canopy resolves per-repo branches.
+For features whose branch name differs across repos (e.g. `SIN-13-fixes` in backend vs `SIN-13-fixes-v2` in frontend), the lane's `branches` map handles this transparently. You pass the canonical feature alias; canopy resolves per-repo branches.
 
 ## Errors are structured — read them
 
@@ -64,7 +64,7 @@ Canopy errors come back as:
   "expected": {...},
   "actual": {...},
   "fix_actions": [
-    {"action": "switch", "args": {"feature": "doc-3029"}, "safe": true, "preview": "..."}
+    {"action": "switch", "args": {"feature": "SIN-12-search"}, "safe": true, "preview": "..."}
   ]
 }
 ```

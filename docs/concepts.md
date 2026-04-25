@@ -26,12 +26,12 @@ Every error from an action carries enough machine-readable context that the cons
 {
   "status": "blocked",
   "code": "drift_detected",
-  "what": "branches don't match feature lane 'doc-3029'",
-  "expected": {"branches": {"api": "doc-3029", "ui": "doc-3029"}},
-  "actual":   {"branches": {"api": "doc-3029", "ui": "main"}},
+  "what": "branches don't match feature lane 'SIN-12-search'",
+  "expected": {"branches": {"backend": "SIN-12-search", "frontend": "SIN-12-search"}},
+  "actual":   {"branches": {"backend": "SIN-12-search", "frontend": "main"}},
   "fix_actions": [
-    {"action": "realign", "args": {"feature": "doc-3029"},
-     "safe": true, "preview": "checkout doc-3029 in ui (clean)"}
+    {"action": "switch", "args": {"feature": "SIN-12-search"},
+     "safe": true, "preview": "promote SIN-12-search to canonical in all repos"}
   ]
 }
 ```
@@ -56,13 +56,13 @@ Every read tool accepts the same alias forms. Learn one rule, use everywhere:
 
 | Form | Example | Notes |
 |---|---|---|
-| Feature name | `doc-3029-paired` | Matches `features.json` entry |
-| Linear issue ID | `ENG-412` | Matches lane's `linear_issue` field |
-| Specific PR | `<repo>#<n>` like `docsum-api#1287` | Bypasses feature lookup |
-| PR URL | `https://github.com/owner/repo/pull/1287` | Parsed |
+| Feature name | `SIN-12-search` | Matches `features.json` entry |
+| Linear issue ID | `SIN-12` | Matches lane's `linear_issue` field |
+| Specific PR | `<repo>#<n>` like `backend#142` | Bypasses feature lookup |
+| PR URL | `https://github.com/owner/repo/pull/142` | Parsed |
 | Specific branch | `<repo>:<branch>` | For `branch info` |
 
-For features whose branch differs across repos (e.g., `doc-1003-fixes` in api, `DOC-1003-fixes-v2` in ui), the lane's `branches` map handles it transparently. You pass the canonical feature alias; canopy resolves per-repo branches.
+For features whose branch differs across repos (e.g., `SIN-13-fixes` in backend, `SIN-13-fixes-v2` in frontend — common when one side rebases or renames mid-flight), the lane's `branches` map handles it transparently. You pass the canonical feature alias; canopy resolves per-repo branches.
 
 ## 3. The 8-state machine
 
@@ -70,7 +70,7 @@ For features whose branch differs across repos (e.g., `doc-1003-fixes` in api, `
 
 | State | Detection | Primary `next_actions` |
 |---|---|---|
-| **`drifted`** | live `current_branch` ≠ expected for any repo in the lane | `switch(feature)` for worktree-backed features; `realign(feature)` for main-tree |
+| **`drifted`** | live `current_branch` ≠ expected for any repo in the lane | `switch(feature)` (canonical-slot model — handles both worktree and main-tree cases) |
 | **`needs_work`** | clean + (CHANGES_REQUESTED or actionable comments) | `address_review_comments(feature)` |
 | **`in_progress`** | aligned + dirty + no fresh preflight | `preflight(feature)` |
 | **`ready_to_commit`** | aligned + dirty + preflight passed for current HEAD | `commit(feature)` |

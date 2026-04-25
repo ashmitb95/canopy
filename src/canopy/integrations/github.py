@@ -1,14 +1,17 @@
 """
-GitHub integration via MCP.
+GitHub integration via MCP, with gh CLI fallback.
 
 Fetches PR data and review comments from a GitHub MCP server configured
-in .canopy/mcps.json. Canopy never talks to GitHub directly — it always
-goes through the MCP layer.
+in .canopy/mcps.json when available, falling back to the user's local
+``gh`` CLI when MCP isn't configured. Same return shapes either way so
+upstream callers don't branch.
 """
 from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +24,7 @@ from ..mcp.client import (
 
 
 class GitHubNotConfiguredError(Exception):
-    """GitHub MCP is not configured in .canopy/mcps.json."""
+    """Neither GitHub MCP nor authenticated gh CLI is available."""
 
 
 class PullRequestNotFoundError(Exception):
@@ -47,8 +50,36 @@ def _get_github_config(workspace_root: Path) -> dict:
 
 
 def is_github_configured(workspace_root: Path) -> bool:
-    """Check if GitHub MCP is set up."""
-    return is_mcp_configured(workspace_root, "github")
+    """Check if GitHub access is available — MCP first, gh CLI as fallback."""
+    return is_mcp_configured(workspace_root, "github") or have_gh_cli()
+
+
+def have_gh_cli() -> bool:
+    """True if the gh CLI is installed and authenticated."""
+    if shutil.which("gh") is None:
+        return False
+    result = subprocess.run(
+        ["gh", "auth", "status"], capture_output=True, text=True, check=False,
+    )
+    return result.returncode == 0
+
+
+def _gh(args: list[str], timeout: float = 15.0) -> str:
+    """Run gh and return stdout. Raises GitHubNotConfiguredError on failure."""
+    try:
+        proc = subprocess.run(
+            ["gh"] + args, capture_output=True, text=True,
+            timeout=timeout, check=False,
+        )
+    except FileNotFoundError as e:
+        raise GitHubNotConfiguredError(f"gh CLI not on PATH: {e}")
+    except subprocess.TimeoutExpired as e:
+        raise GitHubNotConfiguredError(f"gh CLI timed out: {' '.join(args)}")
+    if proc.returncode != 0:
+        raise GitHubNotConfiguredError(
+            f"gh {' '.join(args)} failed: {proc.stderr.strip() or proc.stdout.strip()}"
+        )
+    return proc.stdout
 
 
 def _parse_mcp_result(result: Any) -> Any:
@@ -99,51 +130,191 @@ def find_pull_request(
     repo: str,
     branch: str,
 ) -> dict | None:
-    """Find an open PR for a branch in a repo.
+    """Find an open PR for a branch in a repo. Returns None if not found.
 
-    Returns PR data dict or None if no PR exists.
-
-    The dict includes at minimum: number, title, url, state, head_branch.
+    Tries the configured GitHub MCP server first, then falls back to
+    ``gh pr list``. Same dict shape either way: at minimum ``number,
+    title, url, state, head_branch``.
     """
-    config = _get_github_config(workspace_root)
-
-    # Try common GitHub MCP tool names for listing/searching PRs
-    tool_attempts = [
-        ("list_pull_requests", {
-            "owner": owner,
-            "repo": repo,
-            "head": f"{owner}:{branch}",
-            "state": "open",
-        }),
-        ("search_pull_requests", {
-            "owner": owner,
-            "repo": repo,
-            "head": branch,
-            "state": "open",
-        }),
-        ("list_pull_requests", {
-            "owner": owner,
-            "repo": repo,
-            "state": "open",
-        }),
-    ]
-
-    last_error = None
-    for tool_name, args in tool_attempts:
-        try:
-            result = call_tool(config, tool_name, args, timeout=15.0)
-            parsed = _parse_mcp_result(result)
-            if parsed is None:
+    if is_mcp_configured(workspace_root, "github"):
+        config = _get_github_config(workspace_root)
+        tool_attempts = [
+            ("list_pull_requests", {
+                "owner": owner, "repo": repo,
+                "head": f"{owner}:{branch}", "state": "open",
+            }),
+            ("search_pull_requests", {
+                "owner": owner, "repo": repo,
+                "head": branch, "state": "open",
+            }),
+            ("list_pull_requests", {
+                "owner": owner, "repo": repo, "state": "open",
+            }),
+        ]
+        for tool_name, args in tool_attempts:
+            try:
+                result = call_tool(config, tool_name, args, timeout=15.0)
+                parsed = _parse_mcp_result(result)
+                if parsed is None:
+                    continue
+                prs = _extract_prs(parsed, branch)
+                if prs:
+                    return _normalize_pr(prs[0])
+            except McpClientError:
                 continue
+        # MCP configured but didn't find anything — don't fall back; treat as
+        # authoritative "no PR" to avoid double-querying.
+        return None
 
-            prs = _extract_prs(parsed, branch)
-            if prs:
-                return _normalize_pr(prs[0])
-        except McpClientError as e:
-            last_error = e
-            continue
+    if have_gh_cli():
+        try:
+            output = _gh([
+                "pr", "list",
+                "--repo", f"{owner}/{repo}",
+                "--head", branch, "--state", "open",
+                "--json", "number,title,url,state,headRefName,body",
+                "--limit", "5",
+            ])
+            data = json.loads(output) if output.strip() else []
+            if data:
+                pr = data[0]
+                return _normalize_pr({
+                    "number": pr.get("number"),
+                    "title": pr.get("title"),
+                    "html_url": pr.get("url"),
+                    "state": (pr.get("state") or "open").lower(),
+                    "head": {"ref": pr.get("headRefName")},
+                    "body": pr.get("body") or "",
+                })
+        except (GitHubNotConfiguredError, json.JSONDecodeError):
+            pass
+        return None
 
-    return None
+    raise GitHubNotConfiguredError(
+        "GitHub access not configured. Either:\n"
+        "  - Add a 'github' entry to .canopy/mcps.json, OR\n"
+        "  - Install gh CLI and run `gh auth login`"
+    )
+
+
+def get_pull_request_by_number(
+    workspace_root: Path,
+    owner: str,
+    repo: str,
+    pr_number: int,
+) -> dict | None:
+    """Fetch a specific PR by number. Returns None if not found.
+
+    MCP first; gh fallback. Same return shape as ``find_pull_request``,
+    plus ``base_branch``, ``mergeable``, ``draft``, ``review_decision``.
+    """
+    if is_mcp_configured(workspace_root, "github"):
+        config = _get_github_config(workspace_root)
+        for tool_name, args in [
+            ("get_pull_request", {"owner": owner, "repo": repo, "pull_number": pr_number}),
+            ("pull_request_get", {"owner": owner, "repo": repo, "pull_number": pr_number}),
+        ]:
+            try:
+                result = call_tool(config, tool_name, args, timeout=15.0)
+                parsed = _parse_mcp_result(result)
+                if parsed:
+                    return _normalize_pr(parsed)
+            except McpClientError:
+                continue
+        return None
+
+    if have_gh_cli():
+        try:
+            output = _gh([
+                "pr", "view", str(pr_number),
+                "--repo", f"{owner}/{repo}",
+                "--json", "number,title,url,state,headRefName,baseRefName,body,reviewDecision,mergeable,isDraft",
+            ])
+            pr = json.loads(output) if output.strip() else None
+            if pr:
+                return _normalize_pr({
+                    "number": pr.get("number"),
+                    "title": pr.get("title"),
+                    "html_url": pr.get("url"),
+                    "state": (pr.get("state") or "open").lower(),
+                    "head": {"ref": pr.get("headRefName")},
+                    "base": {"ref": pr.get("baseRefName")},
+                    "body": pr.get("body") or "",
+                    "review_decision": pr.get("reviewDecision") or "",
+                    "mergeable": pr.get("mergeable") or "",
+                    "draft": bool(pr.get("isDraft")),
+                })
+        except (GitHubNotConfiguredError, json.JSONDecodeError):
+            pass
+        return None
+
+    raise GitHubNotConfiguredError(
+        "GitHub access not configured. Either set up github MCP or install gh CLI."
+    )
+
+
+def list_open_prs(
+    workspace_root: Path,
+    owner: str,
+    repo: str,
+    author: str | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """List open PRs in a repo, optionally filtered by author.
+
+    MCP first; gh fallback. Each entry: ``{number, title, url, state,
+    head_branch, review_decision, body}``.
+    """
+    if is_mcp_configured(workspace_root, "github"):
+        config = _get_github_config(workspace_root)
+        args = {"owner": owner, "repo": repo, "state": "open"}
+        if author:
+            args["author"] = author
+        for tool_name in ("list_pull_requests", "search_pull_requests"):
+            try:
+                result = call_tool(config, tool_name, args, timeout=15.0)
+                parsed = _parse_mcp_result(result)
+                if parsed is None:
+                    continue
+                prs = parsed if isinstance(parsed, list) else (
+                    parsed.get("pull_requests") or parsed.get("items")
+                    or parsed.get("data") or []
+                )
+                if isinstance(prs, list):
+                    return [_normalize_pr(p) for p in prs[:limit]]
+            except McpClientError:
+                continue
+        return []
+
+    if have_gh_cli():
+        try:
+            cli_args = [
+                "pr", "list", "--repo", f"{owner}/{repo}",
+                "--state", "open", "--limit", str(limit),
+                "--json", "number,title,url,state,headRefName,body,reviewDecision",
+            ]
+            if author:
+                cli_args.extend(["--author", author])
+            output = _gh(cli_args)
+            data = json.loads(output) if output.strip() else []
+            return [
+                _normalize_pr({
+                    "number": pr.get("number"),
+                    "title": pr.get("title"),
+                    "html_url": pr.get("url"),
+                    "state": (pr.get("state") or "open").lower(),
+                    "head": {"ref": pr.get("headRefName")},
+                    "body": pr.get("body") or "",
+                    "review_decision": pr.get("reviewDecision") or "",
+                })
+                for pr in data
+            ]
+        except (GitHubNotConfiguredError, json.JSONDecodeError):
+            return []
+
+    raise GitHubNotConfiguredError(
+        "GitHub access not configured. Either set up github MCP or install gh CLI."
+    )
 
 
 def _extract_prs(data: Any, branch: str) -> list[dict]:
@@ -185,20 +356,26 @@ def _extract_prs(data: Any, branch: str) -> list[dict]:
 
 
 def _normalize_pr(data: dict) -> dict:
-    """Normalize PR data into a consistent shape."""
+    """Normalize PR data into a consistent shape across MCP / gh."""
     head = data.get("head") or {}
-    head_branch = ""
-    if isinstance(head, dict):
-        head_branch = head.get("ref", "")
+    head_branch = head.get("ref", "") if isinstance(head, dict) else ""
     if not head_branch:
         head_branch = data.get("head_branch") or ""
+    base = data.get("base") or {}
+    base_branch = base.get("ref", "") if isinstance(base, dict) else ""
+    if not base_branch:
+        base_branch = data.get("base_branch") or ""
     return {
         "number": data.get("number") or data.get("id"),
         "title": data.get("title") or "",
         "url": data.get("html_url") or data.get("url") or "",
         "state": data.get("state") or "open",
         "head_branch": head_branch,
+        "base_branch": base_branch,
         "body": data.get("body") or "",
+        "review_decision": data.get("review_decision") or data.get("reviewDecision") or "",
+        "mergeable": data.get("mergeable") or "",
+        "draft": bool(data.get("draft") or data.get("isDraft")),
     }
 
 
@@ -208,7 +385,7 @@ def get_review_comments(
     repo: str,
     pr_number: int,
 ) -> tuple[list[dict], int]:
-    """Fetch review comments for a PR.
+    """Fetch review comments for a PR. MCP first; gh CLI fallback.
 
     Returns ``(comments, resolved_count)``: comments are normalized with
     fields ``path, line, body, author, author_type, state, created_at,
@@ -216,42 +393,35 @@ def get_review_comments(
     excluded because GitHub flagged them resolved.
 
     Bot threads are kept (the temporal classifier downstream handles
-    staleness). If all tool-name attempts fail, returns ``([], 0)``.
+    staleness). If neither path is available, returns ``([], 0)``.
     """
-    config = _get_github_config(workspace_root)
+    if is_mcp_configured(workspace_root, "github"):
+        config = _get_github_config(workspace_root)
+        for tool_name, args in [
+            ("get_pull_request_comments", {"owner": owner, "repo": repo, "pull_number": pr_number}),
+            ("list_review_comments", {"owner": owner, "repo": repo, "pull_number": pr_number}),
+            ("get_pull_request_reviews", {"owner": owner, "repo": repo, "pull_number": pr_number}),
+        ]:
+            try:
+                result = call_tool(config, tool_name, args, timeout=15.0)
+                parsed = _parse_mcp_result(result)
+                if parsed is not None:
+                    return _normalize_comments(parsed)
+            except McpClientError:
+                continue
+        return [], 0
 
-    # Try different tool names
-    tool_attempts = [
-        ("get_pull_request_comments", {
-            "owner": owner,
-            "repo": repo,
-            "pull_number": pr_number,
-        }),
-        ("list_review_comments", {
-            "owner": owner,
-            "repo": repo,
-            "pull_number": pr_number,
-        }),
-        ("get_pull_request_reviews", {
-            "owner": owner,
-            "repo": repo,
-            "pull_number": pr_number,
-        }),
-    ]
-
-    last_error = None
-    for tool_name, args in tool_attempts:
+    if have_gh_cli():
         try:
-            result = call_tool(config, tool_name, args, timeout=15.0)
-            parsed = _parse_mcp_result(result)
-            if parsed is not None:
-                return _normalize_comments(parsed)
-        except McpClientError as e:
-            last_error = e
-            continue
+            output = _gh([
+                "api", f"repos/{owner}/{repo}/pulls/{pr_number}/comments",
+                "--paginate",
+            ])
+            data = json.loads(output) if output.strip() else []
+            return _normalize_comments(data)
+        except (GitHubNotConfiguredError, json.JSONDecodeError):
+            return [], 0
 
-    # If all tool names failed, return empty (not an error — PR might
-    # have no comments, or the MCP server uses unknown tool names)
     return [], 0
 
 

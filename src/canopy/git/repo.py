@@ -67,6 +67,17 @@ def head_sha(repo_path: Path) -> str:
     return _run(["rev-parse", "HEAD"], cwd=repo_path)
 
 
+def sha_of(repo_path: Path, ref: str) -> str:
+    """Resolve any ref (branch / sha / tag) to its full commit sha.
+
+    Returns empty string if the ref doesn't resolve.
+    """
+    try:
+        return _run(["rev-parse", "--verify", f"{ref}^{{commit}}"], cwd=repo_path)
+    except GitError:
+        return ""
+
+
 def short_sha(repo_path: Path) -> str:
     """Get the short HEAD commit sha."""
     return _run(["rev-parse", "--short", "HEAD"], cwd=repo_path)

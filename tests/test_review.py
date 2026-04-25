@@ -268,7 +268,9 @@ class TestRunPrecommit:
 # ── GitHub MCP config ───────────────────────────────────────────────────
 
 class TestGitHubConfig:
-    def test_not_configured(self, tmp_path):
+    def test_not_configured(self, tmp_path, monkeypatch):
+        # Force gh CLI fallback off so we test the pure no-config case.
+        monkeypatch.setattr("canopy.integrations.github.have_gh_cli", lambda: False)
         assert is_github_configured(tmp_path) is False
 
     def test_configured(self, tmp_path):
@@ -287,11 +289,14 @@ class TestGitHubConfig:
 # ── Coordinator review_status (mocked MCP) ─────────────────────────────
 
 class TestReviewStatus:
-    def test_no_github_config_raises(self, workspace_with_feature, canopy_toml):
-        """review_status raises if GitHub MCP isn't configured."""
+    def test_no_github_config_raises(self, workspace_with_feature, canopy_toml, monkeypatch):
+        """review_status raises if neither GitHub MCP nor gh CLI is available."""
         from canopy.workspace.config import load_config
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator
+
+        # Force both transports off.
+        monkeypatch.setattr("canopy.integrations.github.have_gh_cli", lambda: False)
 
         config = load_config(canopy_toml)
         ws = Workspace(config)

@@ -47,9 +47,8 @@ Write actions and execution.
 
 | Command | What it does |
 |---|---|
-| `canopy switch <feature> [--create-worktrees] [--auto-stash]` | Activate a feature as the current workspace context. If feature has worktrees → mark them active. If main-tree only → call realign internally. If neither + `--create-worktrees` → create worktrees on the fly. After switch, `canopy state` / `canopy run <repo> <cmd>` (without `--feature`) default to this feature. |
-| `canopy realign <feature> [--auto-stash]` | Bring all repos in the feature lane onto the feature's branch. Pure drift-fixer for main-tree features (does NOT activate as context — use `switch` for that). `--auto-stash` tags + stashes dirty trees first via P12. |
-| `canopy checkout <branch>` | Plain checkout across all repos — no feature context, no per-repo branch resolution. Use `realign` for feature-scoped switching. |
+| `canopy switch <feature> [--release-current] [--no-evict] [--evict <f>]` | **The focus primitive (Wave 2.9).** Promote a feature to the canonical slot. Default (active rotation): previously-canonical evacuates to a warm worktree (full stash → checkout → pop). `--release-current` (wind-down): previous goes cold with a feature-tagged stash. Cap-reached blocker surfaces explicit fix actions (wind-down, evict by name, raise cap). See [docs/concepts.md §4](concepts.md#4-the-canonical-slot-model). |
+| `canopy checkout <branch>` | Plain checkout across all repos — no feature context, no per-repo branch resolution. Use `switch` for feature-scoped focus changes. |
 | `canopy run <repo> <command> [--feature]` | Run a shell command in a canopy-managed repo with cwd resolved internally. The "agent never `cd`s" tool — also useful from a CLI in a deeply nested directory. |
 | `canopy code\|cursor\|fork <feature\|.>` | Open the feature in VS Code / Cursor / Fork.app (alias-aware; generates `.code-workspace` for the IDE ones). |
 | `canopy sync` | Pull default branch + rebase feature branches across repos. |
@@ -104,21 +103,23 @@ The daily loop:
 ```bash
 canopy triage              # what to work on
 canopy state <feature>     # get oriented + see next_actions
-canopy realign <feature>   # if drifted (one fix command)
+canopy switch <feature>    # promote to canonical (handles drift via active rotation)
 canopy comments <feature>  # actionable threads only
 # ... edit code ...
 canopy preflight <feature> # records result for feature_state
 canopy state <feature>     # confirm transition (in_progress → ready_to_commit)
 ```
 
-Stash + switch flow:
+Switching focus mid-flight (canonical-slot model):
 
 ```bash
-canopy stash save -m "WIP" --feature current-feature
-canopy realign other-feature
-# work on other-feature
-canopy realign current-feature --auto-stash   # restores prior context
-canopy stash pop --feature current-feature
+# Active rotation: previous focus evacuates to a warm worktree, instant to switch back
+canopy switch other-feature
+# ... work on other-feature ...
+canopy switch current-feature   # warm worktree promotes back to canonical
+
+# Wind-down: previous focus goes cold (feature-tagged stash if dirty)
+canopy switch new-feature --release-current
 ```
 
 Investigate without changing state:

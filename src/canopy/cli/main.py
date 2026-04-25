@@ -2107,46 +2107,6 @@ def cmd_switch(args: argparse.Namespace) -> None:
     console.print()
 
 
-def cmd_realign(args: argparse.Namespace) -> None:
-    """Bring all repos in a feature lane onto the feature's branch."""
-    from ..actions.errors import ActionError
-    from ..actions.realign import realign as realign_impl
-    from .render import render_blocker
-    from .ui import console
-
-    workspace = _load_workspace()
-    try:
-        result = realign_impl(
-            workspace, args.feature,
-            auto_stash=getattr(args, "auto_stash", False),
-        )
-    except ActionError as err:
-        if args.json:
-            _print_json(err.to_dict())
-        else:
-            render_blocker(err, action="realign")
-        sys.exit(1)
-
-    if args.json:
-        _print_json(result)
-        return
-    console.print()
-    glyph = "[success]✓[/]" if result["aligned"] else "[error]✗[/]"
-    console.print(f"  {glyph} [feature]{result['feature']}[/]")
-    for repo, info in result["repos"].items():
-        status = info["status"]
-        if status == "already_aligned":
-            console.print(f"      [repo]{repo}[/]  [muted]→ already on {info['after']}[/]")
-        elif status == "checkout_ok":
-            stash_note = f"  [muted](stashed: {info['stash_ref']})[/]" if info.get("stash_ref") else ""
-            console.print(f"      [repo]{repo}[/]  [muted]→ {info['before']} → {info['after']}[/]{stash_note}")
-        elif status == "skipped":
-            console.print(f"      [repo]{repo}[/]  [warning]skipped: {info.get('reason','')}[/]")
-        else:
-            console.print(f"      [repo]{repo}[/]  [error]failed: {info.get('reason','')}[/]")
-    console.print()
-
-
 def cmd_stash_save_feature(args: argparse.Namespace) -> None:
     """Feature-tagged stash save (extends `canopy stash save --feature`)."""
     from ..actions.errors import ActionError
@@ -2538,16 +2498,6 @@ def main() -> None:
                            help="Explicit feature name to evict to cold (overrides LRU pick)")
     switch_p.add_argument("--json", action="store_true", help="Output as JSON")
 
-    # realign
-    realign_p = subparsers.add_parser(
-        "realign",
-        help="Bring all repos onto a feature's branch (fix drift / switch to feature)",
-    )
-    realign_p.add_argument("feature", help="Feature alias (name or Linear ID)")
-    realign_p.add_argument("--auto-stash", action="store_true",
-                            help="Stash dirty trees with feature tag before checkout")
-    realign_p.add_argument("--json", action="store_true", help="Output as JSON")
-
     # setup-agent
     setup_p = subparsers.add_parser(
         "setup-agent",
@@ -2675,7 +2625,6 @@ def main() -> None:
         "issue": cmd_issue,
         "pr": cmd_pr,
         "comments": cmd_comments,
-        "realign": cmd_realign,
         "switch": cmd_switch,
         "triage": cmd_triage,
         "state": cmd_state,

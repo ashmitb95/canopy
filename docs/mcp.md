@@ -24,7 +24,7 @@ Register in any MCP-compatible client. `canopy init` writes this entry into the 
 
 `CANOPY_ROOT` scopes the server to one workspace. To use canopy in multiple workspaces simultaneously, register separate entries with different `CANOPY_ROOT` values (or scope MCP per-project via `.mcp.json` at each workspace root).
 
-### Tools (42)
+### Tools (41)
 
 Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 
@@ -57,8 +57,7 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 | Tool | Description |
 |---|---|
 | `triage` | Prioritized list of features needing attention. Cross-repo PR fetch, grouped by feature, sorted by review state. |
-| `switch` | Activate a feature as the workspace context. Three cases: worktree mode (mark active), main-tree mode (calls realign), or fresh feature with `create_worktrees=True`. Writes `.canopy/state/active_feature.json`. |
-| `realign` | Bring all repos in the feature lane onto the feature's branch. Pure drift-fixer; doesn't activate as context. `auto_stash=True` to handle dirty trees. |
+| `switch` | **The focus primitive (Wave 2.9).** Promote a feature to the canonical slot. Active rotation (default) evacuates the previously-canonical feature to a warm worktree; `release_current=True` (wind-down) sends it to cold with a feature-tagged stash. Cap-reached blocker surfaces explicit fix actions. See [docs/concepts.md §4](concepts.md#4-the-canonical-slot-model). |
 | `drift` | Cached alignment view from `.canopy/state/heads.json`. Fast, hook-driven. |
 
 #### Read primitives (alias-aware)

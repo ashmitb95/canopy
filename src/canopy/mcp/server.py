@@ -192,26 +192,6 @@ def switch(feature: str, release_current: bool = False,
 
 
 @mcp.tool()
-def realign(feature: str, auto_stash: bool = False,
-            repos: list[str] | None = None) -> dict:
-    """Bring all repos in the feature lane onto the feature's branch.
-
-    Reads actual git state per repo (not heads.json) so it's
-    self-correcting even if the post-checkout hook missed an update.
-
-    Dirty trees: by default raises BlockerError(code='dirty_tree').
-    Pass `auto_stash=True` to stash with a feature tag before checkout
-    (the stash ref is included in the per-repo result).
-
-    Returns per-repo {status, before, after, stash_ref?, reason?} with
-    status in {already_aligned, checkout_ok, failed, skipped}.
-    """
-    from ..actions.realign import realign as _impl
-    ws = _get_workspace()
-    return _impl(ws, feature, auto_stash=auto_stash, repos=repos)
-
-
-@mcp.tool()
 def stash_save_feature(feature: str, message: str = "",
                         repos: list[str] | None = None) -> dict:
     """Stash dirty changes (incl. untracked) with a feature tag.

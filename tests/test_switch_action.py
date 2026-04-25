@@ -310,3 +310,35 @@ def test_switch_writes_active_feature(workspace_with_feature):
     ws = _ws(workspace_with_feature)
     switch(ws, "auth-flow")
     assert is_active(ws, "auth-flow")
+
+
+# ── PR3 step 1: structured mid-op failure surface ───────────────────────
+
+def test_mid_op_failure_raises_switch_mid_op_failed(workspace_with_feature, monkeypatch):
+    """If a per-repo step blows up mid-loop, the user gets a structured
+    BlockerError(code='switch_mid_op_failed') with completed_repos +
+    recovery_hints — not a raw GitError. Without this they're stuck
+    debugging a half-flipped workspace from a generic exception."""
+    _make_feature_branches(workspace_with_feature, "feat-b")
+    ws = _ws(workspace_with_feature)
+    switch(ws, "auth-flow")    # auth-flow canonical (no patching yet)
+
+    # Now arm the boom: every checkout call from this point on raises.
+    from canopy.git import repo as git_mod
+    real_checkout = git_mod.checkout
+    def boom(repo_path, branch):
+        raise RuntimeError("simulated mid-op disk full")
+    monkeypatch.setattr("canopy.actions.switch.git.checkout", boom)
+    monkeypatch.setattr("canopy.actions.evacuate.git.checkout", boom)
+
+    with pytest.raises(BlockerError) as exc_info:
+        switch(ws, "feat-b")
+
+    err = exc_info.value
+    assert err.code == "switch_mid_op_failed"
+    assert "simulated mid-op disk full" in err.actual["underlying_error"]
+    assert err.actual["underlying_error_type"] == "RuntimeError"
+    assert "feat-b" in err.what
+    # Recovery hints + fix actions present
+    assert err.details.get("recovery_hints") is not None
+    assert any(fa.action == "switch" for fa in err.fix_actions)

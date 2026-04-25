@@ -19,8 +19,8 @@ Canopy also returns **pre-classified state**: review comments are temporally fil
 |---|---|---|
 | What feature should I work on right now? | `mcp__canopy__triage` | per-repo `gh pr list` + manual grouping |
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads yourself |
-| Activate a feature as the current context (worktree-aware) | `mcp__canopy__switch` | guessing paths or `cd` to a worktree |
-| Fix drift / get repos onto a branch (no context change) | `mcp__canopy__realign` | `cd repo && git checkout` per repo |
+| Promote a feature to the canonical slot (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout` per repo, or guessing paths |
+| Wind down current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` | manual stash + checkout dance |
 | Check whether HEADs match expected | `mcp__canopy__drift` | `cd && git branch --show-current` per repo |
 | Read PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + manual filter |
 | Get PR data (title, decision, draft, ...) | `mcp__canopy__github_get_pr` | `gh pr view --json ...` per repo |
@@ -64,7 +64,7 @@ Canopy errors come back as:
   "expected": {...},
   "actual": {...},
   "fix_actions": [
-    {"action": "realign", "args": {"feature": "doc-3029"}, "safe": true, "preview": "..."}
+    {"action": "switch", "args": {"feature": "doc-3029"}, "safe": true, "preview": "..."}
   ]
 }
 ```
@@ -77,7 +77,7 @@ When you see a `BlockerError`, the first step is to read `fix_actions[0]` and de
 
 ## Anti-patterns
 
-- ❌ `cd <repo> && git checkout <branch>` — use `mcp__canopy__realign(feature=...)` so all participating repos move together with verification.
+- ❌ `cd <repo> && git checkout <branch>` — use `mcp__canopy__switch(feature=...)` so all participating repos move together with verification (and the previously-canonical feature evacuates to a warm worktree, preserving its work-in-progress).
 - ❌ Iterating `gh pr list --author @me` per repo and grouping yourself — `mcp__canopy__triage` already groups by feature lane and applies priority tiers.
 - ❌ `cd <repo> && pnpm test` — use `mcp__canopy__run(repo='ui', command='pnpm test')`. The shell state from a previous tool call is not yours.
 - ❌ Parsing `gh api .../pulls/{n}/comments` and writing your own "is this resolved" logic — `mcp__canopy__github_get_pr_comments` returns `actionable_threads` vs `likely_resolved_threads` already.

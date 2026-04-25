@@ -18,8 +18,10 @@ from typing import Any
 
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
+from . import active_feature as af
 from .aliases import _resolve_owner_slug
 from .errors import BlockerError
+from .evacuate import warm_worktree_path
 from .review_filter import classify_threads
 
 
@@ -46,11 +48,17 @@ def triage(
         repos: subset of canopy repos to scan (default: all).
 
     Returns:
-        ``{author, features: [{feature, linear_issue, linear_url,
-        linear_title, priority, repos: {<r>: {pr_number, pr_url,
-        pr_title, branch, review_decision, actionable_count,
-        likely_resolved_count, has_actionable_bot_thread}}}]}``
-        ordered most-urgent first.
+        ``{author, canonical_feature, features: [{feature, linear_issue,
+        linear_url, linear_title, priority, is_canonical, physical_state,
+        repos: {<r>: {pr_number, pr_url, pr_title, branch, review_decision,
+        actionable_count, likely_resolved_count, has_actionable_bot_thread,
+        physical_state, path}}}]}`` ordered most-urgent first.
+
+        ``physical_state`` per feature is ``canonical | warm | cold | none``
+        (none = no worktree, branch may not even be checked out anywhere).
+        Per-repo ``physical_state`` + ``path`` lets the agent decide
+        whether to switch first or just `canopy_run` against the recorded
+        path.
 
     Raises:
         BlockerError: if no GitHub transport is available, or if a
@@ -59,9 +67,15 @@ def triage(
     target_repos = _select_repos(workspace, repos)
     prs_by_repo = _fetch_open_prs(workspace, target_repos, author)
     feature_groups = _group_by_feature(workspace, prs_by_repo)
-    enriched = [_enrich(workspace, g) for g in feature_groups]
+    active = af.read_active(workspace)
+    canonical_feature = active.feature if active else None
+    enriched = [_enrich(workspace, g, canonical_feature) for g in feature_groups]
     enriched.sort(key=lambda f: _PRIORITY_ORDER.get(f["priority"], 99))
-    return {"author": author, "features": enriched}
+    return {
+        "author": author,
+        "canonical_feature": canonical_feature,
+        "features": enriched,
+    }
 
 
 def _fetch_open_prs(
@@ -172,7 +186,11 @@ def _group_by_feature(
     return groups
 
 
-def _enrich(workspace: Workspace, group: dict) -> dict:
+def _enrich(
+    workspace: Workspace, group: dict, canonical_feature: str | None,
+) -> dict:
+    feature_name = group["feature"]
+    is_canonical = canonical_feature == feature_name
     per_repo: dict[str, dict] = {}
     for canopy_repo, pr in group["repos"].items():
         owner, slug = _resolve_owner_slug(workspace, canopy_repo)
@@ -184,6 +202,19 @@ def _enrich(workspace: Workspace, group: dict) -> dict:
             comments, state.abs_path, pr.get("head_branch") or "",
         )
         actionable = classification["actionable_threads"]
+
+        # Physical state per repo: where this feature lives right now.
+        wt = warm_worktree_path(workspace, feature_name, canopy_repo)
+        if is_canonical:
+            phys = "canonical"
+            path = str(state.abs_path.resolve())
+        elif wt.exists() and (wt / ".git").exists():
+            phys = "warm"
+            path = str(wt.resolve())
+        else:
+            phys = "cold"
+            path = ""    # no on-disk home yet; switch will create one
+
         per_repo[canopy_repo] = {
             "pr_number": pr["number"],
             "pr_url": pr.get("url", ""),
@@ -195,14 +226,28 @@ def _enrich(workspace: Workspace, group: dict) -> dict:
             "has_actionable_bot_thread": any(
                 t.get("author_type") == "Bot" for t in actionable
             ),
+            "physical_state": phys,
+            "path": path,
         }
 
+    # Top-level physical_state is the highest-resolution per-repo state.
+    # canonical > warm > cold. (If repos disagree we report the warmest.)
+    states = {r["physical_state"] for r in per_repo.values()}
+    if "canonical" in states:
+        feat_phys = "canonical"
+    elif "warm" in states:
+        feat_phys = "warm" if states <= {"warm", "cold"} else "mixed"
+    else:
+        feat_phys = "cold"
+
     return {
-        "feature": group["feature"],
+        "feature": feature_name,
         "linear_issue": group["linear_issue"],
         "linear_url": group["linear_url"],
         "linear_title": group["linear_title"],
         "priority": _compute_priority(per_repo),
+        "is_canonical": is_canonical,
+        "physical_state": feat_phys,
         "repos": per_repo,
     }
 

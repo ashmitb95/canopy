@@ -113,115 +113,243 @@ def switch(
             continue
         repo_path = state.abs_path
 
-        # If main is already on the target branch, nothing to do for this
-        # repo aside from recording its path.
         try:
-            current = git.current_branch(repo_path)
-        except git.GitError:
-            current = None
-        new_canonical_paths[repo_name] = str(repo_path.resolve())
-        if current == target_branch:
-            per_repo_results.append({
-                "repo": repo_name, "status": "noop",
-                "reason": "already on target branch",
-            })
-            continue
-
-        # If Y is currently warm in this repo, the warm worktree is
-        # holding the branch — must remove it before main can check out Y.
-        if evac.has_warm_worktree(workspace, feature_name, repo_name):
-            wt_path = evac.warm_worktree_path(workspace, feature_name, repo_name)
-            # Refuse if the warm worktree has uncommitted work — that
-            # would silently disappear. User must commit/stash first.
-            if git.is_dirty(wt_path):
-                raise BlockerError(
-                    code="warm_worktree_dirty_on_promote",
-                    what=(
-                        f"warm worktree {wt_path} has uncommitted changes;"
-                        f" can't promote {feature_name} to canonical without"
-                        f" losing them"
-                    ),
-                    details={"feature": feature_name, "repo": repo_name,
-                             "worktree_path": str(wt_path)},
-                    fix_actions=[
-                        FixAction(
-                            action="commit",
-                            args={"feature": feature_name},
-                            safe=False,
-                            preview=f"commit dirty changes in {wt_path}",
-                        ),
-                        FixAction(
-                            action="stash_save_feature",
-                            args={"feature": feature_name},
-                            safe=True,
-                            preview=f"stash dirty changes in {wt_path}",
-                        ),
-                    ],
-                )
-            git.worktree_remove(repo_path, wt_path)
-
-        # Mode A: wind-down — stash X dirty into a feature-tagged stash on
-        # X's branch, then plain checkout Y in main. No worktree-add for X.
-        if release_current and previously_canonical and current == _branch_for_in_repo(
-            workspace, previously_canonical, repo_name,
-        ):
-            stash_ref = _stash_for_winddown(
-                workspace, previously_canonical, repo_path,
+            _do_repo_switch(
+                workspace, feature_name, repo_name, target_branch,
+                repo_path=repo_path,
+                release_current=release_current,
+                previously_canonical=previously_canonical,
+                per_repo_results=per_repo_results,
+                new_canonical_paths=new_canonical_paths,
             )
-            git.checkout(repo_path, target_branch)
-            per_repo_results.append({
-                "repo": repo_name, "status": "wind_down_then_checkout",
-                "previous_branch": _branch_for_in_repo(
-                    workspace, previously_canonical, repo_name,
+        except BlockerError:
+            raise
+        except Exception as e:
+            # Mid-op failure with no rollback walker (yet). Surface enough
+            # state for the user to recover manually instead of leaving
+            # them with a generic exception. See GitHub issue #2.
+            raise _build_mid_op_error(
+                workspace, feature_name, repo_name, target_branch,
+                previously_canonical, e, per_repo_results,
+            )
+
+    _post_switch_persist(
+        workspace, feature_name, new_canonical_paths, previously_canonical,
+        out, release_current=release_current, per_repo_results=per_repo_results,
+    )
+    return out
+
+
+def _do_repo_switch(
+    workspace: Workspace,
+    feature_name: str,
+    repo_name: str,
+    target_branch: str,
+    *,
+    repo_path: Path,
+    release_current: bool,
+    previously_canonical: str | None,
+    per_repo_results: list[dict[str, Any]],
+    new_canonical_paths: dict[str, str],
+) -> None:
+    """Per-repo switch body — extracted so the caller can wrap it in a
+    structured mid-op error handler. Mutates the lists/dicts in place."""
+
+    # If main is already on the target branch, nothing to do for this
+    # repo aside from recording its path.
+    try:
+        current = git.current_branch(repo_path)
+    except git.GitError:
+        current = None
+    new_canonical_paths[repo_name] = str(repo_path.resolve())
+    if current == target_branch:
+        per_repo_results.append({
+            "repo": repo_name, "status": "noop",
+            "reason": "already on target branch",
+        })
+        return
+
+    # If Y is currently warm in this repo, the warm worktree is holding
+    # the branch — must remove it before main can check out Y.
+    if evac.has_warm_worktree(workspace, feature_name, repo_name):
+        wt_path = evac.warm_worktree_path(workspace, feature_name, repo_name)
+        if git.is_dirty(wt_path):
+            raise BlockerError(
+                code="warm_worktree_dirty_on_promote",
+                what=(
+                    f"warm worktree {wt_path} has uncommitted changes;"
+                    f" can't promote {feature_name} to canonical without"
+                    f" losing them"
                 ),
-                "target_branch": target_branch,
-                "stashed": stash_ref is not None,
-                "stash_ref": stash_ref,
-            })
-            continue
+                details={"feature": feature_name, "repo": repo_name,
+                         "worktree_path": str(wt_path)},
+                fix_actions=[
+                    FixAction(
+                        action="commit",
+                        args={"feature": feature_name},
+                        safe=False,
+                        preview=f"commit dirty changes in {wt_path}",
+                    ),
+                    FixAction(
+                        action="stash_save_feature",
+                        args={"feature": feature_name},
+                        safe=True,
+                        preview=f"stash dirty changes in {wt_path}",
+                    ),
+                ],
+            )
+        git.worktree_remove(repo_path, wt_path)
 
-        # Mode B: active rotation — evacuate X to warm if main is on X.
-        if (
-            previously_canonical
-            and not release_current
-            and current == _branch_for_in_repo(
-                workspace, previously_canonical, repo_name,
-            )
-        ):
-            result = evac.evacuate_repo(
-                workspace, previously_canonical, repo_name, repo_path,
-                target_branch=target_branch,
-            )
-            per_repo_results.append(result)
-            continue
-
-        # Fallback: main is on something else (or not on previous_canonical).
-        # Just stash + checkout.
-        if git.is_dirty(repo_path):
-            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            current_label = current or "(detached)"
-            git.stash_save(
-                repo_path,
-                f"[canopy {current_label} @ {ts}] auto-stash on switch",
-                include_untracked=True,
-            )
-            stashed = True
-        else:
-            stashed = False
+    # Mode A: wind-down — stash X dirty into a feature-tagged stash on
+    # X's branch, then plain checkout Y in main. No worktree-add for X.
+    if release_current and previously_canonical and current == _branch_for_in_repo(
+        workspace, previously_canonical, repo_name,
+    ):
+        stash_ref = _stash_for_winddown(
+            workspace, previously_canonical, repo_path,
+        )
         git.checkout(repo_path, target_branch)
         per_repo_results.append({
-            "repo": repo_name, "status": "checkout",
-            "previous_branch": current,
+            "repo": repo_name, "status": "wind_down_then_checkout",
+            "previous_branch": _branch_for_in_repo(
+                workspace, previously_canonical, repo_name,
+            ),
             "target_branch": target_branch,
-            "stashed": stashed,
+            "stashed": stash_ref is not None,
+            "stash_ref": stash_ref,
         })
+        return
 
+    # Mode B: active rotation — evacuate X to warm if main is on X.
+    if (
+        previously_canonical
+        and not release_current
+        and current == _branch_for_in_repo(
+            workspace, previously_canonical, repo_name,
+        )
+    ):
+        result = evac.evacuate_repo(
+            workspace, previously_canonical, repo_name, repo_path,
+            target_branch=target_branch,
+        )
+        per_repo_results.append(result)
+        return
+
+    # Fallback: main is on something else (or not on previous_canonical).
+    # Just stash + checkout.
+    if git.is_dirty(repo_path):
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        current_label = current or "(detached)"
+        git.stash_save(
+            repo_path,
+            f"[canopy {current_label} @ {ts}] auto-stash on switch",
+            include_untracked=True,
+        )
+        stashed = True
+    else:
+        stashed = False
+    git.checkout(repo_path, target_branch)
+    per_repo_results.append({
+        "repo": repo_name, "status": "checkout",
+        "previous_branch": current,
+        "target_branch": target_branch,
+        "stashed": stashed,
+    })
+
+
+def _build_mid_op_error(
+    workspace: Workspace,
+    feature_name: str,
+    failed_repo: str,
+    target_branch: str,
+    previously_canonical: str | None,
+    underlying_error: Exception,
+    completed_results: list[dict[str, Any]],
+) -> BlockerError:
+    """Build a structured ``BlockerError`` for a mid-op failure.
+
+    Goal: tell the user exactly which repo failed at which step, what
+    state the workspace is in NOW, and the precise commands to recover.
+    Without this they get a generic git error and a half-flipped workspace.
+
+    A real rollback walker is in GitHub issue #2; this is the interim.
+    """
+    completed_repos = [r["repo"] for r in completed_results]
+    # Per-repo recovery hints for completed repos
+    recovery_hints: list[str] = []
+    for r in completed_results:
+        if r.get("stashed"):
+            recovery_hints.append(
+                f"  {r['repo']}: stash exists ({r.get('stash_ref','stash@{0}')}) — "
+                f"`git -C <{r['repo']}-path> stash list` to inspect"
+            )
+        if r.get("status") == "evacuated" and r.get("worktree_path"):
+            recovery_hints.append(
+                f"  {r['repo']}: warm worktree at {r['worktree_path']} (X={previously_canonical})"
+            )
+
+    return BlockerError(
+        code="switch_mid_op_failed",
+        what=(
+            f"switch to '{feature_name}' failed in repo '{failed_repo}' — "
+            f"workspace is partially flipped"
+        ),
+        expected={"feature": feature_name, "target_branch": target_branch},
+        actual={
+            "failed_repo": failed_repo,
+            "completed_repos": completed_repos,
+            "underlying_error": str(underlying_error),
+            "underlying_error_type": type(underlying_error).__name__,
+        },
+        details={
+            "previously_canonical": previously_canonical,
+            "completed_results": completed_results,
+            "recovery_hints": recovery_hints,
+        },
+        fix_actions=[
+            FixAction(
+                action="manual",
+                args={"see": "details.recovery_hints"},
+                safe=False,
+                preview=(
+                    "auto-rollback isn't implemented yet (GH #2). "
+                    "Inspect per-repo state via `canopy state` + `git stash list` "
+                    "in each repo, then re-run `canopy switch <feature>` once "
+                    f"the underlying error ({type(underlying_error).__name__}) is resolved."
+                ),
+            ),
+            FixAction(
+                action="switch",
+                args={"feature": previously_canonical} if previously_canonical else {"feature": feature_name},
+                safe=False,
+                preview=(
+                    f"switch back to '{previously_canonical}' may un-flip"
+                    f" some repos (depends on which step failed)"
+                    if previously_canonical else "retry the switch"
+                ),
+            ),
+        ],
+    )
+
+
+def _post_switch_persist(
+    workspace: Workspace,
+    feature_name: str,
+    new_canonical_paths: dict[str, str],
+    previously_canonical: str | None,
+    out: dict[str, Any],
+    *,
+    release_current: bool,
+    per_repo_results: list[dict[str, Any]],
+) -> None:
+    """Finalize the switch result: write active_feature.json + populate
+    summary fields. Mutates ``out`` in place."""
     out["mode"] = "wind_down" if release_current else "active_rotation"
     out["per_repo"] = per_repo_results
     out["per_repo_paths"] = new_canonical_paths
 
-    # Persist the new canonical state. last_touched bumps both Y (now) and
-    # the previously-canonical X (so its warm slot has fresh recency).
+    # last_touched bumps both Y (now) and the previously-canonical X
+    # (so its warm slot has fresh recency for future LRU picks).
     touched: list[str] = []
     if previously_canonical:
         touched.append(previously_canonical)
@@ -232,8 +360,6 @@ def switch(
     out["activated_at"] = entry.activated_at
     if entry.previous_feature:
         out["previous_feature_in_state"] = entry.previous_feature
-
-    return out
 
 
 def resolve_feature_safely(workspace: Workspace, feature: str) -> str:

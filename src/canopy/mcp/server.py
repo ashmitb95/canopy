@@ -113,6 +113,23 @@ def run(repo: str, command: str, feature: str | None = None,
 
 
 @mcp.tool()
+def feature_state(feature: str) -> dict:
+    """Compute feature state + suggested next actions (dashboard backend).
+
+    Returns one of: drifted, needs_work, in_progress, ready_to_commit,
+    ready_to_push, awaiting_review, approved, no_prs.
+
+    Composes drift detection (live git, not heads.json), dirty/clean
+    state, ahead/behind, temporal-filtered review comments, and recorded
+    preflight result into a single state + ordered next_actions list.
+    Same logic the dashboard CTAs and the agent both consume.
+    """
+    from ..actions.feature_state import feature_state as _impl
+    ws = _get_workspace()
+    return _impl(ws, feature)
+
+
+@mcp.tool()
 def triage(author: str = "@me", repos: list[str] | None = None) -> dict:
     """Prioritized list of features needing user attention.
 

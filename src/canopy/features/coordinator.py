@@ -1191,6 +1191,30 @@ class FeatureCoordinator:
 
             results[repo_name] = entry
 
+        # Persist the result so feature_state can distinguish IN_PROGRESS
+        # from READY_TO_COMMIT. Records HEAD sha per repo at the time the
+        # preflight ran; freshness is decided by comparing those shas
+        # against current HEADs.
+        try:
+            from ..actions.preflight_state import record_result
+            head_sha_per_repo: dict[str, str] = {}
+            for repo_name in paths.keys():
+                try:
+                    repo_state = self.workspace.get_repo(repo_name)
+                    head_sha_per_repo[repo_name] = git.head_sha(repo_state.abs_path)
+                except Exception:
+                    pass
+            record_result(
+                self.workspace.config.root, name,
+                passed=all_passed,
+                head_sha_per_repo=head_sha_per_repo,
+                summary=("all checks passed" if all_passed
+                          else "one or more checks failed"),
+            )
+        except Exception:
+            # State tracking is auxiliary; don't fail review_prep itself.
+            pass
+
         return {
             "feature": name,
             "message": message,

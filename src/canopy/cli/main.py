@@ -1049,7 +1049,44 @@ def cmd_fork(args: argparse.Namespace) -> None:
             time.sleep(0.5)
 
 
+def _cmd_preflight_feature(args: argparse.Namespace) -> None:
+    """Feature-scoped preflight via coordinator.review_prep (records result)."""
+    from ..features.coordinator import FeatureCoordinator
+    from .ui import console, separator, SYM_CHECK, SYM_DOT, SYM_CROSS
+
+    workspace = _load_workspace()
+    coord = FeatureCoordinator(workspace)
+    result = coord.review_prep(args.feature)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    console.print(f"  [feature]{result['feature']}[/]  preflight")
+    separator()
+    for repo, info in result["repos"].items():
+        pc = info.get("precommit") or {}
+        glyph = "[success]✓[/]" if pc.get("passed") else "[error]✗[/]"
+        kind = pc.get("type", "")
+        dirty = info.get("dirty_count", 0)
+        console.print(f"  [repo]{repo}[/]  {glyph} {dirty} files  [muted]{kind}[/]")
+    console.print()
+    if result.get("all_passed"):
+        console.print("  [success]Ready to commit.[/]")
+    else:
+        console.print("  [error]One or more repos failed checks.[/]")
+    console.print()
+
+
 def cmd_preflight(args: argparse.Namespace) -> None:
+    if getattr(args, "feature", None):
+        _cmd_preflight_feature(args)
+    else:
+        _cmd_preflight_context(args)
+
+
+def _cmd_preflight_context(args: argparse.Namespace) -> None:
     """Context-aware pre-commit quality gate.
 
     Detects which feature/repos you're in, stages all changes (git add -A),
@@ -1100,12 +1137,45 @@ def cmd_preflight(args: argparse.Namespace) -> None:
         if not passed:
             all_passed = False
 
-        dirty_count = len(status.strip().splitlines())
+        dirty_count = len(status)
         results[repo_name] = {
             "status": "staged" if passed else "hooks_failed",
             "dirty_count": dirty_count,
             "hooks": hook_result,
         }
+
+    # Persist preflight result so feature_state can distinguish
+    # IN_PROGRESS from READY_TO_COMMIT. Maps detect_context's directory
+    # names back to canopy-registered repo names so feature_state
+    # (which uses canonical names) can match.
+    if ctx.feature and ctx.workspace_root:
+        try:
+            from ..actions.preflight_state import record_result
+            from ..workspace.config import load_config
+            from ..workspace.workspace import Workspace as _WS
+            cfg = load_config(ctx.workspace_root)
+            ws = _WS(cfg)
+            path_to_canonical = {
+                str(state.abs_path.resolve()): state.config.name
+                for state in ws.repos
+            }
+            head_sha_per_repo: dict[str, str] = {}
+            for path in ctx.repo_paths:
+                resolved = str(Path(path).resolve())
+                canonical = path_to_canonical.get(resolved)
+                if not canonical:
+                    continue
+                head_sha_per_repo[canonical] = git_repo.head_sha(path)
+            if head_sha_per_repo:
+                record_result(
+                    ctx.workspace_root, ctx.feature,
+                    passed=all_passed,
+                    head_sha_per_repo=head_sha_per_repo,
+                    summary=("preflight passed" if all_passed
+                              else "preflight failed"),
+                )
+        except Exception:
+            pass
 
     if args.json:
         _print_json({
@@ -1821,6 +1891,89 @@ def cmd_comments(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_state(args: argparse.Namespace) -> None:
+    """Show the feature state + suggested next actions."""
+    from ..actions.errors import ActionError
+    from ..actions.feature_state import feature_state as state_impl
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = state_impl(workspace, args.feature)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="state")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    state_glyph = {
+        "drifted": "[error]✗[/]",
+        "in_progress": "[warning]●[/]",
+        "ready_to_commit": "[info]●[/]",
+        "ready_to_push": "[info]●[/]",
+        "needs_work": "[error]●[/]",
+        "approved": "[success]●[/]",
+        "awaiting_review": "[muted]●[/]",
+        "no_prs": "[muted]○[/]",
+    }
+    glyph = state_glyph.get(result["state"], "[muted]?[/]")
+    console.print()
+    console.print(f"  {glyph} [feature]{result['feature']}[/]  [muted]({result['state']})[/]")
+
+    summary = result.get("summary", {})
+    alignment = summary.get("alignment")
+    if alignment and not alignment.get("aligned"):
+        for repo, exp in (alignment.get("expected") or {}).items():
+            actual = (alignment.get("actual") or {}).get(repo) or "(missing)"
+            mark = "[error]✗[/]" if actual != exp else "[success]✓[/]"
+            console.print(f"      {mark} [repo]{repo}[/]  [muted]→ {actual}  (expected {exp})[/]")
+    else:
+        repos = summary.get("repos") or {}
+        for repo, info in repos.items():
+            bits = []
+            if info.get("is_dirty"):
+                bits.append(f"dirty: {info.get('dirty_count', '?')} files")
+            if info.get("ahead", 0) > 0:
+                bits.append(f"↑{info['ahead']}")
+            if info.get("behind", 0) > 0:
+                bits.append(f"↓{info['behind']}")
+            if info.get("actionable_count", 0) > 0:
+                bits.append(f"actionable: {info['actionable_count']}")
+            if info.get("review_decision"):
+                bits.append(info["review_decision"])
+            extra = "  [muted](" + ", ".join(bits) + ")[/]" if bits else ""
+            console.print(f"      [repo]{repo}[/]  [muted]→ {info.get('branch','')}[/]{extra}")
+
+    pf = summary.get("preflight") or {}
+    if pf.get("ran"):
+        status = "passed" if pf.get("passed") else "failed"
+        fresh = "fresh" if pf.get("fresh") else "stale"
+        console.print(f"      [muted]preflight: {status} ({fresh}, ran {pf.get('ran_at','')})[/]")
+
+    for w in result.get("warnings", []):
+        console.print(f"      [warning]⚠ {w.get('what','')}[/]  [muted]({w.get('code','')})[/]")
+
+    next_actions = result.get("next_actions") or []
+    if next_actions:
+        console.print()
+        console.print("    [header]next:[/]")
+        for i, a in enumerate(next_actions):
+            tag = "[info]→[/]" if a.get("primary") else "  "
+            label = a.get("label") or a.get("action") or "?"
+            preview = a.get("preview")
+            line = f"      {tag} [info]canopy {a['action']} {a.get('args', {}).get('feature','')}[/]  [muted]{label}[/]"
+            console.print(line)
+            if preview:
+                console.print(f"          [muted]{preview}[/]")
+    console.print()
+
+
 def cmd_triage(args: argparse.Namespace) -> None:
     """Show prioritized list of features needing attention."""
     from ..actions.errors import ActionError
@@ -2256,6 +2409,8 @@ def main() -> None:
 
     # preflight (context-aware add + hooks)
     preflight_p = subparsers.add_parser("preflight", help="Stage + run hooks (does not commit)")
+    preflight_p.add_argument("feature", nargs="?", default=None,
+                              help="Feature alias — when set, runs against the lane's repos and records the result")
     preflight_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # list (top-level shortcut)
@@ -2314,6 +2469,14 @@ def main() -> None:
     realign_p.add_argument("--auto-stash", action="store_true",
                             help="Stash dirty trees with feature tag before checkout")
     realign_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # state
+    state_p = subparsers.add_parser(
+        "state",
+        help="Feature state + suggested next actions (dashboard backend)",
+    )
+    state_p.add_argument("feature", help="Feature alias (name or Linear ID)")
+    state_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # triage
     triage_p = subparsers.add_parser(
@@ -2421,6 +2584,7 @@ def main() -> None:
         "comments": cmd_comments,
         "realign": cmd_realign,
         "triage": cmd_triage,
+        "state": cmd_state,
     }
 
     if args.command == "feature":

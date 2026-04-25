@@ -159,6 +159,25 @@ def cmd_init(args: argparse.Namespace) -> None:
                 note = "" if h["action"] == "installed" else f" [muted]({h['action']})[/]"
                 console.print(f"  [repo]{h['repo']}[/]{note}")
 
+    if not args.no_agent:
+        from ..agent_setup import setup_agent as _setup_agent
+        agent_result = _setup_agent(root, do_skill=True, do_mcp=True, reinstall=False)
+        skill = agent_result.get("skill", {})
+        mcp = agent_result.get("mcp", {})
+        console.print()
+        console.print(f"  [header]Claude Code agent setup[/]")
+        if skill.get("action") in ("installed", "reinstalled"):
+            console.print(f"  skill   [success]{SYM_CHECK}[/] {skill['action']}  [muted]{skill['path']}[/]")
+        else:
+            note = skill.get("reason") or skill.get("action", "")
+            console.print(f"  skill   [muted]· {note}[/]")
+        if mcp.get("action") in ("added", "updated", "created"):
+            console.print(f"  mcp     [success]{SYM_CHECK}[/] {mcp['action']}  [muted]{mcp['path']}[/]")
+        else:
+            note = mcp.get("reason") or mcp.get("action", "")
+            console.print(f"  mcp     [muted]· {note}[/]")
+        console.print(f"  [muted]Restart Claude Code to pick up the skill + MCP. Skip with --no-agent.[/]")
+
     # Report existing feature worktrees under .canopy/
     canopy_dir = root / ".canopy"
     worktrees_dir = canopy_dir / "worktrees"
@@ -1891,6 +1910,85 @@ def cmd_comments(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_setup_agent(args: argparse.Namespace) -> None:
+    """Install the using-canopy skill + register canopy MCP for the workspace."""
+    from ..agent_setup import setup_agent, check_status
+    from .ui import console, print_success, print_warning
+
+    if args.check:
+        # Best-effort workspace detection, but still works without one.
+        try:
+            workspace = _load_workspace()
+            workspace_root = workspace.config.root
+        except Exception:
+            workspace_root = Path.cwd()
+        status = check_status(workspace_root)
+        if args.json:
+            _print_json(status)
+            return
+        skill = status["skill"]
+        mcp = status["mcp"]
+        console.print()
+        if skill["installed"] and skill["is_canopy_skill"]:
+            label = "[success]✓ up to date[/]" if skill["up_to_date"] else "[warning]● out of date[/]"
+            console.print(f"  skill   {label}  [muted]{skill['path']}[/]")
+        elif skill["installed"]:
+            console.print(f"  skill   [warning]foreign file present[/]  [muted]{skill['path']}[/]")
+        else:
+            console.print(f"  skill   [error]✗ not installed[/]  [muted]{skill['path']}[/]")
+        if mcp["configured"]:
+            root = (mcp.get("env") or {}).get("CANOPY_ROOT", "")
+            console.print(f"  mcp     [success]✓ configured[/]  [muted]CANOPY_ROOT={root}[/]")
+        else:
+            console.print(f"  mcp     [error]✗ not configured[/]  [muted]{mcp['path']}[/]")
+        console.print()
+        return
+
+    do_skill = not args.mcp_only
+    do_mcp = not args.skill_only
+
+    workspace_root: Path | None = None
+    if do_mcp:
+        try:
+            workspace = _load_workspace()
+            workspace_root = workspace.config.root
+        except Exception:
+            workspace_root = None
+
+    result = setup_agent(
+        workspace_root, do_skill=do_skill, do_mcp=do_mcp, reinstall=args.reinstall,
+    )
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    if "skill" in result:
+        s = result["skill"]
+        glyph = {
+            "installed": "[success]✓ installed[/]",
+            "reinstalled": "[success]✓ reinstalled[/]",
+            "skipped": "[muted]· skipped[/]",
+        }.get(s["action"], s["action"])
+        console.print(f"  skill   {glyph}  [muted]{s['path']}[/]")
+        if s.get("reason"):
+            console.print(f"          [muted]{s['reason']}[/]")
+    if "mcp" in result:
+        m = result["mcp"]
+        glyph = {
+            "added": "[success]✓ added[/]",
+            "updated": "[success]✓ updated[/]",
+            "created": "[success]✓ created[/]",
+            "skipped": "[muted]· skipped[/]",
+        }.get(m["action"], m["action"])
+        console.print(f"  mcp     {glyph}  [muted]{m['path']}[/]")
+        if m.get("reason"):
+            console.print(f"          [muted]{m['reason']}[/]")
+    console.print()
+    console.print("  [muted]Restart Claude Code (or open a new session) to pick up changes.[/]")
+    console.print()
+
+
 def cmd_state(args: argparse.Namespace) -> None:
     """Show the feature state + suggested next actions."""
     from ..actions.errors import ActionError
@@ -2258,6 +2356,8 @@ def main() -> None:
     init_p.add_argument("--force", action="store_true", help="Overwrite existing canopy.toml")
     init_p.add_argument("--dry-run", action="store_true", help="Print toml without writing")
     init_p.add_argument("--json", action="store_true", help="Output as JSON")
+    init_p.add_argument("--no-agent", action="store_true",
+                         help="Skip Claude Code agent setup (skill + MCP config)")
 
     # status
     status_p = subparsers.add_parser("status", help="Workspace status")
@@ -2470,6 +2570,21 @@ def main() -> None:
                             help="Stash dirty trees with feature tag before checkout")
     realign_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # setup-agent
+    setup_p = subparsers.add_parser(
+        "setup-agent",
+        help="Install the using-canopy skill + add canopy MCP to .mcp.json",
+    )
+    setup_p.add_argument("--skill-only", action="store_true",
+                          help="Install only the skill (skip MCP config)")
+    setup_p.add_argument("--mcp-only", action="store_true",
+                          help="Install only the MCP config (skip skill)")
+    setup_p.add_argument("--reinstall", action="store_true",
+                          help="Overwrite existing files even if foreign or current")
+    setup_p.add_argument("--check", action="store_true",
+                          help="Report status without changing anything")
+    setup_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # state
     state_p = subparsers.add_parser(
         "state",
@@ -2585,6 +2700,7 @@ def main() -> None:
         "realign": cmd_realign,
         "triage": cmd_triage,
         "state": cmd_state,
+        "setup-agent": cmd_setup_agent,
     }
 
     if args.command == "feature":

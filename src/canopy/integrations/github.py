@@ -9,6 +9,7 @@ upstream callers don't branch.
 from __future__ import annotations
 
 import json
+import platform
 import re
 import shutil
 import subprocess
@@ -24,7 +25,16 @@ from ..mcp.client import (
 
 
 class GitHubNotConfiguredError(Exception):
-    """Neither GitHub MCP nor authenticated gh CLI is available."""
+    """Neither GitHub MCP nor authenticated gh CLI is available.
+
+    Carries the same structured payload that ``github_unavailable_blocker()``
+    returns so upstream callers (e.g. triage) can convert to a BlockerError
+    with proper ``fix_actions`` without re-deriving install hints.
+    """
+
+    def __init__(self, message: str = "", *, payload: dict | None = None):
+        super().__init__(message or (payload or {}).get("what", "GitHub not configured"))
+        self.payload = payload or {}
 
 
 class PullRequestNotFoundError(Exception):
@@ -62,6 +72,70 @@ def have_gh_cli() -> bool:
         ["gh", "auth", "status"], capture_output=True, text=True, check=False,
     )
     return result.returncode == 0
+
+
+def gh_install_hint() -> str:
+    """Platform-aware install instructions for gh CLI."""
+    system = platform.system()
+    if system == "Darwin":
+        return "brew install gh && gh auth login"
+    if system == "Linux":
+        return (
+            "Install gh from https://github.com/cli/cli#installation "
+            "(`apt install gh` on Debian/Ubuntu, `dnf install gh` on Fedora), "
+            "then run `gh auth login`."
+        )
+    if system == "Windows":
+        return "winget install --id GitHub.cli && gh auth login"
+    return "See https://github.com/cli/cli#installation, then run `gh auth login`."
+
+
+def gh_status_hint() -> str:
+    """Hint when gh is installed but not authenticated."""
+    return "Run `gh auth login` to authenticate."
+
+
+def github_unavailable_blocker() -> dict:
+    """Build a structured no-github-access dict that callers can wrap into BlockerError.
+
+    Returns ``{code, what, fix_actions}`` matching the action contract. Use
+    when neither the GitHub MCP server is configured nor the gh CLI is
+    available. Tells the user how to fix it on their platform.
+    """
+    have_gh_binary = shutil.which("gh") is not None
+    actions = []
+    if have_gh_binary:
+        # gh installed but not authed
+        actions.append({
+            "action": "gh auth login",
+            "args": {},
+            "safe": True,
+            "preview": gh_status_hint(),
+        })
+    else:
+        actions.append({
+            "action": "install gh CLI",
+            "args": {},
+            "safe": True,
+            "preview": gh_install_hint(),
+        })
+    actions.append({
+        "action": "configure github MCP",
+        "args": {},
+        "safe": True,
+        "preview": (
+            "Add a 'github' entry to .canopy/mcps.json with command/args/env "
+            "for an MCP server (e.g. @modelcontextprotocol/server-github)"
+        ),
+    })
+    return {
+        "code": "github_not_configured",
+        "what": (
+            "GitHub access not configured. Either install + auth gh CLI, "
+            "or configure the github MCP server in .canopy/mcps.json."
+        ),
+        "fix_actions": actions,
+    }
 
 
 def _gh(args: list[str], timeout: float = 15.0) -> str:
@@ -153,7 +227,7 @@ def find_pull_request(
         ]
         for tool_name, args in tool_attempts:
             try:
-                result = call_tool(config, tool_name, args, timeout=15.0)
+                result = call_tool(config, tool_name, args, timeout=15.0, server_name="github")
                 parsed = _parse_mcp_result(result)
                 if parsed is None:
                     continue
@@ -190,11 +264,8 @@ def find_pull_request(
             pass
         return None
 
-    raise GitHubNotConfiguredError(
-        "GitHub access not configured. Either:\n"
-        "  - Add a 'github' entry to .canopy/mcps.json, OR\n"
-        "  - Install gh CLI and run `gh auth login`"
-    )
+    payload = github_unavailable_blocker()
+    raise GitHubNotConfiguredError(payload=payload)
 
 
 def get_pull_request_by_number(
@@ -215,7 +286,7 @@ def get_pull_request_by_number(
             ("pull_request_get", {"owner": owner, "repo": repo, "pull_number": pr_number}),
         ]:
             try:
-                result = call_tool(config, tool_name, args, timeout=15.0)
+                result = call_tool(config, tool_name, args, timeout=15.0, server_name="github")
                 parsed = _parse_mcp_result(result)
                 if parsed:
                     return _normalize_pr(parsed)
@@ -248,9 +319,8 @@ def get_pull_request_by_number(
             pass
         return None
 
-    raise GitHubNotConfiguredError(
-        "GitHub access not configured. Either set up github MCP or install gh CLI."
-    )
+    payload = github_unavailable_blocker()
+    raise GitHubNotConfiguredError(payload=payload)
 
 
 def list_open_prs(
@@ -272,7 +342,7 @@ def list_open_prs(
             args["author"] = author
         for tool_name in ("list_pull_requests", "search_pull_requests"):
             try:
-                result = call_tool(config, tool_name, args, timeout=15.0)
+                result = call_tool(config, tool_name, args, timeout=15.0, server_name="github")
                 parsed = _parse_mcp_result(result)
                 if parsed is None:
                     continue
@@ -312,9 +382,8 @@ def list_open_prs(
         except (GitHubNotConfiguredError, json.JSONDecodeError):
             return []
 
-    raise GitHubNotConfiguredError(
-        "GitHub access not configured. Either set up github MCP or install gh CLI."
-    )
+    payload = github_unavailable_blocker()
+    raise GitHubNotConfiguredError(payload=payload)
 
 
 def _extract_prs(data: Any, branch: str) -> list[dict]:
@@ -403,7 +472,7 @@ def get_review_comments(
             ("get_pull_request_reviews", {"owner": owner, "repo": repo, "pull_number": pr_number}),
         ]:
             try:
-                result = call_tool(config, tool_name, args, timeout=15.0)
+                result = call_tool(config, tool_name, args, timeout=15.0, server_name="github")
                 parsed = _parse_mcp_result(result)
                 if parsed is not None:
                     return _normalize_comments(parsed)

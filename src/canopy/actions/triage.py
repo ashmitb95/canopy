@@ -80,10 +80,18 @@ def _fetch_open_prs(
                 workspace.config.root, owner, slug, author=author,
             )
         except gh.GitHubNotConfiguredError as e:
+            from .errors import FixAction
+            payload = e.payload or {}
+            fix_actions = [
+                FixAction(action=fa["action"], args=fa.get("args", {}),
+                          safe=fa.get("safe", True), preview=fa.get("preview"))
+                for fa in payload.get("fix_actions", [])
+            ]
             raise BlockerError(
-                code="github_not_configured",
-                what="No GitHub transport available (MCP not configured, gh CLI not authed)",
-                details={"repo": repo_name, "error": str(e)},
+                code=payload.get("code", "github_not_configured"),
+                what=payload.get("what", str(e)),
+                fix_actions=fix_actions,
+                details={"repo": repo_name},
             )
     return out
 

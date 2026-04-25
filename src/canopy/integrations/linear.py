@@ -100,7 +100,7 @@ def get_issue(workspace_root: Path, issue_id: str) -> dict:
     last_error = None
     for tool_name, args in tool_attempts:
         try:
-            result = call_tool(config, tool_name, args, timeout=15.0)
+            result = call_tool(config, tool_name, args, timeout=15.0, server_name="linear")
             parsed = _parse_issue_result(result)
             if parsed:
                 return _normalize_issue(parsed, issue_id)
@@ -176,7 +176,7 @@ def list_my_issues(workspace_root: Path, limit: int = 25) -> list[dict]:
 
     for tool_name, args in tool_attempts:
         try:
-            result = call_tool(config, tool_name, args, timeout=15.0)
+            result = call_tool(config, tool_name, args, timeout=15.0, server_name="linear")
         except McpClientError:
             continue
         parsed = _parse_issue_result(result)

@@ -66,3 +66,166 @@ src/canopy/
 ```
 
 Always top-down. `actions/` depends on `git/`, `integrations/`, `features/`, `workspace/` — never the reverse. Tests can stub any layer below by patching at the import boundary.
+
+## Runtime pathways
+
+The dynamic stories — what happens when calls land. These complement the static module tree above.
+
+### The agent tool loop
+
+A typical session through canopy MCP. Every arrow is one MCP call. Note the agent never specifies a path; every input is semantic (feature name, repo name, alias).
+
+```
+  Agent                                  Canopy
+  ─────                                  ──────
+   triage()                          ─→  gh.list_open_prs per repo (MCP or gh CLI)
+                                         group by feature lane
+                                         classify priority via temporal filter
+                                     ←─  features ordered by priority
+
+   feature_state(feature)            ─→  live git.current_branch per repo
+                                         git.divergence per repo
+                                         gh.get_review_comments + classify
+                                         gh.find_pull_request
+                                         preflight_state.is_fresh()
+                                     ←─  state + summary + next_actions
+
+   ── read next_actions[0] ──
+
+   realign(feature)                  ─→  per repo:
+                                           git.current_branch
+                                           git.checkout (if needed)
+                                           post-checkout hook updates heads.json
+                                     ←─  per-repo {status, before, after, stash_ref?}
+
+   feature_state(feature)            ─→  …
+                                     ←─  state advanced (e.g. drifted → in_progress)
+
+   ── agent edits files via Read/Edit/Write ──
+   ── or runs path-safe shell via run(repo, command) ──
+
+   preflight(feature)                ─→  precommit hooks per repo (sequential v1)
+                                         preflight_state.record_result()
+                                     ←─  per-repo {passed, output}
+
+   feature_state(feature)            ─→  …
+                                     ←─  state: ready_to_commit
+```
+
+Path resolution lives entirely in `actions/aliases.py` (`resolve_feature`, `repos_for_feature`) and `agent/runner.py` (`canopy_run`). It never crosses the MCP boundary, so the agent has no surface area to type a wrong path.
+
+### feature_state composition
+
+`feature_state` is a thin shell over many primitives — same pattern other actions follow, but the most-composed example. Decision tree:
+
+```
+  feature_state(f)
+    │
+    ├─ resolve_feature(f)                  alias → canonical name
+    │
+    ├─ repos_for_feature(f)                {repo: expected_branch}  (honors lane.branches map)
+    │
+    ├─ _live_drift(repos, branches)        actual git current_branch per repo
+    │   │
+    │   └─ drifted? → state = "drifted"   ◄── supersedes everything below
+    │
+    ├─ _per_repo_facts(f, repos)
+    │   ├─ git.is_dirty / dirty_file_count
+    │   ├─ git.sha_of(branch)
+    │   ├─ git.divergence(branch, origin/branch)  → ahead, behind
+    │   ├─ gh.find_pull_request                   → review_decision, draft, …
+    │   └─ gh.get_review_comments + classify_threads → actionable, likely_resolved
+    │
+    ├─ preflight_state.is_fresh(repos)     compares recorded sha vs current HEAD
+    │
+    └─ _decide_state(facts, summary, preflight_fresh, preflight_entry):
+        ├─ dirty + fresh-passed-preflight       → ready_to_commit
+        ├─ dirty                                 → in_progress
+        ├─ clean + ahead > 0                     → ready_to_push
+        ├─ clean + actionable | CHANGES_REQUESTED → needs_work
+        ├─ clean + all PRs APPROVED              → approved
+        ├─ clean + no PRs                        → no_prs
+        └─ clean + PRs open + nothing actionable → awaiting_review
+```
+
+### Drift detection: two pathways
+
+Two paths exist because they answer different questions and have different costs.
+
+```
+  ┌─ Cached fast path (canopy drift) ──────────────────────────────┐
+  │                                                                │
+  │  git checkout <branch>                                         │
+  │       │                                                        │
+  │       ▼                                                        │
+  │  .git/hooks/post-checkout    (Python; fcntl-locked)            │
+  │       │                                                        │
+  │       ▼                                                        │
+  │  .canopy/state/heads.json    {repo: {branch, sha, ts}}         │
+  │       │                                                        │
+  │       ▼                                                        │
+  │  canopy drift                read heads.json + features.json,  │
+  │                              report alignment per feature      │
+  └────────────────────────────────────────────────────────────────┘
+
+  ┌─ Live correct path (canopy state, feature_state MCP tool) ─────┐
+  │                                                                │
+  │  feature_state(f)                                              │
+  │       │                                                        │
+  │       ▼                                                        │
+  │  git.current_branch per repo  (subprocess; authoritative)      │
+  │       │                                                        │
+  │       ▼                                                        │
+  │  alignment vs repos_for_feature(f) → drifted / aligned         │
+  └────────────────────────────────────────────────────────────────┘
+```
+
+The hook is shared across all worktrees of a repo via git's `commondir` mechanism — installing in the main repo covers every linked worktree. Honors `core.hooksPath` (Husky-compatible). Pre-existing user hooks are chained: canopy's hook moves them to `post-checkout.canopy-chained` and execs them after writing state.
+
+### Action contract pathway
+
+Every action follows a fixed three-phase structure. Errors flow back as `BlockerError` (preconditions failed; no side effects) or `FailedError` (mid-flight; partial side effects). Both serialize to the same `{status, code, what, expected, actual, fix_actions, details}` shape.
+
+```
+  def some_action(workspace, feature, **kw):
+
+      # 1. PRECONDITIONS — verify before any side effect
+      assert_aligned(workspace, feature)         # raises BlockerError on drift
+      validate_inputs(...)
+
+      # 2. STEPS — per-repo execution with per-repo result tracking
+      results = {}
+      for repo, expected_branch in repos_for_feature(workspace, feature).items():
+          before = git.current_branch(repo)
+          try:
+              do_the_thing(repo, expected_branch)
+              after = git.current_branch(repo)
+              results[repo] = {"status": "ok", "before": before, "after": after}
+          except git.GitError as e:
+              results[repo] = {"status": "failed", "reason": str(e), ...}
+
+      # 3. COMPLETION — verify the new state matches criteria, don't assume
+      if not all_repos_ok(results):
+          raise FailedError(code="...", actual={"per_repo": results}, fix_actions=[...])
+
+      return {"feature": feature, "aligned": True, "repos": results}
+```
+
+CLI renders the error via `cli/render.py` (multi-line with `fix_actions` and `safe`/`needs review` tags). MCP returns `BlockerError.to_dict()` directly. Same shape, two consumers — the agent and the human read the same JSON, just rendered differently.
+
+## State files
+
+What state lives where, who writes it, who reads it:
+
+| Path | Writer | Readers | Purpose |
+|---|---|---|---|
+| `canopy.toml` | `canopy init` | all canopy commands | workspace definition (which repos) |
+| `.canopy/features.json` | `feature_create` / `link_linear` / `done` | most actions | feature lanes + Linear links + branches map |
+| `.canopy/state/heads.json` | post-checkout hook | `drift`, `hook_status` | drift fast path |
+| `.canopy/state/heads.json.lock` | post-checkout hook | (fcntl flock) | concurrent-fire safety |
+| `.canopy/state/preflight.json` | `review_prep` / `cmd_preflight --feature` | `feature_state` | IN_PROGRESS vs READY_TO_COMMIT |
+| `.mcp.json` | `canopy init` / `setup-agent` | MCP-aware clients (Claude Code, Cursor) | server registry |
+| `~/.canopy/mcp-tokens/<server>.{client,tokens}.json` | `mcp/client.py` OAuth provider | `mcp/client.py` on subsequent calls | OAuth token cache |
+| `~/.claude/skills/using-canopy/SKILL.md` | `canopy init` / `setup-agent` | Claude Code (auto-loaded) | agent integration skill |
+
+All workspace state lives under `.canopy/`; agent / per-user state lives under `~/`. The split lets you share workspace state via git (commit `.canopy/features.json` if you want; ignore `.canopy/state/`), while OAuth tokens and skill never leave the user's machine.

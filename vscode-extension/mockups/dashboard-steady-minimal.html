@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>canopy — dashboard (minimal)</title>
+<style>
+  /* Minimal — matches new-feature-minimal + action-drawer-minimal. */
+  :root {
+    --bg:        #0a0a0a;
+    --bg-elev:   #111111;
+    --bg-elev-2: #181818;
+    --border:    #2a2a2a;
+    --border-soft: #1f1f1f;
+    --fg:        #fafafa;
+    --fg-muted:  #a1a1a1;
+    --fg-dim:    #6b6b6b;
+    --accent:    #4f80ff;
+    --warn:      #f5b945;
+    --hot:       #ff6363;
+    --on:        #5dd0a8;
+    --bot:       #b08aff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px; line-height: 1.55;
+    background: var(--bg); color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  .mono, code {
+    font-family: "Berkeley Mono", "SF Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 12px; letter-spacing: -0.05px;
+  }
+
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .logo { font-weight: 600; font-size: 13px; letter-spacing: -0.2px; }
+  .station { color: var(--fg-dim); font-size: 12px; margin-left: 4px; }
+  .station code { color: var(--fg-muted); }
+  .spacer { flex: 1; }
+
+  .lamp-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 11px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    color: var(--fg-muted); font-size: 12px;
+  }
+  .lamp-pill .lamp { width: 6px; height: 6px; border-radius: 50%; background: var(--on); }
+  .lamp-pill.warm .lamp { background: var(--warn); }
+  .lamp-pill strong { color: var(--fg); margin-left: 2px; font-weight: 500; }
+
+  .theme-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    background: var(--bg-elev);
+  }
+  .theme-toggle a { padding: 5px 12px; font-size: 11px; color: var(--fg-dim); text-decoration: none; font-weight: 500; }
+  .theme-toggle a + a { border-left: 1px solid var(--border-soft); }
+  .theme-toggle a:hover { color: var(--fg); }
+  .theme-toggle a.active { background: var(--bg-elev-2); color: var(--fg); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    height: calc(100vh - 49px);
+  }
+  .main { padding: 32px 40px 60px; overflow-y: auto; }
+  .triage {
+    background: var(--bg);
+    border-left: 1px solid var(--border-soft);
+    overflow-y: auto;
+  }
+
+  .section-head {
+    display: flex; align-items: baseline; gap: 8px;
+    margin: 0 0 14px;
+    color: var(--fg-muted); font-size: 12px; font-weight: 500;
+  }
+  .section-head .count { color: var(--fg-dim); font-size: 11px; }
+  .section-head .hint { color: var(--fg-dim); font-size: 11px; margin-left: auto; }
+  .main > .section-head:not(:first-child) { margin-top: 36px; }
+
+  /* Focus card */
+  .focus {
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 22px 24px;
+  }
+  .focus h2 {
+    margin: 0 0 8px;
+    font-size: 20px; font-weight: 600; letter-spacing: -0.3px;
+  }
+  .focus h2 .sub { color: var(--fg-muted); font-weight: 400; font-size: 14px; margin-left: 8px; }
+  .focus .meta-row {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 16px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; padding: 3px 9px;
+    border-radius: 11px;
+    border: 1px solid var(--border-soft);
+    color: var(--fg-muted);
+  }
+  .badge.canonical { color: var(--on); }
+  .badge.warm { color: var(--warn); }
+  .badge.state-needs_work { color: var(--hot); }
+  .badge.state-in_progress { color: var(--warn); }
+  .badge.state-ready_to_push { color: var(--accent); }
+  .badge.state-awaiting_review { color: var(--fg-muted); }
+  .badge.state-no_prs { color: var(--fg-dim); }
+  .pill-link {
+    color: var(--fg-dim); text-decoration: none; font-size: 11px;
+  }
+  .pill-link:hover { color: var(--fg); }
+
+  .repo-strip { display: grid; gap: 8px; margin-bottom: 18px; }
+  .repo-row {
+    display: grid;
+    grid-template-columns: 100px 1fr auto auto auto;
+    gap: 14px; align-items: center;
+    padding: 11px 14px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .repo-row .name { font-weight: 600; }
+  .repo-row .branch { color: var(--fg-dim); font-family: "Berkeley Mono", "SF Mono", monospace; font-size: 11px; }
+  .repo-row .dirty { color: var(--warn); font-size: 11px; }
+  .repo-row .pr { color: var(--accent); font-size: 11px; text-decoration: none; }
+  .repo-row .actionable { color: var(--hot); font-size: 11px; font-weight: 500; }
+
+  .cta-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button.btn {
+    background: var(--bg-elev); color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px; font-size: 12px; font-weight: 500;
+    cursor: pointer;
+  }
+  button.btn:hover { background: var(--bg-elev-2); }
+  button.btn.primary {
+    background: var(--fg); border-color: var(--fg); color: var(--bg);
+  }
+  button.btn.primary:hover { background: #fff; }
+  button.btn .preview {
+    color: var(--fg-muted); font-weight: 400; font-size: 11px; margin-left: 6px;
+  }
+  button.btn.primary .preview { color: rgba(0,0,0,0.55); }
+
+  .standby-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .standby-card {
+    border: 1px solid var(--border-soft);
+    border-radius: 7px;
+    padding: 15px 17px;
+  }
+  .standby-card .meta-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .standby-card h3 {
+    margin: 0 0 8px;
+    font-size: 14px; font-weight: 600;
+  }
+  .standby-card .summary {
+    color: var(--fg-muted); font-size: 11px;
+    margin-bottom: 12px;
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .standby-card .summary span::before { content: "·"; margin-right: 6px; color: var(--border); }
+  .standby-card .summary span:first-child::before { content: ""; margin-right: 0; }
+  .standby-card .actions { display: flex; gap: 6px; }
+  .standby-card button.btn { padding: 5px 11px; font-size: 11px; }
+
+  .cold {
+    border: 1px solid var(--border-soft);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .cold-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 14px; align-items: center;
+    padding: 11px 16px;
+    border-top: 1px solid var(--border-soft);
+    font-size: 12px;
+  }
+  .cold-row:first-child { border-top: none; }
+  .cold-row:hover { background: var(--bg-elev); }
+  .cold-row .name { font-weight: 500; }
+  .cold-row .name .badge { margin-left: 8px; }
+  .cold-row .meta-info { color: var(--fg-dim); font-size: 11px; }
+  .cold-row button.warm-it {
+    background: none; border: 1px solid var(--border); color: var(--fg-muted);
+    border-radius: 4px; padding: 4px 11px; font-size: 11px; cursor: pointer;
+  }
+  .cold-row button.warm-it:hover { color: var(--fg); background: var(--bg-elev); }
+
+  /* Triage */
+  .triage h3 {
+    margin: 0; padding: 18px 22px 14px;
+    font-size: 12px; color: var(--fg-dim); font-weight: 500;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: baseline;
+  }
+  .triage h3 .total {
+    margin-left: auto; font-weight: 400; font-size: 11px; color: var(--fg-dim);
+  }
+  .triage-item {
+    padding: 13px 22px;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer;
+  }
+  .triage-item:hover { background: var(--bg-elev); }
+  .triage-item .priority-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 4px;
+  }
+  .triage-item .priority {
+    font-size: 11px; font-weight: 500;
+  }
+  .triage-item .priority.changes_requested { color: var(--hot); }
+  .triage-item .priority.bot               { color: var(--bot); }
+  .triage-item .priority.review_required   { color: var(--accent); }
+  .triage-item .priority.approved          { color: var(--on); }
+  .triage-item .canonical-tag {
+    color: var(--on); font-size: 11px; margin-left: auto;
+  }
+  .triage-item .feature-name { font-size: 13px; font-weight: 500; }
+  .triage-item .secondary { color: var(--fg-muted); font-size: 11px; margin-top: 3px; }
+
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="logo">canopy</span>
+  <span class="station">workspace <code>~/projects/my-product</code></span>
+  <span class="spacer"></span>
+  <span class="theme-toggle">
+    <a href="dashboard-steady.html">Navy</a>
+    <a class="active" href="dashboard-steady-minimal.html">Minimal</a>
+  </span>
+  <span class="lamp-pill">
+    <span class="lamp"></span>
+    Main: <strong>SIN-12-search</strong>
+  </span>
+  <span class="lamp-pill warm">
+    <span class="lamp"></span>
+    Worktrees <strong>2 / 2</strong>
+  </span>
+</header>
+
+<div class="layout">
+
+  <main class="main">
+
+    <div class="section-head">
+      Main <span class="count">in focus</span>
+      <span class="hint">primary action sourced from feature_state.next_actions[0]</span>
+    </div>
+
+    <div class="focus">
+      <h2>SIN-12-search<span class="sub">Add /search endpoint with shared filter types</span></h2>
+      <div class="meta-row">
+        <span class="badge canonical">● in main</span>
+        <span class="badge state-needs_work">needs work</span>
+        <a class="pill-link" href="#">SIN-12 ↗</a>
+      </div>
+
+      <div class="repo-strip">
+        <div class="repo-row">
+          <span class="name">backend</span>
+          <span class="branch">SIN-12-search</span>
+          <span class="dirty">3 dirty</span>
+          <a class="pr" href="#">PR #142 ↗</a>
+          <span class="actionable">2 actionable</span>
+        </div>
+        <div class="repo-row">
+          <span class="name">frontend</span>
+          <span class="branch">SIN-12-search</span>
+          <span class="dirty">1 dirty</span>
+          <a class="pr" href="#">PR #58 ↗</a>
+          <span class="actionable">1 actionable</span>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <button class="btn primary">
+          Address comments<span class="preview">3 actionable threads · open in Claude</span>
+        </button>
+        <button class="btn">Run preflight</button>
+        <button class="btn">View comments</button>
+        <button class="btn">Open in IDE</button>
+      </div>
+    </div>
+
+    <div class="section-head">
+      Worktrees <span class="count">2 / 2</span>
+      <span class="hint">linked worktrees · click to switch into main</span>
+    </div>
+
+    <div class="standby-row">
+      <div class="standby-card">
+        <h3>SIN-13-empty-state</h3>
+        <div class="meta-row">
+          <span class="badge warm">● worktree</span>
+          <span class="badge state-in_progress">in progress</span>
+        </div>
+        <div class="summary">
+          <span>frontend only</span><span>2 dirty</span><span>no PR yet</span>
+        </div>
+        <div class="actions">
+          <button class="btn primary">Switch into main</button>
+          <button class="btn">Open IDE</button>
+        </div>
+      </div>
+
+      <div class="standby-card">
+        <h3>SIN-14-cache-stats</h3>
+        <div class="meta-row">
+          <span class="badge warm">● worktree</span>
+          <span class="badge state-ready_to_push">ready to push</span>
+        </div>
+        <div class="summary">
+          <span>backend only</span><span>clean</span><span>2 commits ahead</span>
+        </div>
+        <div class="actions">
+          <button class="btn primary">Switch into main</button>
+          <button class="btn">Push from here</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      Branches <span class="count">3</span>
+      <span class="hint">no worktree · switching creates one</span>
+    </div>
+
+    <div class="cold">
+      <div class="cold-row">
+        <span class="name">SIN-15-stale-count<span class="badge state-awaiting_review">awaiting review</span></span>
+        <span class="meta-info">backend + frontend · hibernating 2d</span>
+        <button class="warm-it">Switch (evicts SIN-13)</button>
+      </div>
+      <div class="cold-row">
+        <span class="name">SIN-16-doc-update<span class="badge state-no_prs">no PRs</span></span>
+        <span class="meta-info">frontend only · last touched 5d ago</span>
+        <button class="warm-it">Switch</button>
+      </div>
+      <div class="cold-row">
+        <span class="name">SIN-17-export-csv<span class="badge state-needs_work">needs work</span></span>
+        <span class="meta-info">backend only · 1 actionable thread · hibernating 8d</span>
+        <button class="warm-it">Switch (evicts SIN-13)</button>
+      </div>
+    </div>
+
+  </main>
+
+  <aside class="triage">
+    <h3>Triage <span class="total">5 features</span></h3>
+
+    <div class="triage-item">
+      <div class="priority-row">
+        <span class="priority changes_requested">changes requested</span>
+        <span class="canonical-tag">● focused</span>
+      </div>
+      <div class="feature-name">SIN-12-search</div>
+      <div class="secondary">3 actionable threads across 2 PRs</div>
+    </div>
+
+    <div class="triage-item">
+      <div class="priority-row">
+        <span class="priority bot">bot review</span>
+      </div>
+      <div class="feature-name">SIN-17-export-csv</div>
+      <div class="secondary">claude[bot] flagged a missing test · hibernating</div>
+    </div>
+
+    <div class="triage-item">
+      <div class="priority-row">
+        <span class="priority review_required">review required</span>
+      </div>
+      <div class="feature-name">SIN-15-stale-count</div>
+      <div class="secondary">PR open · awaiting human · branch only</div>
+    </div>
+
+    <div class="triage-item">
+      <div class="priority-row">
+        <span class="priority approved">approved</span>
+      </div>
+      <div class="feature-name">SIN-14-cache-stats</div>
+      <div class="secondary">2 commits ahead · in worktree · ready to push</div>
+    </div>
+
+    <div class="triage-item">
+      <div class="priority-row">
+        <span class="priority review_required">review required</span>
+      </div>
+      <div class="feature-name">SIN-13-empty-state</div>
+      <div class="secondary">no PR yet · in progress · in worktree</div>
+    </div>
+  </aside>
+
+</div>
+
+</body>
+</html>

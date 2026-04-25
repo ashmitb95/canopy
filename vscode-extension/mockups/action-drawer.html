@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>canopy command — action drawer (navy)</title>
+<style>
+  /* Canopy Command (navy) — same palette family, dialed back.
+     Dropped: all-caps EVERYTHING, mono in body text, busy keyboard chips,
+     loud group-label decorations.
+     Kept: navy palette, signal-yellow + signal-red accents, compass insignia,
+     "on station" vocabulary on lamps.
+  */
+  :root {
+    --bg:          #08111c;
+    --bg-elev:     #0d1a26;
+    --bg-elev-2:   #11202f;
+    --bg-elev-3:   #16293c;
+    --hairline:    #1c3450;
+    --rule:        #20405e;
+    --fg:          #e6eef7;
+    --fg-muted:    #8aa3bd;
+    --fg-dim:      #506c87;
+    --signal:      #e6c34c;
+    --signal-soft: #e6c34c1f;
+    --command:     #2f81f7;
+    --command-soft:#2f81f71f;
+    --hot:         #f85149;
+    --hot-soft:    #f8514922;
+    --on-station:  #5dd0a8;
+    --on-soft:     #5dd0a822;
+    --steel:       #4a6378;
+    --bot:         #a371f7;
+    --bot-soft:    #a371f722;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+    font-size: 13px; line-height: 1.55;
+    background: var(--bg); color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono, code {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+    font-size: 12px; letter-spacing: -0.05px;
+  }
+
+  /* Bridge — sentence-case "Main:" / "Worktrees" labels */
+  .bridge {
+    display: flex; align-items: center; gap: 14px;
+    padding: 11px 24px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--rule);
+  }
+  .insignia {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 13px;
+  }
+  .insignia .compass {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--steel); border-radius: 50%;
+    position: relative;
+  }
+  .insignia .compass::before, .insignia .compass::after { content: ""; position: absolute; background: var(--steel); }
+  .insignia .compass::before { top: 1px; bottom: 1px; left: 50%; width: 1px; transform: translateX(-50%); }
+  .insignia .compass::after  { left: 1px; right: 1px; top: 50%; height: 1px; transform: translateY(-50%); }
+  .station { color: var(--fg-muted); font-size: 12px; margin-left: 4px; }
+  .station code { color: var(--fg); }
+  .spacer { flex: 1; }
+  .lamp-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 11px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    color: var(--fg-muted); font-size: 12px;
+  }
+  .lamp-pill .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--on-station); box-shadow: 0 0 6px var(--on-station); }
+  .lamp-pill.warm .lamp { background: var(--signal); box-shadow: 0 0 6px var(--signal); }
+  .lamp-pill strong { color: var(--fg); margin-left: 2px; font-weight: 500; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    height: calc(100vh - 42px);
+  }
+  .center { padding: 28px 36px 60px; overflow-y: auto; }
+  .drawer {
+    background: var(--bg-elev);
+    border-left: 1px solid var(--rule);
+    overflow-y: auto;
+  }
+
+  .crumb {
+    color: var(--fg-dim); font-size: 12px;
+    margin-bottom: 18px;
+  }
+  .crumb .here { color: var(--fg); }
+
+  /* Hero — softer than v1, no border-left bar */
+  .hero h1 {
+    margin: 0 0 6px;
+    font-size: 22px; font-weight: 600; letter-spacing: -0.3px;
+  }
+  .hero h1 .sub {
+    color: var(--fg-muted); font-weight: 400; font-size: 14px; margin-left: 10px;
+  }
+  .hero .meta-row {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 8px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; padding: 3px 9px;
+    border-radius: 11px;
+  }
+  .badge.canonical { color: var(--on-station); background: var(--on-soft); }
+  .badge.warm      { color: var(--signal);     background: var(--signal-soft); }
+  .badge.state-needs_work { color: var(--hot); background: var(--hot-soft); }
+  .pill-link {
+    color: var(--command); text-decoration: none; font-size: 11px;
+    padding: 2px 9px; background: var(--command-soft); border-radius: 9px;
+  }
+  .meta-row .since {
+    color: var(--fg-dim); font-size: 11px; margin-left: auto;
+  }
+
+  /* Per-repo strip — no border, just the strip itself */
+  .repo-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin: 22px 0 8px;
+  }
+  .repo-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--hairline);
+    padding: 12px 14px;
+    border-radius: 5px;
+  }
+  .repo-card .repo-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .repo-card .repo-name { font-weight: 600; font-size: 13px; }
+  .repo-card .branch {
+    font-family: "JetBrains Mono", monospace; font-size: 11px;
+    color: var(--fg-muted);
+  }
+  .repo-card .stats {
+    display: flex; gap: 12px; font-size: 11px; color: var(--fg-muted); margin-bottom: 6px;
+  }
+  .repo-card .stats .dirty { color: var(--signal); }
+  .repo-card .stats .actionable { color: var(--hot); font-weight: 500; }
+  .repo-card .stats a { color: var(--command); text-decoration: none; }
+  .repo-card .stats a:hover { text-decoration: underline; }
+  .repo-card .path {
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: var(--fg-dim);
+  }
+
+  /* Section header — softer */
+  .section-head {
+    display: flex; align-items: baseline; gap: 8px;
+    margin: 26px 0 10px;
+    color: var(--fg-muted); font-size: 12px; font-weight: 500;
+  }
+  .section-head .count {
+    color: var(--fg-dim); font-size: 11px;
+  }
+
+  .threads { display: grid; gap: 8px; }
+  .thread {
+    background: var(--bg-elev);
+    border: 1px solid var(--hairline);
+    border-left: 2px solid var(--hot);
+    padding: 12px 14px;
+    border-radius: 4px;
+  }
+  .thread.bot { border-left-color: var(--bot); }
+  .thread .thread-head {
+    display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px;
+  }
+  .thread .repo-tag {
+    font-size: 10px; padding: 1px 7px; border-radius: 3px;
+    background: var(--bg-elev-2); color: var(--fg-muted);
+  }
+  .thread .file-loc {
+    font-family: "JetBrains Mono", monospace; font-size: 11px;
+    color: var(--command); cursor: pointer;
+  }
+  .thread .author { color: var(--fg-muted); font-size: 11px; }
+  .thread .author.bot { color: var(--bot); }
+  .thread .age { color: var(--fg-dim); font-size: 10px; margin-left: auto; }
+  .thread .body { color: var(--fg); font-size: 12px; line-height: 1.5; margin-bottom: 8px; }
+  .thread .body code { background: var(--bg); padding: 1px 5px; border-radius: 2px; color: var(--command); }
+  .thread .actions { display: flex; gap: 4px; }
+  .thread .actions button {
+    background: none; border: 1px solid transparent; color: var(--fg-dim);
+    border-radius: 4px; padding: 3px 9px; font-size: 11px; cursor: pointer;
+  }
+  .thread .actions button:hover { background: var(--bg-elev-2); color: var(--fg); border-color: var(--hairline); }
+  .thread .actions .reply { color: var(--command); }
+
+  /* ── Drawer (right rail) ─────────────────────────────────────── */
+  .drawer-head {
+    padding: 16px 20px 14px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .drawer-head .feature {
+    font-family: "JetBrains Mono", monospace; font-size: 12px;
+    color: var(--signal); font-weight: 600;
+  }
+  .drawer-head .label {
+    color: var(--fg-dim); font-size: 11px; margin-bottom: 4px;
+  }
+
+  /* Quick summary — table-style, much calmer */
+  .summary {
+    padding: 14px 20px 16px;
+    border-bottom: 1px solid var(--hairline);
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 5px 14px;
+    font-size: 12px;
+  }
+  .summary .label { color: var(--fg-dim); font-weight: 400; }
+  .summary .value { color: var(--fg); }
+  .summary .value.alert { color: var(--hot); }
+  .summary .value.warn { color: var(--signal); }
+  .summary .value code {
+    color: var(--fg); font-family: "JetBrains Mono", monospace; font-size: 11px;
+  }
+
+  /* Action group — sentence-case, no glyph clutter */
+  .group {
+    border-bottom: 1px solid var(--hairline);
+    padding: 14px 20px 8px;
+  }
+  .group:last-of-type { border-bottom: none; }
+  .group-label {
+    color: var(--fg-muted); font-size: 11px; font-weight: 600;
+    margin-bottom: 8px;
+    display: flex; align-items: baseline;
+  }
+  .group-label .recommended {
+    color: var(--on-station); font-size: 10px;
+    margin-left: auto; font-weight: 500;
+  }
+
+  .action {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    padding: 8px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 0 -10px 2px;
+  }
+  .action:hover { background: var(--bg-elev-2); }
+  .action.recommended {
+    background: var(--bg-elev-2);
+    border-left: 2px solid var(--on-station);
+    margin-left: -12px; padding-left: 8px;
+  }
+  .action .label {
+    color: var(--fg); font-size: 13px; font-weight: 500;
+  }
+  .action .preview {
+    color: var(--fg-muted); font-size: 11px; line-height: 1.4;
+  }
+  .action.disabled { opacity: 0.45; cursor: not-allowed; }
+  .action.disabled .preview { color: var(--fg-dim); }
+  .action .danger { color: var(--hot); }
+
+  .drawer-foot {
+    padding: 14px 20px;
+    border-top: 1px solid var(--hairline);
+    color: var(--fg-dim); font-size: 11px;
+    text-align: center;
+  }
+  .drawer-foot code {
+    color: var(--fg-muted);
+    background: var(--bg);
+    padding: 1px 6px; border-radius: 3px;
+  }
+
+  /* Theme toggle (top-right) */
+  .theme-toggle {
+    display: inline-flex;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--bg-elev-2);
+  }
+  .theme-toggle a {
+    padding: 5px 12px;
+    font-size: 11px;
+    color: var(--fg-muted);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .theme-toggle a + a { border-left: 1px solid var(--hairline); }
+  .theme-toggle a:hover { color: var(--fg); }
+  .theme-toggle a.active {
+    background: var(--bg-elev-3);
+    color: var(--fg);
+  }
+</style>
+</head>
+<body>
+
+<header class="bridge">
+  <div class="insignia">
+    <div class="compass"></div>
+    <span>Canopy Command</span>
+  </div>
+  <span class="station">workspace <code>~/projects/my-product</code></span>
+  <span class="spacer"></span>
+  <span class="theme-toggle">
+    <a class="active" href="action-drawer.html">Navy</a>
+    <a href="action-drawer-minimal.html">Minimal</a>
+  </span>
+  <span class="lamp-pill">
+    <span class="lamp"></span>
+    Main: <strong>SIN-12-search</strong>
+  </span>
+  <span class="lamp-pill warm">
+    <span class="lamp"></span>
+    Worktrees <strong>2 / 2</strong>
+  </span>
+</header>
+
+<div class="layout">
+
+  <!-- Center: focused feature -->
+  <main class="center">
+
+    <div class="crumb">Dashboard · <span class="here">SIN-12-search</span></div>
+
+    <div class="hero">
+      <h1>SIN-12-search<span class="sub">Add /search endpoint with shared filter types</span></h1>
+      <div class="meta-row">
+        <span class="badge canonical">● in main</span>
+        <span class="badge state-needs_work">needs work</span>
+        <a class="pill-link" href="#">SIN-12 ↗</a>
+        <span class="since">last touched 12 min ago · CHANGES_REQUESTED in 1 PR</span>
+      </div>
+
+      <div class="repo-grid">
+        <div class="repo-card">
+          <div class="repo-head">
+            <span class="repo-name">backend</span>
+            <span class="branch">SIN-12-search</span>
+          </div>
+          <div class="stats">
+            <span class="dirty">3 dirty</span>
+            <span class="actionable">2 actionable</span>
+            <a href="#">PR #142 ↗</a>
+          </div>
+          <div class="path">~/projects/my-product/backend</div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-head">
+            <span class="repo-name">frontend</span>
+            <span class="branch">SIN-12-search</span>
+          </div>
+          <div class="stats">
+            <span class="dirty">1 dirty</span>
+            <span class="actionable">1 actionable</span>
+            <a href="#">PR #58 ↗</a>
+          </div>
+          <div class="path">~/projects/my-product/frontend</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head">
+      Actionable threads <span class="count">3</span>
+    </div>
+
+    <div class="threads">
+      <div class="thread">
+        <div class="thread-head">
+          <span class="repo-tag">backend</span>
+          <span class="file-loc">src/api/search.py:18</span>
+          <span class="author">@reviewer-1</span>
+          <span class="age">2h ago</span>
+        </div>
+        <div class="body">
+          Could you add a docstring with an example response shape? Other endpoints
+          all have one and the OpenAPI generator picks it up.
+        </div>
+        <div class="actions">
+          <button>Jump</button>
+          <button class="reply">Draft reply</button>
+          <button>Mark addressed</button>
+          <button>Defer</button>
+        </div>
+      </div>
+
+      <div class="thread">
+        <div class="thread-head">
+          <span class="repo-tag">backend</span>
+          <span class="file-loc">src/api/search.py:42</span>
+          <span class="author">@reviewer-1</span>
+          <span class="age">2h ago</span>
+        </div>
+        <div class="body">
+          The <code>FilterParams</code> type should probably be a discriminated union
+          rather than a flat dict.
+        </div>
+        <div class="actions">
+          <button>Jump</button>
+          <button class="reply">Draft reply</button>
+          <button>Mark addressed</button>
+          <button>Defer</button>
+        </div>
+      </div>
+
+      <div class="thread bot">
+        <div class="thread-head">
+          <span class="repo-tag">frontend</span>
+          <span class="file-loc">src/components/SearchBar.tsx:31</span>
+          <span class="author bot">claude[bot]</span>
+          <span class="age">35m ago</span>
+        </div>
+        <div class="body">
+          The new <code>useSearchFilters</code> hook isn't covered by any test.
+        </div>
+        <div class="actions">
+          <button>Jump</button>
+          <button class="reply">Draft reply</button>
+          <button>Mark addressed</button>
+          <button>Defer</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Right rail: ACTION DRAWER ─────────────────────────────────── -->
+  <aside class="drawer">
+
+    <div class="drawer-head">
+      <div class="label">Available actions</div>
+      <div class="feature">SIN-12-search</div>
+    </div>
+
+    <div class="summary">
+      <span class="label">State</span>             <span class="value alert">needs_work</span>
+      <span class="label">Slot</span>              <span class="value">in main</span>
+      <span class="label">Dirty</span>             <span class="value warn">4 files</span>
+      <span class="label">Unpushed</span>          <span class="value">0</span>
+      <span class="label">PRs</span>               <span class="value">2 open · changes requested</span>
+      <span class="label">Actionable</span>        <span class="value alert">3 threads</span>
+      <span class="label">Preflight</span>         <span class="value">stale</span>
+    </div>
+
+    <div class="group">
+      <div class="group-label">
+        Review
+        <span class="recommended">Recommended</span>
+      </div>
+      <div class="action recommended">
+        <div class="label">Address comments in Claude</div>
+        <div class="preview">Opens Claude with the 3 actionable threads + file context preloaded.</div>
+      </div>
+      <div class="action">
+        <div class="label">Draft replies for addressed threads</div>
+        <div class="preview">Scans push history, seeds a reply per resolved thread.</div>
+      </div>
+      <div class="action">
+        <div class="label">Defer all</div>
+        <div class="preview">Marks threads as deferred, kept in audit log.</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">Write</div>
+      <div class="action">
+        <div class="label">Run preflight</div>
+        <div class="preview">Re-runs per-repo checks, records result.</div>
+      </div>
+      <div class="action disabled">
+        <div class="label">Commit + push</div>
+        <div class="preview">Disabled: preflight is stale. Run preflight first.</div>
+      </div>
+      <div class="action">
+        <div class="label">Stash dirty work</div>
+        <div class="preview">Tags both repos' changes with the feature stash.</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">Slot</div>
+      <div class="action">
+        <div class="label">Move to a worktree</div>
+        <div class="preview">Evacuates SIN-12 to a linked worktree; main free for another feature.</div>
+      </div>
+      <div class="action">
+        <div class="label">Hibernate (branch only)</div>
+        <div class="preview">Stashes dirty work with the feature tag; removes the worktree. Wakes up on next switch into SIN-12.</div>
+      </div>
+      <div class="action">
+        <div class="label">Add docs to the lane</div>
+        <div class="preview">Currently 2/3 repos. Adds docs branch + worktree.</div>
+      </div>
+      <div class="action">
+        <div class="label">Remove frontend from the lane</div>
+        <div class="preview">Scopes feature to backend only; frontend's PR untouched.</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">Inspect</div>
+      <div class="action">
+        <div class="label">Open in IDE</div>
+        <div class="preview">Launches workspace at the main checkout paths.</div>
+      </div>
+      <div class="action">
+        <div class="label">View full diff vs main</div>
+        <div class="preview">Aggregate diff across both repos with type-overlap detection.</div>
+      </div>
+      <div class="action">
+        <div class="label">Show 4 likely-resolved threads</div>
+        <div class="preview">Collapsed by the temporal filter (later commits touched these files).</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">Configure</div>
+      <div class="action">
+        <div class="label">Re-link Linear issue</div>
+        <div class="preview">Currently SIN-12. Pick another from your inbox.</div>
+      </div>
+      <div class="action">
+        <div class="label danger">Done — archive lane</div>
+        <div class="preview">Requires PRs merged or explicit force. Worktrees removed.</div>
+      </div>
+    </div>
+
+    <div class="drawer-foot">
+      Every action maps to a <code>mcp__canopy__*</code> call.
+    </div>
+
+  </aside>
+
+</div>
+
+</body>
+</html>

@@ -20,7 +20,7 @@ Canopy also returns **pre-classified state**: review comments are temporally fil
 | What feature should I work on right now? | `mcp__canopy__triage` | per-repo `gh pr list` + manual grouping |
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads yourself |
 | Promote a feature to the canonical slot (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout` per repo, or guessing paths |
-| Wind down current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` | manual stash + checkout dance |
+| Hibernate current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` *(`release_current` is the API param; user-facing label is "hibernate")* | manual stash + checkout dance |
 | Check whether HEADs match expected | `mcp__canopy__drift` | `cd && git branch --show-current` per repo |
 | Read PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + manual filter |
 | Get PR data (title, decision, draft, ...) | `mcp__canopy__github_get_pr` | `gh pr view --json ...` per repo |

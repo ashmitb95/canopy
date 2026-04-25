@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>canopy — focused feature detail (needs_work)</title>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --bg-elev:   #161b22;
+    --bg-elev-2: #1c232c;
+    --bg-elev-3: #222a33;
+    --border:    #30363d;
+    --border-soft: #21262d;
+    --fg:        #e6edf3;
+    --fg-muted:  #8b949e;
+    --fg-dim:    #6e7681;
+    --accent:    #2f81f7;
+    --accent-soft:#1f6feb33;
+    --warm:      #d29922;
+    --warm-soft: #d2992233;
+    --cold:      #6e7681;
+    --canonical: #3fb950;
+    --canonical-soft: #3fb95022;
+    --danger:    #f85149;
+    --danger-soft:#f8514922;
+    --bot:       #a371f7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13px; line-height: 1.5;
+    background: var(--bg); color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: "SF Mono", "Monaco", "Menlo", Consolas, monospace; font-size: 12px; }
+
+  /* ── Layout (same as steady) ──────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 1fr 320px;
+    grid-template-areas:
+      "ribbon  ribbon"
+      "main    triage";
+    height: 100vh;
+  }
+  .ribbon {
+    grid-area: ribbon;
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 24px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+  }
+  .ribbon .logo { font-weight: 600; }
+  .ribbon .workspace { color: var(--fg-muted); }
+  .ribbon .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 10px;
+    background: var(--bg-elev-2); color: var(--fg);
+    border: 1px solid var(--border-soft); font-size: 12px;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--canonical); }
+
+  .main { grid-area: main; overflow-y: auto; padding: 24px 32px 60px; }
+  .triage { grid-area: triage; border-left: 1px solid var(--border-soft); background: var(--bg-elev); padding: 14px 18px; }
+
+  /* ── Breadcrumbs ──────────────────────────────────────────────── */
+  .crumbs {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--fg-dim); font-size: 12px;
+    margin-bottom: 18px;
+  }
+  .crumbs a { color: var(--fg-muted); text-decoration: none; }
+  .crumbs a:hover { color: var(--accent); }
+  .crumbs .sep { color: var(--border); }
+
+  /* ── Hero header ──────────────────────────────────────────────── */
+  .hero {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--canonical);
+    border-radius: 8px;
+    padding: 22px 24px;
+  }
+  .hero h1 {
+    margin: 0 0 6px; font-size: 22px; font-weight: 600; letter-spacing: -0.3px;
+  }
+  .hero h1 .feature-name { color: var(--fg); }
+  .hero h1 .sub { color: var(--fg-muted); font-weight: 400; font-size: 16px; margin-left: 10px; }
+  .hero .badges {
+    display: flex; gap: 8px; align-items: center; margin-top: 8px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 11px;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.3px;
+  }
+  .badge.canonical { color: var(--canonical); background: var(--canonical-soft); }
+  .badge.warm      { color: var(--warm);      background: var(--warm-soft); }
+  .badge.state-needs_work { color: var(--danger); background: var(--danger-soft); }
+  .pill-link {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    padding: 1px 8px; border-radius: 9px;
+    background: var(--accent-soft);
+  }
+  .pill-link:hover { text-decoration: underline; }
+  .hero .summary {
+    margin-top: 14px;
+    color: var(--fg-muted); font-size: 13px;
+    line-height: 1.55;
+  }
+  .hero .summary strong { color: var(--fg); }
+
+  /* ── Per-repo strip (richer than steady) ─────────────────────── */
+  .repo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .repo-card {
+    background: var(--bg-elev-2);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .repo-card .repo-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  }
+  .repo-card .repo-name { font-weight: 600; }
+  .repo-card .branch {
+    font-family: "SF Mono", monospace; font-size: 11px;
+    color: var(--fg-muted);
+    background: var(--bg);
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .repo-card .stats {
+    display: flex; gap: 16px;
+    font-size: 11px;
+    color: var(--fg-muted);
+    margin-bottom: 10px;
+  }
+  .repo-card .stats .dirty { color: var(--warm); }
+  .repo-card .stats .actionable { color: var(--danger); font-weight: 500; }
+  .repo-card .stats .clean { color: var(--canonical); }
+  .repo-card .path {
+    font-family: "SF Mono", monospace; font-size: 11px;
+    color: var(--fg-dim);
+    margin-top: 4px;
+  }
+  .repo-card .path .canonical-tag,
+  .repo-card .path .warm-tag {
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 9px; padding: 1px 5px; border-radius: 7px;
+    text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+  }
+  .repo-card .path .canonical-tag { color: var(--canonical); background: var(--canonical-soft); }
+  .repo-card .path .warm-tag      { color: var(--warm);      background: var(--warm-soft); }
+
+  /* ── CTA strip (primary + secondary from next_actions) ───────── */
+  .cta-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .cta-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--fg-dim); font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .cta-row {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  button.btn {
+    background: var(--bg-elev-2); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 5px; padding: 8px 14px; font-size: 12px; font-weight: 500;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  button.btn:hover { background: var(--border-soft); }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.btn.primary:hover { background: #1f6feb; }
+  button.btn .glyph { font-size: 12px; opacity: 0.85; }
+  button.btn .preview {
+    color: var(--fg-muted); font-weight: 400; font-size: 11px; margin-left: 4px;
+  }
+  button.btn.primary .preview { color: rgba(255,255,255,0.75); }
+
+  /* ── Section labels ──────────────────────────────────────────── */
+  .section-label {
+    margin: 26px 0 12px;
+    color: var(--fg-dim); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label .count {
+    background: var(--bg-elev); color: var(--fg-muted);
+    padding: 1px 7px; border-radius: 8px; font-size: 10px; font-weight: 500;
+    letter-spacing: 0.4px;
+  }
+  .section-label .hint { color: var(--fg-dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+  /* ── Threads (actionable review comments) ────────────────────── */
+  .threads {
+    display: grid; gap: 10px;
+  }
+  .thread {
+    background: var(--bg-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 7px;
+    padding: 14px 16px;
+    border-left: 3px solid var(--danger);
+  }
+  .thread.bot { border-left-color: var(--bot); }
+  .thread .thread-head {
+    display: flex; gap: 10px; align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .thread .repo-tag {
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    background: var(--bg-elev-2); color: var(--fg-muted);
+    text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+  }
+  .thread .file-loc {
+    font-family: "SF Mono", monospace; font-size: 12px;
+    color: var(--accent); cursor: pointer;
+  }
+  .thread .file-loc:hover { text-decoration: underline; }
+  .thread .author {
+    color: var(--fg-muted); font-size: 12px;
+  }
+  .thread .author.bot { color: var(--bot); font-weight: 500; }
+  .thread .age { color: var(--fg-dim); font-size: 11px; }
+  .thread .body {
+    color: var(--fg); font-size: 13px; line-height: 1.55;
+    margin-bottom: 10px;
+  }
+  .thread .body em { color: var(--fg-muted); font-style: normal; }
+  .thread .body code {
+    background: var(--bg);
+    padding: 1px 5px; border-radius: 3px;
+    color: var(--accent);
+  }
+  .thread .actions {
+    display: flex; gap: 6px;
+  }
+  .thread .actions button {
+    background: var(--bg-elev-2); color: var(--fg-muted); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 10px; font-size: 11px; cursor: pointer;
+  }
+  .thread .actions button:hover { color: var(--fg); background: var(--border-soft); }
+  .thread .actions .reply { color: var(--accent); }
+
+  /* ── Likely-resolved tab ─────────────────────────────────────── */
+  .resolved-summary {
+    color: var(--fg-dim); font-size: 12px;
+    padding: 10px 14px;
+    background: var(--bg-elev);
+    border: 1px dashed var(--border-soft);
+    border-radius: 6px;
+  }
+  .resolved-summary a { color: var(--accent); text-decoration: none; }
+  .resolved-summary a:hover { text-decoration: underline; }
+
+  /* ── Triage feed (compact) ───────────────────────────────────── */
+  .triage h3 {
+    margin: 0 0 10px; padding: 0;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--fg-dim); font-weight: 600;
+  }
+  .triage-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer; font-size: 12px;
+  }
+  .triage-item:hover .feature-name { color: var(--accent); }
+  .triage-item .priority {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .triage-item .priority.changes_requested { color: var(--danger); }
+  .triage-item .priority.bot               { color: var(--bot); }
+  .triage-item .priority.review_required   { color: var(--accent); }
+  .triage-item .priority.approved          { color: var(--canonical); }
+  .triage-item .feature-name { font-weight: 500; margin-top: 3px; }
+  .triage-item .secondary { color: var(--fg-dim); font-size: 11px; margin-top: 2px; }
+  .triage-item.active .feature-name { color: var(--canonical); }
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="ribbon">
+    <span class="logo">🌳 canopy</span>
+    <span class="workspace mono">~/projects/my-product</span>
+    <span class="spacer"></span>
+    <span class="pill">
+      <span class="dot"></span>
+      canonical: <strong style="margin-left:2px;color:var(--canonical)">SIN-12-search</strong>
+    </span>
+  </header>
+
+  <section class="main">
+
+    <div class="crumbs">
+      <a href="#">Dashboard</a> <span class="sep">/</span>
+      <a href="#">SIN-12-search</a>
+    </div>
+
+    <!-- Hero -->
+    <div class="hero">
+      <h1>
+        <span class="feature-name">SIN-12-search</span>
+        <span class="sub">Add /search endpoint with shared filter types</span>
+      </h1>
+
+      <div class="badges">
+        <span class="badge canonical">●&nbsp;canonical</span>
+        <span class="badge state-needs_work">needs work</span>
+        <a class="pill-link" href="#">SIN-12 ↗</a>
+        <span style="color: var(--fg-dim); font-size: 11px; margin-left: auto;">
+          last updated 12 min ago · changes_requested in 1 PR
+        </span>
+      </div>
+
+      <div class="summary">
+        <strong>3 actionable review threads</strong> across 2 PRs. Reviewer asked for
+        a docstring on the new endpoint and a discriminated union for the filter type;
+        a <strong>claude[bot]</strong> review flagged a missing test in the frontend.
+      </div>
+
+      <!-- Per-repo strip with path resolution -->
+      <div class="repo-grid">
+
+        <div class="repo-card">
+          <div class="repo-head">
+            <span class="repo-name">backend</span>
+            <span class="branch">SIN-12-search</span>
+          </div>
+          <div class="stats">
+            <span class="dirty">3 dirty</span>
+            <span class="actionable">2 actionable</span>
+            <span><a href="#" style="color:var(--accent); text-decoration: none;">PR #142 ↗</a></span>
+          </div>
+          <div class="path">
+            <span class="canonical-tag">canonical</span>
+            ~/projects/my-product/backend
+          </div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-head">
+            <span class="repo-name">frontend</span>
+            <span class="branch">SIN-12-search</span>
+          </div>
+          <div class="stats">
+            <span class="dirty">1 dirty</span>
+            <span class="actionable">1 actionable</span>
+            <span><a href="#" style="color:var(--accent); text-decoration: none;">PR #58 ↗</a></span>
+          </div>
+          <div class="path">
+            <span class="canonical-tag">canonical</span>
+            ~/projects/my-product/frontend
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CTA strip — sourced from next_actions[0..N] -->
+      <div class="cta-section">
+        <div class="cta-label">next actions <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--fg-dim)">— from <code>feature_state(SIN-12-search).next_actions</code></span></div>
+        <div class="cta-row">
+          <button class="btn primary">
+            <span class="glyph">⏵</span> Address comments
+            <span class="preview">3 actionable threads · open in Claude</span>
+          </button>
+          <button class="btn">
+            <span class="glyph">▶</span> Run preflight
+            <span class="preview">retry the per-repo checks</span>
+          </button>
+          <button class="btn">View all comments (3 actionable, 4 likely-resolved)</button>
+          <button class="btn">Open backend in IDE</button>
+          <button class="btn">Open frontend in IDE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actionable threads -->
+    <div class="section-label">
+      Actionable threads
+      <span class="count">3</span>
+      <span class="hint">— posted after the latest commit, or touch a file no later commit changed</span>
+    </div>
+
+    <div class="threads">
+
+      <div class="thread">
+        <div class="thread-head">
+          <span class="repo-tag">backend</span>
+          <span class="file-loc">src/api/search.py:18</span>
+          <span class="author">@reviewer-1</span>
+          <span style="flex:1"></span>
+          <span class="age">2h ago</span>
+        </div>
+        <div class="body">
+          Could you add a docstring with an example response shape? Other endpoints
+          all have one and the OpenAPI generator picks it up. Specifically the part
+          that documents the <code>FilterParams</code> envelope.
+        </div>
+        <div class="actions">
+          <button>Jump to file:line</button>
+          <button class="reply">Reply / draft</button>
+          <button>Mark addressed</button>
+        </div>
+      </div>
+
+      <div class="thread">
+        <div class="thread-head">
+          <span class="repo-tag">backend</span>
+          <span class="file-loc">src/api/search.py:42</span>
+          <span class="author">@reviewer-1</span>
+          <span style="flex:1"></span>
+          <span class="age">2h ago</span>
+        </div>
+        <div class="body">
+          The <code>FilterParams</code> type should probably be a discriminated union
+          rather than a flat dict — otherwise the frontend has to handle every
+          combination of optional fields. Same shape both sides should consume.
+        </div>
+        <div class="actions">
+          <button>Jump to file:line</button>
+          <button class="reply">Reply / draft</button>
+          <button>Mark addressed</button>
+        </div>
+      </div>
+
+      <div class="thread bot">
+        <div class="thread-head">
+          <span class="repo-tag">frontend</span>
+          <span class="file-loc">src/components/SearchBar.tsx:31</span>
+          <span class="author bot">claude[bot]</span>
+          <span style="flex:1"></span>
+          <span class="age">35 min ago</span>
+        </div>
+        <div class="body">
+          <em>Bot review:</em> the new <code>useSearchFilters</code> hook isn't covered
+          by any test. Suggest adding a <code>renderHook</code> case in
+          <code>SearchBar.test.tsx</code> that verifies the debounce and the
+          empty-result fallback.
+        </div>
+        <div class="actions">
+          <button>Jump to file:line</button>
+          <button class="reply">Reply / draft</button>
+          <button>Mark addressed</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Likely-resolved (collapsed summary, not loaded into context) -->
+    <div class="section-label">
+      Likely resolved
+      <span class="count">4</span>
+      <span class="hint">— a later commit touched these files; canopy hides them by default</span>
+    </div>
+    <div class="resolved-summary">
+      4 threads classified as likely-resolved by the temporal filter
+      (commit <code>0bc81725</code> touched 3 files, <code>b94ac21f</code> touched 1).
+      <a href="#">Show anyway</a>.
+    </div>
+
+  </section>
+
+  <!-- Triage feed (compact) -->
+  <aside class="triage">
+    <h3>Triage</h3>
+    <div class="triage-item active">
+      <span class="priority changes_requested">changes requested</span>
+      <div class="feature-name">SIN-12-search ●</div>
+      <div class="secondary">3 actionable · you're focused on this</div>
+    </div>
+    <div class="triage-item">
+      <span class="priority bot">bot review</span>
+      <div class="feature-name">SIN-17-export-csv</div>
+      <div class="secondary">claude[bot] flagged a test gap</div>
+    </div>
+    <div class="triage-item">
+      <span class="priority review_required">review required</span>
+      <div class="feature-name">SIN-15-stale-count</div>
+      <div class="secondary">PR open · awaiting human</div>
+    </div>
+    <div class="triage-item">
+      <span class="priority approved">approved</span>
+      <div class="feature-name">SIN-14-cache-stats</div>
+      <div class="secondary">2 commits ahead · ready to push</div>
+    </div>
+  </aside>
+
+</div>
+
+</body>
+</html>

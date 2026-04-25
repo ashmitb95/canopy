@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>canopy command — new feature from linear</title>
+<style>
+  /* "Canopy Command" theme — same palette as action-drawer.html.
+     This v2 keeps every essential, drops decoration. */
+  :root {
+    --bg:          #08111c;
+    --bg-elev:     #0d1a26;
+    --bg-elev-2:   #11202f;
+    --bg-elev-3:   #16293c;
+    --hairline:    #1c3450;
+    --rule:        #20405e;
+    --fg:          #e6eef7;
+    --fg-muted:    #8aa3bd;
+    --fg-dim:      #506c87;
+    --signal:      #e6c34c;
+    --command:     #2f81f7;
+    --hot:         #f85149;
+    --on-station:  #5dd0a8;
+    --steel:       #4a6378;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+    font-size: 13px; line-height: 1.5;
+    background: var(--bg); color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono, code {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+    font-size: 12px; letter-spacing: -0.1px;
+  }
+
+  /* ── Bridge ───────────────────────────────────────────────────── */
+  .bridge {
+    display: flex; align-items: center; gap: 22px;
+    padding: 9px 24px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--rule);
+  }
+  .insignia {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 13px;
+  }
+  .insignia .compass {
+    width: 18px; height: 18px;
+    border: 1.5px solid var(--steel); border-radius: 50%;
+    position: relative;
+  }
+  .insignia .compass::before, .insignia .compass::after { content: ""; position: absolute; background: var(--steel); }
+  .insignia .compass::before { top: 1px; bottom: 1px; left: 50%; width: 1px; transform: translateX(-50%); }
+  .insignia .compass::after  { left: 1px; right: 1px; top: 50%; height: 1px; transform: translateY(-50%); }
+  .insignia .name { letter-spacing: 0.18em; font-weight: 500; }
+  .station { color: var(--fg-muted); font-size: 11px; }
+  .station strong { color: var(--fg); font-family: "JetBrains Mono", monospace; }
+  .spacer { flex: 1; }
+  .theme-toggle {
+    display: inline-flex;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--bg-elev-2);
+    margin-left: auto;
+  }
+  .theme-toggle a {
+    padding: 5px 12px;
+    font-size: 11px;
+    color: var(--fg-muted);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .theme-toggle a + a { border-left: 1px solid var(--hairline); }
+  .theme-toggle a:hover { color: var(--fg); }
+  .theme-toggle a.active {
+    background: var(--bg-elev-3);
+    color: var(--fg);
+  }
+
+  /* ── Layout ───────────────────────────────────────────────────── */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: calc(100vh - 39px);
+  }
+  .inbox {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--rule);
+    overflow-y: auto;
+    padding: 14px 0;
+  }
+  .form {
+    padding: 28px 36px;
+    overflow-y: auto;
+    max-width: 720px;
+  }
+
+  /* ── Inbox (lean) ─────────────────────────────────────────────── */
+  .inbox h3 {
+    margin: 0 16px 10px;
+    text-transform: uppercase; letter-spacing: 0.12em; font-size: 10px;
+    color: var(--fg-dim); font-weight: 600;
+  }
+  .inbox h3 .count { color: var(--fg-muted); font-weight: 500; margin-left: 6px; }
+  .issue {
+    padding: 8px 16px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .issue:hover { background: var(--bg-elev-2); }
+  .issue.selected {
+    background: var(--bg-elev-2);
+    border-left-color: var(--command);
+  }
+  .issue .key {
+    color: var(--signal); font-family: "JetBrains Mono", monospace;
+    font-size: 11px; letter-spacing: 0.04em;
+  }
+  .issue .key .priority-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--fg-dim); margin-right: 6px;
+  }
+  .issue .key .priority-dot.urgent { background: var(--hot); }
+  .issue .key .priority-dot.high   { background: var(--signal); }
+  .issue .title {
+    color: var(--fg); font-size: 12px; margin-top: 1px; line-height: 1.35;
+  }
+  .issue.in-canopy { opacity: 0.45; }
+  .issue.in-canopy .key::after {
+    content: " · in canopy"; color: var(--on-station); font-size: 9px;
+  }
+
+  /* ── Form ─────────────────────────────────────────────────────── */
+  .crumb {
+    color: var(--fg-dim); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 10px;
+  }
+  .crumb .here { color: var(--fg); }
+
+  .selected-issue {
+    display: flex; align-items: baseline; gap: 14px;
+    margin-bottom: 28px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .selected-issue .key {
+    color: var(--signal); font-family: "JetBrains Mono", monospace;
+    font-size: 18px; font-weight: 600;
+  }
+  .selected-issue .title {
+    color: var(--fg); font-size: 18px; font-weight: 500;
+    line-height: 1.3;
+  }
+  .selected-issue a {
+    color: var(--command); text-decoration: none; font-size: 11px;
+    margin-left: auto; padding: 3px 10px;
+    border: 1px solid var(--rule); border-radius: 2px;
+  }
+  .selected-issue a:hover { background: var(--bg-elev-2); }
+
+  .field { margin-bottom: 24px; }
+  .field-label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--fg-dim); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600;
+  }
+
+  /* Name */
+  .input-group { display: flex; max-width: 520px; }
+  .prefix {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--rule); border-right: none;
+    border-radius: 2px 0 0 2px;
+    padding: 8px 12px;
+    color: var(--fg-muted);
+    font-family: "JetBrains Mono", monospace; font-size: 13px;
+  }
+  .text-input {
+    flex: 1;
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: 0 2px 2px 0;
+    color: var(--fg);
+    padding: 8px 12px;
+    font-family: "JetBrains Mono", monospace; font-size: 13px;
+  }
+  .text-input:focus { outline: none; border-color: var(--command); }
+
+  /* Repo picker — tight rows, no metadata clutter */
+  .repos {
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    max-width: 520px;
+  }
+  .repo {
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    gap: 12px; align-items: center;
+    padding: 10px 14px;
+    cursor: pointer;
+  }
+  .repo + .repo { border-top: 1px solid var(--hairline); }
+  .repo:hover { background: var(--bg-elev-2); }
+  .repo.checked { background: var(--bg-elev-2); }
+  .repo .check {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--steel);
+    border-radius: 2px;
+    position: relative;
+  }
+  .repo.checked .check { background: var(--command); border-color: var(--command); }
+  .repo.checked .check::after {
+    content: ""; position: absolute; left: 4px; top: 1px;
+    width: 5px; height: 9px;
+    border-right: 1.5px solid #fff; border-bottom: 1.5px solid #fff;
+    transform: rotate(45deg);
+  }
+  .repo .name { color: var(--fg); font-weight: 500; font-size: 13px; }
+  .repo .status {
+    color: var(--fg-dim); font-size: 11px; font-family: "JetBrains Mono", monospace;
+  }
+  .repo .status.warn { color: var(--signal); }
+
+  .repo-quick {
+    display: flex; gap: 18px; margin-top: 10px;
+    color: var(--command); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;
+  }
+  .repo-quick button {
+    background: none; border: none; padding: 0; cursor: pointer; color: inherit;
+    font: inherit; letter-spacing: inherit; text-transform: inherit;
+  }
+  .repo-quick button:hover { text-decoration: underline; }
+  .repo-quick .summary {
+    color: var(--fg-muted); margin-left: auto;
+    text-transform: none; letter-spacing: 0; font-weight: 400;
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  /* Slot — segmented toggle (much lighter than v1's full cards) */
+  .slot-toggle {
+    display: inline-flex;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    background: var(--bg-elev);
+  }
+  .slot-toggle button {
+    background: none; border: none; cursor: pointer;
+    color: var(--fg-muted);
+    padding: 8px 16px;
+    font-size: 12px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .slot-toggle button + button { border-left: 1px solid var(--rule); }
+  .slot-toggle button:hover { color: var(--fg); }
+  .slot-toggle button.active {
+    background: var(--bg-elev-3);
+    color: var(--fg);
+  }
+  .slot-toggle button.active::before {
+    content: "● "; color: var(--command);
+  }
+
+  /* One-line preview, not an itemized list */
+  .preview {
+    margin: 28px 0 16px;
+    padding: 12px 14px;
+    background: var(--bg);
+    border-left: 2px solid var(--on-station);
+    border-radius: 0 2px 2px 0;
+    color: var(--fg-muted); font-size: 12px;
+    font-family: "JetBrains Mono", monospace;
+    max-width: 720px;
+  }
+  .preview .ok { color: var(--on-station); }
+  .preview strong { color: var(--fg); font-weight: 600; }
+
+  .actions {
+    display: flex; gap: 10px; align-items: center;
+    max-width: 720px;
+  }
+  .actions .spacer { flex: 1; }
+  button.btn {
+    background: var(--bg-elev-2); color: var(--fg);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 9px 16px; font-size: 12px; font-weight: 500;
+    cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  button.btn:hover { background: var(--bg-elev-3); }
+  button.btn.primary {
+    background: var(--command); border-color: var(--command); color: #fff;
+  }
+  button.btn.primary:hover { background: #1f6feb; }
+  button.btn.ghost {
+    background: none; color: var(--fg-muted); border-color: transparent;
+  }
+  button.btn.ghost:hover { color: var(--fg); }
+
+  /* Optional "show details" expander — fully collapsed by default */
+  details { margin-top: 14px; max-width: 720px; }
+  details summary {
+    color: var(--fg-dim); font-size: 11px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600;
+    list-style: none;
+  }
+  details summary::before { content: "▸ "; }
+  details[open] summary::before { content: "▾ "; }
+  details summary:hover { color: var(--fg-muted); }
+  details .body {
+    margin-top: 8px; color: var(--fg-muted); font-size: 12px;
+    padding-left: 14px; border-left: 1px solid var(--hairline);
+  }
+  details .body code { color: var(--fg); }
+</style>
+</head>
+<body>
+
+<header class="bridge">
+  <div class="insignia">
+    <div class="compass"></div>
+    <span class="name">CANOPY · COMMAND</span>
+  </div>
+  <div class="station">workspace <strong>~/projects/my-product</strong></div>
+  <span class="spacer"></span>
+  <span class="theme-toggle">
+    <a class="active" href="new-feature.html">Navy</a>
+    <a href="new-feature-minimal.html">Minimal</a>
+  </span>
+</header>
+
+<div class="layout">
+
+  <!-- Inbox -->
+  <aside class="inbox">
+    <h3>Linear inbox <span class="count">7 open</span></h3>
+    <div class="issue selected">
+      <div class="key"><span class="priority-dot high"></span>SIN-19</div>
+      <div class="title">Add export to CSV in dashboard</div>
+    </div>
+    <div class="issue">
+      <div class="key"><span class="priority-dot"></span>SIN-20</div>
+      <div class="title">Tooltip a11y on chart legends</div>
+    </div>
+    <div class="issue in-canopy">
+      <div class="key"><span class="priority-dot high"></span>SIN-12</div>
+      <div class="title">Add /search endpoint with shared filter types</div>
+    </div>
+    <div class="issue in-canopy">
+      <div class="key"><span class="priority-dot"></span>SIN-13</div>
+      <div class="title">Empty-state illustration for dashboard</div>
+    </div>
+    <div class="issue in-canopy">
+      <div class="key"><span class="priority-dot"></span>SIN-14</div>
+      <div class="title">Cache hit-rate metrics on /stats</div>
+    </div>
+    <div class="issue">
+      <div class="key"><span class="priority-dot urgent"></span>SIN-21</div>
+      <div class="title">Migrate auth to OAuth2 PKCE</div>
+    </div>
+    <div class="issue">
+      <div class="key"><span class="priority-dot"></span>SIN-22</div>
+      <div class="title">Investigate flaky test in search bar</div>
+    </div>
+  </aside>
+
+  <!-- Form -->
+  <main class="form">
+
+    <div class="crumb">Command &middot; <span class="here">New feature</span></div>
+
+    <div class="selected-issue">
+      <span class="key">SIN-19</span>
+      <span class="title">Add export to CSV in dashboard</span>
+      <a href="#">view in Linear ↗</a>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Name</label>
+      <div class="input-group">
+        <span class="prefix">SIN-19/</span>
+        <input class="text-input" value="export-to-csv" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Repos</label>
+      <div class="repos">
+        <div class="repo checked">
+          <div class="check"></div>
+          <div class="name">backend</div>
+          <div class="status">main · clean</div>
+        </div>
+        <div class="repo checked">
+          <div class="check"></div>
+          <div class="name">frontend</div>
+          <div class="status warn">on SIN-12-search · 3 dirty</div>
+        </div>
+        <div class="repo">
+          <div class="check"></div>
+          <div class="name">docs</div>
+          <div class="status">main · clean</div>
+        </div>
+      </div>
+      <div class="repo-quick">
+        <button>ALL</button>
+        <button>NONE</button>
+        <button>JUST FRONTEND</button>
+        <span class="summary">2 of 3 selected</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Initial slot</label>
+      <div class="slot-toggle">
+        <button>Switch into main</button>
+        <button class="active">Open as worktree</button>
+      </div>
+    </div>
+
+    <div class="preview">
+      <span class="ok">▸</span>
+      Creates branch <strong>SIN-19-export-to-csv</strong> in
+      <strong>backend</strong> + <strong>frontend</strong>;
+      opens linked worktrees; current focus stays on SIN-12-search.
+    </div>
+
+    <div class="actions">
+      <button class="btn ghost">CANCEL</button>
+      <span class="spacer"></span>
+      <button class="btn primary">CREATE LANE</button>
+    </div>
+
+    <details>
+      <summary>What canopy will run</summary>
+      <div class="body">
+        <code>worktree_create(name="SIN-19-export-to-csv", repos=["backend","frontend"], issue="SIN-19")</code><br>
+        Same call your AI agent would make via <code>mcp__canopy__worktree_create</code>.
+      </div>
+    </details>
+
+  </main>
+</div>
+
+</body>
+</html>

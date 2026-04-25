@@ -440,8 +440,12 @@ function registerCommands(
       const name = coerceFeatureName(arg) ?? (await pickFeature(client));
       if (!name) return;
       try {
-        await client.featureSwitch(name);
-        void vscode.window.showInformationMessage(`Canopy: switched to ${name}`);
+        const result = await client.switchFeature({ feature: name });
+        const note =
+          result.previously_canonical
+            ? `Canopy: ${name} is now in main · ${result.previously_canonical} → worktree`
+            : `Canopy: ${name} is now in main`;
+        void vscode.window.showInformationMessage(note);
         await refresh();
       } catch (err) {
         void vscode.window.showErrorMessage(

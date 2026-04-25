@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>canopy — cap reached on switch</title>
+<style>
+  /* Inherits the visual language from dashboard-steady.html.
+     Only the modal overlay + cap-reached card are new here. */
+  :root {
+    --bg:        #0d1117;
+    --bg-elev:   #161b22;
+    --bg-elev-2: #1c232c;
+    --border:    #30363d;
+    --border-soft: #21262d;
+    --fg:        #e6edf3;
+    --fg-muted:  #8b949e;
+    --fg-dim:    #6e7681;
+    --accent:    #2f81f7;
+    --accent-soft:#1f6feb33;
+    --warm:      #d29922;
+    --warm-soft: #d2992233;
+    --cold:      #6e7681;
+    --canonical: #3fb950;
+    --canonical-soft: #3fb95022;
+    --danger:    #f85149;
+    --danger-soft:#f8514922;
+    --bot:       #a371f7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13px; line-height: 1.5;
+    background: var(--bg); color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: "SF Mono", "Monaco", "Menlo", Consolas, monospace; font-size: 12px; }
+
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 1fr 320px;
+    grid-template-areas:
+      "ribbon  ribbon"
+      "main    triage";
+    height: 100vh;
+    filter: blur(2px) saturate(0.8);
+    pointer-events: none;
+  }
+  /* The blurred backdrop conveys "modal owns focus" — content visible
+     enough to remind you of context, but you can't act on it. */
+
+  /* Stub backdrop — same content as steady mockup, abbreviated */
+  .ribbon {
+    grid-area: ribbon;
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 24px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+  }
+  .ribbon .logo { font-weight: 600; }
+  .ribbon .workspace { color: var(--fg-muted); }
+  .ribbon .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 10px;
+    background: var(--bg-elev-2); color: var(--fg);
+    border: 1px solid var(--border-soft); font-size: 12px;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--canonical); }
+  .pill.warm .dot { background: var(--warm); }
+  .main { grid-area: main; padding: 24px 32px; }
+  .triage { grid-area: triage; border-left: 1px solid var(--border-soft); background: var(--bg-elev); }
+  .ghost-card {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; padding: 24px; margin-bottom: 16px;
+    color: var(--fg-muted);
+  }
+
+  /* ── Modal overlay ──────────────────────────────────────────────── */
+  .modal-veil {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 90px;
+    z-index: 50;
+  }
+
+  .modal {
+    width: 640px; max-width: 92vw;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--warm);
+    border-radius: 10px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.65);
+    overflow: hidden;
+  }
+
+  .modal-head {
+    padding: 20px 24px 14px;
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .modal-glyph {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--warm-soft);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--warm); font-size: 18px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .modal-title {
+    font-size: 16px; font-weight: 600;
+    color: var(--fg);
+  }
+  .modal-code {
+    font-family: "SF Mono", "Monaco", monospace;
+    font-size: 11px;
+    color: var(--fg-dim);
+    margin-top: 2px;
+    letter-spacing: 0.3px;
+  }
+
+  .modal-body {
+    padding: 0 24px 18px;
+    color: var(--fg-muted); font-size: 13px;
+  }
+  .modal-body .what {
+    color: var(--fg);
+    margin-bottom: 12px;
+  }
+  .modal-body .what strong { color: var(--warm); font-weight: 600; }
+  .state-snapshot {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    padding: 12px 14px;
+    background: var(--bg-elev-2);
+    border-radius: 6px;
+    font-size: 12px;
+    margin-top: 6px;
+  }
+  .state-snapshot .label { color: var(--fg-dim); font-weight: 500; }
+  .state-snapshot .value { color: var(--fg); font-family: "SF Mono", monospace; }
+
+  /* ── fix_actions choices ───────────────────────────────────────── */
+  .actions-list {
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg);
+  }
+  .action-choice {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 14px; align-items: center;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer;
+  }
+  .action-choice:last-child { border-bottom: none; }
+  .action-choice:hover { background: var(--bg-elev-2); }
+  .action-choice.recommended {
+    background: var(--bg-elev-2);
+  }
+  .action-choice .num {
+    color: var(--fg-dim);
+    font-family: "SF Mono", monospace;
+    font-size: 12px;
+    text-align: center;
+  }
+  .action-choice .title {
+    color: var(--fg);
+    font-weight: 500;
+    margin-bottom: 3px;
+  }
+  .action-choice .title .recommended-tag {
+    color: var(--canonical);
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .action-choice .preview {
+    color: var(--fg-muted); font-size: 12px;
+    line-height: 1.45;
+  }
+  .action-choice .invocation {
+    margin-top: 6px;
+    color: var(--fg-dim);
+    font-family: "SF Mono", "Monaco", monospace;
+    font-size: 11px;
+  }
+  .action-choice .invocation .arg-key { color: var(--accent); }
+  .action-choice .invocation .arg-val { color: var(--warm); }
+  .action-choice .safe {
+    font-size: 10px; padding: 2px 8px; border-radius: 8px;
+    color: var(--canonical); background: var(--canonical-soft);
+    text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600;
+  }
+  .action-choice .safe.unsafe { color: var(--warm); background: var(--warm-soft); }
+
+  .modal-foot {
+    display: flex; gap: 8px;
+    padding: 14px 24px 18px;
+    background: var(--bg);
+  }
+  .modal-foot button {
+    background: none; border: 1px solid var(--border);
+    color: var(--fg-muted);
+    border-radius: 5px;
+    padding: 7px 14px; font-size: 12px; font-weight: 500;
+    cursor: pointer;
+  }
+  .modal-foot button:hover { background: var(--bg-elev-2); color: var(--fg); }
+
+  .same-data-strip {
+    background: var(--bg);
+    border-top: 1px solid var(--border-soft);
+    padding: 10px 24px;
+    color: var(--fg-dim);
+    font-size: 11px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .same-data-strip .glyph { font-size: 12px; }
+  .same-data-strip code {
+    color: var(--fg-muted);
+    background: var(--bg-elev);
+    padding: 1px 6px; border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Blurred backdrop: ghosts the steady-state dashboard -->
+<div class="app">
+  <header class="ribbon">
+    <span class="logo">🌳 canopy</span>
+    <span class="workspace mono">~/projects/my-product</span>
+    <span class="spacer"></span>
+    <span class="pill">
+      <span class="dot"></span>
+      Main: <strong style="margin-left:2px;color:var(--canonical)">SIN-12-search</strong>
+    </span>
+    <span class="pill warm" style="margin-left:14px">
+      <span class="dot"></span>
+      Worktrees: 2 / 2
+    </span>
+  </header>
+  <section class="main">
+    <div class="ghost-card">SIN-12-search · in main · needs_work</div>
+    <div class="ghost-card">SIN-13-empty-state · in worktree · in_progress</div>
+    <div class="ghost-card">SIN-14-cache-stats · in worktree · ready_to_push</div>
+    <div class="ghost-card">SIN-15-stale-count · branch only</div>
+  </section>
+  <aside class="triage"></aside>
+</div>
+
+<!-- ── Modal ────────────────────────────────────────────────────── -->
+<div class="modal-veil">
+
+  <div class="modal">
+
+    <div class="modal-head">
+      <div class="modal-glyph">!</div>
+      <div>
+        <div class="modal-title">Switching to SIN-15-stale-count would exceed the worktree cap.</div>
+        <div class="modal-code">BlockerError · worktree_cap_reached</div>
+      </div>
+    </div>
+
+    <div class="modal-body">
+      <div class="what">
+        Switching <strong>SIN-15-stale-count</strong> into main means the current
+        focus (<strong>SIN-12-search</strong>) needs to move to a worktree.
+        But you're already at <strong>max_worktrees = 2</strong>.
+        Canopy needs your call before it touches anything.
+      </div>
+      <div class="state-snapshot">
+        <span class="label">in main now</span>          <span class="value">SIN-12-search</span>
+        <span class="label">in worktree now</span>      <span class="value">SIN-13-empty-state, SIN-14-cache-stats</span>
+        <span class="label">switching to</span>          <span class="value">SIN-15-stale-count</span>
+        <span class="label">would-be worktrees</span>   <span class="value">SIN-12-search, SIN-13, SIN-14  (3 &gt; cap of 2)</span>
+        <span class="label">LRU candidate</span>        <span class="value">SIN-13-empty-state  (last touched 4h ago)</span>
+      </div>
+    </div>
+
+    <!-- fix_actions ordered most-recommended first -->
+    <div class="actions-list">
+
+      <div class="action-choice recommended">
+        <div class="num">1.</div>
+        <div>
+          <div class="title">
+            Hibernate SIN-12 instead — both worktrees stay intact.
+            <span class="recommended-tag">recommended</span>
+          </div>
+          <div class="preview">
+            SIN-12-search goes to <strong style="color:var(--cold)">branch only</strong>
+            (with a feature-tagged stash for any dirty work). Nothing else gets evicted.
+            Best when you're parking SIN-12 anyway — switch back later wakes it from hibernation.
+          </div>
+          <div class="invocation">
+            switch(<span class="arg-key">feature</span>=<span class="arg-val">"SIN-15-stale-count"</span>, <span class="arg-key">hibernate</span>=<span class="arg-val">true</span>)
+          </div>
+        </div>
+        <div class="safe unsafe">REQUIRES&nbsp;CONFIRM</div>
+      </div>
+
+      <div class="action-choice">
+        <div class="num">2.</div>
+        <div>
+          <div class="title">Evict SIN-13-empty-state to branch only (auto-stash if dirty).</div>
+          <div class="preview">
+            SIN-13's worktree is removed; its branch + stash stay recoverable.
+            Future <code>switch(SIN-13)</code> wakes it from hibernation and pops the stash.
+          </div>
+          <div class="invocation">
+            switch(<span class="arg-key">feature</span>=<span class="arg-val">"SIN-15-stale-count"</span>, <span class="arg-key">evict</span>=<span class="arg-val">"SIN-13-empty-state"</span>)
+          </div>
+        </div>
+        <div class="safe unsafe">REQUIRES&nbsp;CONFIRM</div>
+      </div>
+
+      <div class="action-choice">
+        <div class="num">3.</div>
+        <div>
+          <div class="title">Raise the cap to 3 — keep all four features as worktrees.</div>
+          <div class="preview">
+            Updates <code>max_worktrees</code> in <code>canopy.toml</code> to 3.
+            Then retries the switch. Pure config change, no work moved.
+          </div>
+          <div class="invocation">
+            workspace_config(<span class="arg-key">max_worktrees</span>=<span class="arg-val">3</span>) → switch(<span class="arg-val">"SIN-15-stale-count"</span>)
+          </div>
+        </div>
+        <div class="safe">SAFE</div>
+      </div>
+
+    </div>
+
+    <div class="modal-foot">
+      <button>Cancel</button>
+      <span style="flex:1"></span>
+      <button style="color:var(--fg-muted)">Show as JSON</button>
+    </div>
+
+    <div class="same-data-strip">
+      <span class="glyph">⚙︎</span>
+      Same blocker your AI agent sees via
+      <code>mcp__canopy__switch</code>. The fix actions above are
+      <code>BlockerError.fix_actions</code> verbatim.
+    </div>
+
+  </div>
+
+</div>
+
+</body>
+</html>

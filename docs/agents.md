@@ -48,8 +48,8 @@ The skill encodes this matrix; the agent reads it on session start. Mirror here 
 |---|---|---|
 | What feature should I work on? | `mcp__canopy__triage` | per-repo `gh pr list` + manual grouping |
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads |
-| Promote a feature to canonical (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout`, or guessing paths |
-| Wind down current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` | manual stash + checkout dance |
+| Switch a feature into main (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout`, or guessing paths |
+| Hibernate the current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` | manual stash + checkout dance |
 | Check HEAD alignment | `mcp__canopy__drift` | `git branch --show-current` per repo |
 | PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + custom filter |
 | PR data (title, decision, draft) | `mcp__canopy__github_get_pr` | `gh pr view --json` per repo |
@@ -57,6 +57,19 @@ The skill encodes this matrix; the agent reads it on session start. Mirror here 
 | Linear issue | `mcp__canopy__linear_get_issue` | direct API |
 | Run shell command in a specific repo | `mcp__canopy__run` | `cd /path && cmd` (path mistake risk) |
 | Stash for a feature | `mcp__canopy__stash_save_feature` | raw `git stash push` |
+
+### Vocabulary note: hibernate ⇄ release_current
+
+The user-facing word for "send the current focus to branch-only with a feature-tagged stash" is **hibernate**. The dashboard button says it. The CLI flag will eventually say it. But the actual MCP parameter today is **`release_current=True`** (kept as the API name for backwards compat).
+
+When you describe what you're about to do to the user, prefer the user-facing word:
+
+  - ✓ "I'll **hibernate** SIN-12 so SIN-15 can take main."
+  - ✗ "I'll set release_current=true on SIN-12."
+
+Same operation. Different surface vocab. A future canopy release may add `hibernate=true` as an alias for `release_current=true` — until then, when calling the tool, use `release_current=True`.
+
+A feature in the resulting state is **hibernating** (synonyms in the wild: "branch only", "released to cold", "wound down" — all the same thing).
 
 ## The daily loop
 

@@ -251,6 +251,16 @@
           "type": "string",
           "default": "",
           "description": "Optional: python3 path used by 'Install Backend'. Leave empty to auto-detect."
+        },
+        "canopy.dashboard.theme": {
+          "type": "string",
+          "default": "navy",
+          "enum": ["navy", "minimal"],
+          "enumDescriptions": [
+            "Canopy Command — deep navy with signal accents",
+            "Near-monochrome with a single accent — quiet / premium"
+          ],
+          "description": "Color + typography theme for the canopy dashboard panel. Add new themes by dropping a file in vscode-extension/src/webview/themes/ and registering it in themes/index.ts."
         }
       }
     }

@@ -5,6 +5,9 @@ import { getTheme, renderThemeCss, type ThemeName } from "./themes";
 import { componentCss } from "./components/styles";
 import { renderBridge } from "./components/bridge";
 import { renderFocusTile } from "./components/focusTile";
+import { renderWorktreeRow } from "./components/worktreeRow";
+import { renderBranchLedger } from "./components/branchLedger";
+import { renderTriageFeed } from "./components/triageFeed";
 import { escapeHtml } from "./components/util";
 
 /**
@@ -105,12 +108,22 @@ export class CockpitPanel {
     // pull from features with worktree_paths.
     const triage = await this.client.triage().catch(() => null);
     const canonicalFeature = triage?.canonical_feature ?? null;
-    const worktreeCount = triage
+    const worktreeFeatures = triage
       ? triage.features.filter(
           (f) => !f.is_canonical && f.physical_state === "warm",
-        ).length
-      : 0;
+        )
+      : [];
+    const branchFeatures = triage
+      ? triage.features.filter(
+          (f) => !f.is_canonical && f.physical_state === "cold",
+        )
+      : [];
+    const worktreeCount = worktreeFeatures.length;
     const worktreeCap = readWorktreeCap();
+    const evictionCandidate =
+      worktreeCap > 0 && worktreeCount >= worktreeCap
+        ? worktreeFeatures[worktreeFeatures.length - 1]?.feature ?? null
+        : null;
 
     // Canonical feature state — drives the focus tile.
     let featureState: FeatureStateResult | null = null;
@@ -160,20 +173,22 @@ ${renderBridge({
     ${renderFocusTile({ state: featureState, linearTitle, linearUrl })}
 
     <div class="section-head">
-      Worktrees <span class="count">phase C</span>
+      Worktrees <span class="count">${worktreeCount} / ${worktreeCap || "∞"}</span>
       <span class="hint">linked worktrees · click to switch into main</span>
     </div>
-    <div class="empty-hint"><span class="glyph">·</span>Worktree row lands in phase C of the rebuild.</div>
+    ${renderWorktreeRow({ features: worktreeFeatures })}
 
     <div class="section-head">
-      Branches <span class="count">phase C</span>
-      <span class="hint">no worktree · switching creates one</span>
+      Branches <span class="count">${branchFeatures.length}</span>
+      <span class="hint">no worktree · switching creates one${
+        evictionCandidate ? " (and may evict the LRU worktree)" : ""
+      }</span>
     </div>
-    <div class="empty-hint"><span class="glyph">·</span>Branch ledger lands in phase C.</div>
+    ${renderBranchLedger({ features: branchFeatures, evictionCandidate })}
   </main>
 
   <aside class="triage-rail">
-    <div class="empty-hint" style="padding: 18px;"><span class="glyph">·</span>Triage feed lands in phase C.</div>
+    ${renderTriageFeed({ triage })}
   </aside>
 </div>
 

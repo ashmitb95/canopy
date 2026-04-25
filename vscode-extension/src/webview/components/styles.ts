@@ -249,6 +249,103 @@ button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
   margin-right: 6px;
 }
 
+/* ── Standby row (warm worktree cards) ──────────────────────────── */
+.standby-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.standby-card {
+  background: var(--color-bg-elev);
+  border: var(--shape-border-width) solid var(--color-border-soft);
+  border-left: 2px solid var(--color-warn);
+  border-radius: var(--shape-radius);
+  padding: 14px 16px;
+}
+.standby-card .meta-row {
+  display: flex; gap: 8px; align-items: center;
+  margin-bottom: 8px;
+}
+.standby-card h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: var(--type-headline-weight);
+}
+.standby-card .summary {
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.standby-card .actions { display: flex; gap: 6px; }
+.standby-card button.btn { padding: 4px 10px; font-size: 11px; }
+
+/* ── Cold ledger (branch-only features) ────────────────────────── */
+.cold-ledger {
+  background: var(--color-bg-elev);
+  border: var(--shape-border-width) solid var(--color-border-soft);
+  border-radius: var(--shape-radius);
+  overflow: hidden;
+}
+.cold-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 9px 14px;
+  border-top: var(--shape-border-width) solid var(--color-border-soft);
+  font-size: 12px;
+}
+.cold-row:first-child { border-top: none; }
+.cold-row:hover { background: var(--color-bg-elev-2); }
+.cold-row .name { font-weight: 500; }
+.cold-row .name .badge { margin-left: 8px; }
+.cold-row .meta-info { color: var(--color-fg-dim); font-size: 11px; }
+.cold-row button.btn { padding: 3px 10px; font-size: 11px; background: none; }
+.cold-row button.btn:hover { background: var(--color-bg-elev-2); }
+
+/* ── Triage feed (right rail) ──────────────────────────────────── */
+.triage-rail-body { padding: 0; }
+.triage-rail-body h3 {
+  margin: 0; padding: 14px 18px 12px;
+  font-size: 12px;
+  color: var(--color-fg-dim);
+  font-weight: 600;
+  border-bottom: var(--shape-border-width) solid var(--color-border-soft);
+  display: flex; align-items: baseline;
+}
+.triage-rail-body h3 .total {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--color-fg-muted);
+}
+.triage-item {
+  padding: 11px 18px;
+  border-bottom: var(--shape-border-width) solid var(--color-border-soft);
+  cursor: pointer;
+}
+.triage-item:hover { background: var(--color-bg-elev-2); }
+.triage-item.focused { background: var(--color-bg-elev-2); }
+.triage-item .priority-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+}
+.triage-item .priority {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+}
+.triage-item .priority.changes_requested,
+.triage-item .priority.review_required_with_bot_comments {
+  color: var(--color-hot);
+}
+.triage-item .priority.review_required { color: var(--color-accent); }
+.triage-item .priority.approved        { color: var(--color-ok); }
+.triage-item .canonical-tag {
+  color: var(--color-ok); font-size: 10px; margin-left: auto;
+}
+.triage-item .feature-name { font-size: 12px; font-weight: 500; }
+.triage-item .secondary {
+  color: var(--color-fg-muted); font-size: 11px; margin-top: 3px;
+}
+
 /* ── Loading state ─────────────────────────────────────────────── */
 .skeleton {
   background: linear-gradient(

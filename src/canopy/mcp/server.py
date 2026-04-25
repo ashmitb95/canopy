@@ -179,16 +179,28 @@ def switch(feature: str, release_current: bool = False,
     (canopy_run, feature_state, IDE openers) default to this feature.
 
     Returns {feature, mode, per_repo_paths, previously_canonical?,
-    eviction?, branches_created?, migration?, per_repo, activated_at}.
+    eviction?, branches_created?, migration?, per_repo, activated_at}
+    on success, or a structured ``BlockerError``-shaped dict
+    ``{status: "blocked", code, what, fix_actions, ...}`` when a
+    precondition refuses the action (e.g. ``worktree_cap_reached``).
+    Dashboards inspect ``status`` to render a modal with the fix actions.
     """
     from ..actions.switch import switch as _impl
+    from ..actions.errors import ActionError
     ws = _get_workspace()
-    return _impl(
-        ws, feature,
-        release_current=release_current,
-        no_evict=no_evict,
-        evict=evict,
-    )
+    try:
+        return _impl(
+            ws, feature,
+            release_current=release_current,
+            no_evict=no_evict,
+            evict=evict,
+        )
+    except ActionError as e:
+        # Surface BlockerError / FailedError as a structured response so
+        # the dashboard can render the cap-reached modal (or any future
+        # blocker) without parsing string repr. Same convention used by
+        # linear_my_issues + ``feature_state`` warnings.
+        return e.to_dict()
 
 
 @mcp.tool()

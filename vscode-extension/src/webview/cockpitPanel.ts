@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
-import type { CanopyClient, FeatureStateResult } from "../canopyClient";
+import type { CanopyClient, FeatureStateResult, SwitchBlocker } from "../canopyClient";
+import { isSwitchBlocker } from "../canopyClient";
 import { getTheme, renderThemeCss, type ThemeName } from "./themes";
 import { componentCss } from "./components/styles";
 import { renderBridge } from "./components/bridge";
@@ -8,6 +9,7 @@ import { renderFocusTile } from "./components/focusTile";
 import { renderWorktreeRow } from "./components/worktreeRow";
 import { renderBranchLedger } from "./components/branchLedger";
 import { renderTriageFeed } from "./components/triageFeed";
+import { renderCapReachedModal } from "./components/capReachedModal";
 import { escapeHtml } from "./components/util";
 
 /**
@@ -192,24 +194,50 @@ ${renderBridge({
   </aside>
 </div>
 
+<div id="modal-host"></div>
+
 <script>
   const vscode = acquireVsCodeApi();
+  const modalHost = document.getElementById('modal-host');
+
   document.addEventListener('click', (ev) => {
+    // Modal close (× button or Cancel button)
+    if (ev.target.closest('[data-modal-close]')) {
+      modalHost.innerHTML = '';
+      return;
+    }
+    // Modal-veil click outside .modal closes
+    if (ev.target.matches('[data-modal-veil]')) {
+      modalHost.innerHTML = '';
+      return;
+    }
+
     const el = ev.target.closest('[data-action], [data-theme]');
     if (!el) return;
+
     const theme = el.getAttribute('data-theme');
     if (theme) {
       vscode.postMessage({ type: 'setTheme', theme });
       return;
     }
+
     const action = el.getAttribute('data-action');
     if (action) {
       const args = el.getAttribute('data-args');
+      // Close any open modal before dispatching (cleaner than waiting for refresh)
+      modalHost.innerHTML = '';
       vscode.postMessage({
         type: 'invokeAction',
         action,
         args: args ? JSON.parse(args) : {},
       });
+    }
+  });
+
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (msg.type === 'showModal' && msg.html) {
+      modalHost.innerHTML = msg.html;
     }
   });
 </script>
@@ -242,18 +270,102 @@ ${renderBridge({
         }
         return;
       }
-      case "invokeAction": {
-        // Phase B placeholder: surface the action via a message so we
-        // can verify wiring. Phase D wires the real CTAs through.
-        void vscode.window.showInformationMessage(
-          `Canopy action: ${msg.action} ${JSON.stringify(msg.args ?? {})}`,
-        );
+      case "invokeAction":
+        await this.dispatchAction(msg.action, msg.args ?? {});
         return;
-      }
       case "refresh":
         void this.refresh();
         return;
     }
+  }
+
+  private async dispatchAction(
+    action: string,
+    args: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      switch (action) {
+        case "switch": {
+          const result = await this.client.switchFeature({
+            feature: args.feature as string,
+            releaseCurrent: args.release_current as boolean | undefined,
+            noEvict: args.no_evict as boolean | undefined,
+            evict: args.evict as string | undefined,
+          });
+          if (isSwitchBlocker(result)) {
+            this.showCapReachedModal(result, args.feature as string);
+            return;
+          }
+          await this.refresh();
+          return;
+        }
+        case "preflight": {
+          const r = await this.client.preflight();
+          void vscode.window.showInformationMessage(
+            r.all_passed
+              ? "Canopy preflight: all repos passed"
+              : "Canopy preflight: failures — see Output",
+          );
+          await this.refresh();
+          return;
+        }
+        case "openInIde":
+          await vscode.commands.executeCommand(
+            "canopy.openInIde",
+            args.feature as string,
+          );
+          return;
+        case "openCockpitForFeature":
+          // Phase E: opens the focused-feature drilldown panel. Until
+          // that lands, fall back to the existing per-feature dashboard
+          // so clicks still take the user somewhere useful.
+          await vscode.commands.executeCommand(
+            "canopy.openDashboard",
+            args.feature as string,
+          );
+          return;
+        case "newFeature":
+          // Phase E
+          await vscode.commands.executeCommand("canopy.createFeature");
+          return;
+        case "address_review_comments":
+        case "addressComments":
+          // Existing helper used by the per-feature dashboard for the
+          // "Start workflow with Claude" CTA. Reused here.
+          await vscode.commands.executeCommand(
+            "canopy.startWorkflowWithClaude",
+            args.feature as string,
+          );
+          return;
+        case "viewComments":
+          // Open the per-feature dashboard which has the existing
+          // comments view — Phase E swaps for the action drawer.
+          await vscode.commands.executeCommand(
+            "canopy.openDashboard",
+            args.feature as string,
+          );
+          return;
+        default:
+          void vscode.window.showInformationMessage(
+            `Canopy: ${action} not yet wired (args: ${JSON.stringify(args)})`,
+          );
+      }
+    } catch (err) {
+      void vscode.window.showErrorMessage(
+        `Canopy: ${action} failed — ${(err as Error).message}`,
+      );
+    }
+  }
+
+  private showCapReachedModal(blocker: SwitchBlocker, originalTarget: string): void {
+    // Render the modal HTML extension-side (so escapeHtml runs in our
+    // process, not the webview), post it across, the webview script
+    // injects into <div id="modal-host">. Click handlers on the buttons
+    // post back invokeAction with the chosen fix-action's args.
+    this.panel.webview.postMessage({
+      type: "showModal",
+      html: renderCapReachedModal(blocker, originalTarget),
+    });
   }
 }
 

@@ -22,6 +22,7 @@ import {
   launchClaudeWorkflow,
 } from "./webview/dashboardPanel";
 import { CockpitPanel } from "./webview/cockpitPanel";
+import { isSwitchBlocker } from "./canopyClient";
 
 interface Active {
   client: CanopyClient;
@@ -450,10 +451,15 @@ function registerCommands(
       if (!name) return;
       try {
         const result = await client.switchFeature({ feature: name });
-        const note =
-          result.previously_canonical
-            ? `Canopy: ${name} is now in main · ${result.previously_canonical} → worktree`
-            : `Canopy: ${name} is now in main`;
+        if (isSwitchBlocker(result)) {
+          void vscode.window.showWarningMessage(
+            `Canopy: switch blocked — ${result.what}. Open the cockpit to pick a fix.`,
+          );
+          return;
+        }
+        const note = result.previously_canonical
+          ? `Canopy: ${name} is now in main · ${result.previously_canonical} → worktree`
+          : `Canopy: ${name} is now in main`;
         void vscode.window.showInformationMessage(note);
         await refresh();
       } catch (err) {

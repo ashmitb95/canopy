@@ -264,29 +264,26 @@ export class CanopyClient {
    *
    * UI surfaces label `releaseCurrent` as "Hibernate" — see
    * docs/agents.md vocabulary note.
+   *
+   * On success returns the switch result. On a structured BlockerError
+   * (e.g. `worktree_cap_reached`) the canopy MCP wrapper returns the
+   * blocker as a dict with `status: "blocked"`. We detect that here and
+   * surface it as a typed value so the caller can dispatch to a modal
+   * (cap-reached) or fall through to a generic error notification.
    */
-  switchFeature(opts: {
+  async switchFeature(opts: {
     feature: string;
     releaseCurrent?: boolean;
     noEvict?: boolean;
     evict?: string;
-  }) {
-    return this.call<{
-      feature: string;
-      mode: "active_rotation" | "wind_down";
-      per_repo_paths: Record<string, string>;
-      previously_canonical?: string;
-      eviction?: { feature: string; repos: Array<{ repo: string; stashed: boolean; stash_ref?: string; removed: boolean }> };
-      branches_created?: Array<{ repo: string; branch: string; base: string }>;
-      activated_at: string;
-      migration?: { ran: boolean; canonical_detected: string | null };
-      per_repo: Array<{ repo: string; status: string; [k: string]: unknown }>;
-    }>("switch", {
+  }): Promise<SwitchResult | SwitchBlocker> {
+    const result = await this.call<SwitchResult | SwitchBlocker>("switch", {
       feature: opts.feature,
       release_current: opts.releaseCurrent ?? false,
       no_evict: opts.noEvict ?? false,
       evict: opts.evict ?? null,
     });
+    return result;
   }
 
   featureLinkLinear(feature: string, issue: string) {
@@ -564,3 +561,42 @@ export type StashPopResult = {
   feature: string;
   repos: Array<{ repo: string; popped: boolean; stash_ref?: string; reason?: string }>;
 };
+
+// ── Switch result + blocker shapes ─────────────────────────────────
+
+export type SwitchResult = {
+  feature: string;
+  mode: "active_rotation" | "wind_down";
+  per_repo_paths: Record<string, string>;
+  previously_canonical?: string;
+  eviction?: {
+    feature: string;
+    repos: Array<{ repo: string; stashed: boolean; stash_ref?: string; removed: boolean }>;
+  };
+  branches_created?: Array<{ repo: string; branch: string; base: string }>;
+  activated_at: string;
+  migration?: { ran: boolean; canonical_detected: string | null };
+  per_repo: Array<{ repo: string; status: string; [k: string]: unknown }>;
+};
+
+export type FixAction = {
+  action: string;
+  args: Record<string, unknown>;
+  safe: boolean;
+  preview?: string | null;
+};
+
+export type SwitchBlocker = {
+  status: "blocked";
+  code: string;
+  what: string;
+  expected?: unknown;
+  actual?: unknown;
+  fix_actions: FixAction[];
+  details?: Record<string, unknown>;
+};
+
+/** True when a switch result is the structured BlockerError shape. */
+export function isSwitchBlocker(v: SwitchResult | SwitchBlocker): v is SwitchBlocker {
+  return (v as SwitchBlocker).status === "blocked";
+}

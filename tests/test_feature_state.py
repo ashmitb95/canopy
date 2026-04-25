@@ -276,3 +276,111 @@ def test_changes_requested_decision_is_needs_work(workspace_with_feature):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "needs_work"
+
+
+# ── B5: worktree-aware path resolution (R5) ─────────────────────────────
+
+def test_worktree_backed_feature_not_drifted_when_main_on_other_branch(
+    workspace_dir,
+):
+    """A worktree-backed feature must check the worktree's branch, not main's.
+
+    Pre-B5, feature_state always checked main repo's HEAD and reported
+    'drifted' for every worktree-backed feature whose branch wasn't also
+    in main. The bug suggested 'realign' as the next action — which would
+    actively destroy any in-flight work in main.
+    """
+    api = workspace_dir / "api"
+    ui = workspace_dir / "ui"
+
+    # Simulate a different feature checked out in main
+    _git(["checkout", "-b", "in-flight"], cwd=api)
+    _git(["checkout", "-b", "in-flight"], cwd=ui)
+
+    # Create the worktree-backed feature via the coordinator
+    ws = _make_workspace(workspace_dir)
+    from canopy.features.coordinator import FeatureCoordinator
+    coord = FeatureCoordinator(ws)
+    coord.create("sin-9-demo", use_worktrees=True)
+
+    # Sanity: features.json records the worktree paths
+    features = json.loads(
+        (workspace_dir / ".canopy" / "features.json").read_text(),
+    )
+    assert features["sin-9-demo"]["use_worktrees"] is True
+    assert "worktree_paths" in features["sin-9-demo"]
+
+    # Main repos are still on in-flight, NOT on sin-9-demo. Pre-B5 this
+    # would report state='drifted' suggesting realign. Post-B5 it must
+    # check the worktree path and report a non-drifted state.
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               side_effect=_no_pr), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               side_effect=_no_comments):
+        result = feature_state(ws, "sin-9-demo")
+
+    assert result["state"] != "drifted", (
+        f"worktree-backed feature should not be drifted; got {result}"
+    )
+
+
+def test_drifted_worktree_feature_suggests_switch_not_realign(workspace_dir):
+    """If a worktree IS on the wrong branch (rare — manual git checkout
+    inside the worktree), the suggested fix is `switch`, not `realign`.
+    Realign would touch main, which is the exact thing worktrees were
+    supposed to protect."""
+    api = workspace_dir / "api"
+    ui = workspace_dir / "ui"
+
+    _git(["checkout", "-b", "in-flight"], cwd=api)
+    _git(["checkout", "-b", "in-flight"], cwd=ui)
+
+    ws = _make_workspace(workspace_dir)
+    from canopy.features.coordinator import FeatureCoordinator
+    coord = FeatureCoordinator(ws)
+    coord.create("sin-10-demo", use_worktrees=True)
+
+    # Manually break the worktree — checkout a different branch inside it
+    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-10-demo" / "api"
+    _git(["checkout", "-b", "manual-detour"], cwd=wt_api)
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               side_effect=_no_pr), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               side_effect=_no_comments):
+        result = feature_state(ws, "sin-10-demo")
+
+    assert result["state"] == "drifted"
+    assert result["next_actions"][0]["action"] == "switch"
+    assert result["summary"]["alignment"]["has_worktrees"] is True
+
+
+def test_per_repo_facts_use_worktree_path_for_dirty_check(workspace_dir):
+    """Dirty/branch checks must read from the worktree, not main.
+
+    Make main clean but introduce a dirty file inside the worktree;
+    feature_state must report the feature as dirty (via dirty_repos)."""
+    api = workspace_dir / "api"
+    ui = workspace_dir / "ui"
+
+    _git(["checkout", "-b", "in-flight"], cwd=api)
+    _git(["checkout", "-b", "in-flight"], cwd=ui)
+
+    ws = _make_workspace(workspace_dir)
+    from canopy.features.coordinator import FeatureCoordinator
+    coord = FeatureCoordinator(ws)
+    coord.create("sin-11-demo", use_worktrees=True)
+
+    # Modify a file inside the api worktree
+    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-11-demo" / "api"
+    (wt_api / "src" / "app.py").write_text("dirty in worktree\n")
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               side_effect=_no_pr), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               side_effect=_no_comments):
+        result = feature_state(ws, "sin-11-demo")
+
+    assert "api" in result["summary"]["dirty_repos"], (
+        f"expected api in dirty_repos (worktree was dirty); summary={result['summary']}"
+    )

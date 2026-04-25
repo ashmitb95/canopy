@@ -22,6 +22,7 @@ agent stay in lockstep.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ..git import repo as git
@@ -53,15 +54,22 @@ def feature_state(workspace: Workspace, feature: str) -> dict[str, Any]:
         return _shell_result(feature_name, "no_prs",
                               note="no repos resolved for feature")
 
+    # A worktree-backed feature physically lives at its worktree path,
+    # regardless of which feature is "active" right now. Resolve per-repo
+    # paths up front so drift + per-repo facts both check the right tree.
+    repo_paths, has_worktrees = _resolve_repo_paths(
+        workspace, feature_name, repo_branches,
+    )
+
     # Drift check from LIVE git state (not heads.json, which may be empty
     # if the post-checkout hook hasn't run). The hook + heads.json power
     # canopy drift's fast path; feature_state prefers correctness.
-    drift_info = _live_drift(workspace, repo_branches)
+    drift_info = _live_drift(workspace, repo_branches, repo_paths)
     if drift_info["drifted_repos"] or drift_info["missing_repos"]:
-        return _drifted_result(feature_name, drift_info)
+        return _drifted_result(feature_name, drift_info, has_worktrees=has_worktrees)
 
     # Aligned. Gather per-repo facts.
-    per_repo = _per_repo_facts(workspace, feature_name, repo_branches)
+    per_repo = _per_repo_facts(workspace, feature_name, repo_branches, repo_paths)
     summary = _summarize(per_repo)
     preflight_fresh, preflight_entry = is_fresh(
         workspace, feature_name, repo_branches,
@@ -81,17 +89,64 @@ def feature_state(workspace: Workspace, feature: str) -> dict[str, Any]:
     }
 
 
+def _resolve_repo_paths(
+    workspace: Workspace, feature_name: str, repo_branches: dict[str, str],
+) -> tuple[dict[str, Path], bool]:
+    """Per-repo path resolution for state derivation.
+
+    Worktree-backed features always resolve to the worktree path, regardless
+    of activation status — a worktree IS the feature's home, the active flag
+    only governs implicit cwd in canopy_run/IDE openers.
+
+    Returns (paths_by_repo, has_any_worktrees). The flag drives downstream
+    UX choices (e.g. drifted-state next-action: switch vs realign).
+    """
+    from ..features.coordinator import FeatureCoordinator
+    coord = FeatureCoordinator(workspace)
+    try:
+        lane = coord.status(feature_name)
+    except Exception:
+        lane = None
+
+    paths: dict[str, Path] = {}
+    has_worktrees = False
+    for repo_name in repo_branches:
+        try:
+            state = workspace.get_repo(repo_name)
+        except KeyError:
+            continue
+        wt_path: Path | None = None
+        if lane is not None:
+            wt_str = (lane.repo_states.get(repo_name) or {}).get("worktree_path")
+            if wt_str:
+                candidate = Path(wt_str).resolve()
+                # ``worktree_for_branch`` returns the main repo path when the
+                # branch is checked out there, so candidate == state.abs_path
+                # means "no linked worktree — feature lives in the main tree."
+                if candidate.exists() and candidate != state.abs_path.resolve():
+                    wt_path = candidate
+                    has_worktrees = True
+        paths[repo_name] = wt_path if wt_path is not None else state.abs_path
+    return paths, has_worktrees
+
+
 def _per_repo_facts(
     workspace: Workspace, feature_name: str, repo_branches: dict[str, str],
+    repo_paths: dict[str, Path],
 ) -> dict[str, dict]:
-    """Gather facts per repo: dirty, ahead/behind, PR, comments."""
+    """Gather facts per repo: dirty, ahead/behind, PR, comments.
+
+    ``repo_paths`` resolves to the worktree path for worktree-backed
+    features, the main repo path otherwise. Without it, dirty/ahead/branch
+    checks would target main even when the feature lives in a worktree.
+    """
     out: dict[str, dict] = {}
     for repo_name, branch in repo_branches.items():
         try:
             state = workspace.get_repo(repo_name)
         except KeyError:
             continue
-        repo_path = state.abs_path
+        repo_path = repo_paths.get(repo_name, state.abs_path)
 
         facts: dict[str, Any] = {
             "branch": branch,
@@ -302,9 +357,16 @@ def _any_changes_requested(decisions: dict[str, str]) -> bool:
 
 def _live_drift(
     workspace: Workspace, repo_branches: dict[str, str],
+    repo_paths: dict[str, Path],
 ) -> dict[str, Any]:
-    """Check actual git state vs expected per repo. Returns
-    ``{drifted_repos, missing_repos, expected, actual}``."""
+    """Check actual git state vs expected per repo against the resolved path.
+
+    For worktree-backed features the resolved path is the worktree, so the
+    branch check is against the worktree's HEAD. For main-tree features it's
+    the main repo. Either way, the branch check is targeted correctly.
+
+    Returns ``{drifted_repos, missing_repos, expected, actual}``.
+    """
     drifted: list[str] = []
     missing: list[str] = []
     expected: dict[str, str] = {}
@@ -317,12 +379,13 @@ def _live_drift(
             missing.append(repo_name)
             actual[repo_name] = None
             continue
-        if not git.branch_exists(state.abs_path, expected_branch):
+        check_path = repo_paths.get(repo_name, state.abs_path)
+        if not git.branch_exists(check_path, expected_branch):
             missing.append(repo_name)
             actual[repo_name] = None
             continue
         try:
-            current = git.current_branch(state.abs_path)
+            current = git.current_branch(check_path)
         except git.GitError:
             current = None
         actual[repo_name] = current
@@ -336,9 +399,39 @@ def _live_drift(
     }
 
 
-def _drifted_result(feature_name: str, drift_info: dict) -> dict[str, Any]:
+def _drifted_result(
+    feature_name: str, drift_info: dict, *, has_worktrees: bool = False,
+) -> dict[str, Any]:
     drifted = drift_info["drifted_repos"]
     missing = drift_info["missing_repos"]
+
+    # For worktree-backed features, "drifted" usually means the worktree
+    # was manually checked out off-branch — `realign` would touch main and
+    # is the wrong fix. Suggest `switch` (which warms / re-checks out) or
+    # `done` (clean up the broken worktree). For main-tree features the
+    # original realign suggestion is correct.
+    if has_worktrees:
+        next_actions = [
+            {"action": "switch", "args": {"feature": feature_name},
+             "primary": True, "label": "Switch",
+             "preview": (
+                 "worktree is on the wrong branch — switch to re-establish"
+                 " the feature context"
+             )},
+            {"action": "done", "args": {"feature": feature_name},
+             "primary": False, "label": "Clean up worktree",
+             "preview": "remove the worktree if you no longer need it"},
+        ]
+    else:
+        next_actions = [
+            {"action": "realign", "args": {"feature": feature_name},
+             "primary": True, "label": "Realign",
+             "preview": (
+                 f"checkout expected branch in "
+                 f"{', '.join(drifted + missing)}"
+             )},
+        ]
+
     return {
         "feature": feature_name,
         "state": "drifted",
@@ -349,16 +442,10 @@ def _drifted_result(feature_name: str, drift_info: dict) -> dict[str, Any]:
                 "actual": drift_info["actual"],
                 "drifted_repos": drifted,
                 "missing_repos": missing,
+                "has_worktrees": has_worktrees,
             },
         },
-        "next_actions": [
-            {"action": "realign", "args": {"feature": feature_name},
-             "primary": True, "label": "Realign",
-             "preview": (
-                 f"checkout expected branch in "
-                 f"{', '.join(drifted + missing)}"
-             )},
-        ],
+        "next_actions": next_actions,
         "warnings": [],
     }
 

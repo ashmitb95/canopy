@@ -48,8 +48,9 @@ def realign(
             ``--auto-stash`` form and a manual stash suggestion.
     """
     feature_name = resolve_feature(workspace, feature)
-    expected_branch = feature_name  # v1: feature name == branch name
-    target_repos = _select_repos(workspace, feature_name, repos)
+    target_repos, branch_for_repo = _select_repos_and_branches(
+        workspace, feature_name, repos,
+    )
 
     results: dict[str, dict] = {}
     dirty_blocked: list[str] = []
@@ -61,6 +62,8 @@ def realign(
             results[repo_name] = {"status": "failed", "reason": "unknown_repo"}
             continue
         repo_path = state.abs_path
+        # Per-repo expected branch (honors features.json `branches` map).
+        expected_branch = branch_for_repo.get(repo_name, feature_name)
 
         try:
             before = git.current_branch(repo_path)
@@ -146,7 +149,7 @@ def realign(
                 f"{len(dirty_blocked)} repo(s) have uncommitted changes "
                 f"and would be lost by checkout"
             ),
-            expected={"feature": feature_name, "branch": expected_branch},
+            expected={"feature": feature_name, "branches": dict(branch_for_repo)},
             actual={"dirty_repos": list(dirty_blocked)},
             fix_actions=[
                 FixAction(
@@ -186,10 +189,20 @@ def _safe_current_branch(repo_path, fallback: str) -> str:
         return fallback
 
 
-def _select_repos(
+def _select_repos_and_branches(
     workspace: Workspace, feature_name: str, requested: list[str] | None,
-) -> list[str]:
+) -> tuple[list[str], dict[str, str]]:
+    """Pick the repo list + per-repo expected branch for the feature.
+
+    Returns ``(repo_names, {repo: expected_branch})``. The branch map
+    honors the lane's per-repo ``branches`` override, falling back to
+    ``feature_name``. For implicit single-repo features (no
+    features.json entry), expects branch == feature_name everywhere.
+    """
+    from .aliases import repos_for_feature
     all_names = {r.config.name for r in workspace.repos}
+
+    branch_map = repos_for_feature(workspace, feature_name)
 
     if requested is not None:
         unknown = [r for r in requested if r not in all_names]
@@ -200,10 +213,13 @@ def _select_repos(
                 expected={"available_repos": sorted(all_names)},
                 details={"requested": list(requested)},
             )
-        return list(requested)
+        # Filter to the requested set, keep branch overrides where present.
+        filtered = {
+            r: branch_map.get(r, feature_name) for r in requested if r in all_names
+        }
+        return list(filtered.keys()), filtered
 
-    from ..features.coordinator import FeatureCoordinator
-    features = FeatureCoordinator(workspace)._load_features()
-    feature_data = features.get(feature_name) or {}
-    declared = feature_data.get("repos") or sorted(all_names)
-    return [r for r in declared if r in all_names]
+    if not branch_map:
+        # Fallback: feature has no resolvable repos (rare; defensive).
+        return [], {}
+    return list(branch_map.keys()), branch_map

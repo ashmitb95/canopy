@@ -45,12 +45,19 @@ class BranchTarget:
 def resolve_feature(workspace: Workspace, alias: str) -> str:
     """Resolve a feature alias to a canonical feature name.
 
-    Strict: if no feature lane (explicit in features.json or implicit
-    across multiple repos) matches, raises ``BlockerError(code='unknown_alias')``
-    with the available feature list as ``expected``. Different from
-    ``FeatureCoordinator._resolve_name`` which returns unknowns as-is.
+    Resolution order:
+      1. Explicit lane in ``features.json``.
+      2. ``features.json`` lane via ``branches`` mapping (per-repo branch overrides).
+      3. Implicit multi-repo feature (``workspace.active_features()`` —
+         branch present in 2+ repos).
+      4. Single-repo implicit feature (branch present in any registered repo).
+
+    Step 4 lets single-repo features resolve without an explicit
+    features.json entry. Without it, queries like ``canopy comments
+    doc-1002-api-only`` fail when only one repo carries the branch.
     """
     from ..features.coordinator import FeatureCoordinator
+    from ..git import repo as git
     coord = FeatureCoordinator(workspace)
     try:
         resolved = coord._resolve_name(alias)
@@ -65,9 +72,23 @@ def resolve_feature(workspace: Workspace, alias: str) -> str:
     if resolved in features:
         return resolved
 
+    # Step 2: alias may be a per-repo branch in some lane's branches map.
+    for fname, fdata in features.items():
+        branches_map = fdata.get("branches") or {}
+        if resolved in branches_map.values():
+            return fname
+
     workspace.refresh()
     if resolved in workspace.active_features():
         return resolved
+
+    # Step 4: single-repo branch fallback.
+    for state in workspace.repos:
+        try:
+            if git.branch_exists(state.abs_path, resolved):
+                return resolved
+        except Exception:
+            pass
 
     raise BlockerError(
         code="unknown_alias",
@@ -82,6 +103,45 @@ def resolve_feature(workspace: Workspace, alias: str) -> str:
                       preview="canopy list shows all feature lanes"),
         ],
     )
+
+
+def repos_for_feature(
+    workspace: Workspace, feature_name: str,
+) -> dict[str, str]:
+    """Return ``{repo_name: expected_branch_name}`` for the feature.
+
+    Resolution:
+      - If ``feature_name`` is in ``features.json``: return all declared
+        ``repos`` with their expected branch (per-repo ``branches`` map
+        override, else feature name). Missing branches are NOT filtered
+        — callers (e.g. realign) need to know about declared repos
+        whose branch is gone, to report ``branch_not_found``.
+      - Otherwise (implicit feature): scan workspace repos and include
+        each where a branch named ``feature_name`` exists.
+    """
+    from ..features.coordinator import FeatureCoordinator
+    from ..git import repo as git
+
+    coord = FeatureCoordinator(workspace)
+    features = coord._load_features()
+
+    if feature_name in features:
+        fdata = features[feature_name]
+        branches_map = fdata.get("branches") or {}
+        return {
+            repo_name: branches_map.get(repo_name, feature_name)
+            for repo_name in (fdata.get("repos") or [])
+        }
+
+    # Implicit: scan repos for the branch.
+    out: dict[str, str] = {}
+    for state in workspace.repos:
+        try:
+            if git.branch_exists(state.abs_path, feature_name):
+                out[state.config.name] = feature_name
+        except Exception:
+            pass
+    return out
 
 
 def resolve_linear_id(workspace: Workspace, alias: str) -> str:
@@ -125,7 +185,8 @@ def resolve_pr_targets(workspace: Workspace, alias: str) -> list[PRTarget]:
     Accepts:
       - PR URL (specific PR)
       - ``<repo>#<n>`` (specific PR)
-      - Feature alias (all PRs in the lane, across repos)
+      - Feature alias (all PRs in the lane, across repos — uses per-repo
+        branches map when set)
     """
     m = _PR_URL.match(alias)
     if m:
@@ -147,26 +208,32 @@ def resolve_pr_targets(workspace: Workspace, alias: str) -> list[PRTarget]:
         return [PRTarget(canopy_repo, owner, repo_slug, pr)]
 
     feature_name = resolve_feature(workspace, alias)
+    repo_branches = repos_for_feature(workspace, feature_name)
 
-    from ..features.coordinator import FeatureCoordinator
-    coord = FeatureCoordinator(workspace)
-    status = coord.review_status(feature_name)
+    # Imported here (not at module top) to avoid a circular import: github
+    # imports from canopy.actions.errors which imports from this package.
+    from ..integrations import github as _gh
+
     targets: list[PRTarget] = []
-    for repo_name, info in status.get("repos", {}).items():
-        pr = info.get("pr")
-        if not pr:
+    for canopy_repo, branch in repo_branches.items():
+        try:
+            owner, repo_slug = _resolve_owner_slug(workspace, canopy_repo)
+        except BlockerError:
+            continue
+        pr = _gh.find_pull_request(workspace.config.root, owner, repo_slug, branch)
+        if pr is None:
             continue
         targets.append(PRTarget(
-            repo=repo_name,
-            owner=info.get("owner", ""),
-            repo_slug=info.get("repo_name", ""),
+            repo=canopy_repo, owner=owner, repo_slug=repo_slug,
             pr_number=pr["number"],
         ))
+
     if not targets:
         raise BlockerError(
             code="no_prs_for_feature",
             what=f"feature '{feature_name}' has no open PRs in any repo",
-            details={"alias": alias, "feature": feature_name},
+            details={"alias": alias, "feature": feature_name,
+                      "repos_checked": list(repo_branches)},
             fix_actions=[
                 FixAction(action="pr_create", args={"feature": feature_name},
                           safe=False, preview="open PRs for this feature"),
@@ -182,7 +249,8 @@ def resolve_branch_targets(
 
     Accepts:
       - ``<repo>:<branch>`` (specific branch in specific repo)
-      - Feature alias (per-repo branches from feature lane)
+      - Feature alias (per-repo branches from the lane's ``branches`` map,
+        falling back to the feature name)
 
     If ``repo`` is provided alongside a feature alias, filters to that repo.
     """
@@ -206,21 +274,19 @@ def resolve_branch_targets(
         return [BranchTarget(canopy_repo, branch)]
 
     feature_name = resolve_feature(workspace, alias)
+    repo_branches = repos_for_feature(workspace, feature_name)
 
-    from ..features.coordinator import FeatureCoordinator
-    features = FeatureCoordinator(workspace)._load_features()
-    feature_data = features.get(feature_name) or {}
-    repos = feature_data.get("repos") or [r.config.name for r in workspace.repos]
     if repo:
-        if repo not in repos:
+        if repo not in repo_branches:
             raise BlockerError(
                 code="repo_not_in_feature",
                 what=f"repo '{repo}' is not part of feature '{feature_name}'",
-                expected={"feature_repos": list(repos)},
+                expected={"feature_repos": list(repo_branches)},
                 details={"alias": alias, "repo": repo, "feature": feature_name},
             )
-        repos = [repo]
-    return [BranchTarget(r, feature_name) for r in repos]
+        return [BranchTarget(repo, repo_branches[repo])]
+
+    return [BranchTarget(r, b) for r, b in repo_branches.items()]
 
 
 def _find_canopy_repo_by_slug(workspace: Workspace, owner: str, slug: str) -> str:

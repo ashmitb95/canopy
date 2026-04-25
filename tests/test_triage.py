@@ -230,6 +230,38 @@ def test_features_ordered_by_priority(workspace_with_feature):
 
 # ── Errors ──────────────────────────────────────────────────────────────
 
+def test_per_repo_branches_map_groups_mismatched_branches(workspace_with_feature):
+    """doc-1003 has different branch names per repo; explicit `branches`
+    map in features.json should group them under one feature lane."""
+    _features_file(workspace_with_feature, {
+        "doc-1003": {
+            "repos": ["api", "ui"],
+            "status": "active",
+            "branches": {
+                "api": "doc-1003-fixes",
+                "ui": "DOC-1003-fixes-v2",
+            },
+        },
+    })
+    ws = _make_workspace(workspace_with_feature)
+    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "ui", "git@github.com:owner/ui.git")
+
+    def _list(workspace_root, owner, slug, author=None, **kw):
+        if slug == "api":
+            return [_pr(11, "doc-1003-fixes")]
+        return [_pr(22, "DOC-1003-fixes-v2")]
+
+    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.actions.triage.gh.get_review_comments",
+               return_value=([], 0)):
+        result = triage(ws)
+
+    assert len(result["features"]) == 1
+    assert result["features"][0]["feature"] == "doc-1003"
+    assert set(result["features"][0]["repos"].keys()) == {"api", "ui"}
+
+
 def test_unknown_repo_raises(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
     with pytest.raises(BlockerError) as exc_info:

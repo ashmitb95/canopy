@@ -131,23 +131,17 @@ def test_github_get_pr_via_feature_alias_multi_repo(workspace_with_feature):
     _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
     _set_remote(workspace_with_feature / "ui", "git@github.com:owner/ui.git")
 
-    fake_status = {
-        "feature": "auth-flow", "has_prs": True,
-        "repos": {
-            "api": {"branch": "auth-flow", "owner": "owner", "repo_name": "api",
-                     "pr": {"number": 100}},
-            "ui":  {"branch": "auth-flow", "owner": "owner", "repo_name": "ui",
-                     "pr": {"number": 200}},
-        },
+    fake_pr_for_alias = {
+        "number": 100, "title": "x", "url": "u", "state": "open",
+        "head_branch": "auth-flow", "base_branch": "dev", "body": "",
+        "review_decision": "", "mergeable": "", "draft": False,
     }
-    fake_pr = {"number": 0, "title": "x", "url": "u", "state": "open",
-                "head_branch": "auth-flow", "base_branch": "dev", "body": "",
-                "review_decision": "", "mergeable": "", "draft": False}
-
-    with patch("canopy.features.coordinator.FeatureCoordinator.review_status",
-               return_value=fake_status), \
+    # resolve_pr_targets now uses find_pull_request (per-repo branch),
+    # not review_status, since it operates on per-repo expected branches.
+    with patch("canopy.integrations.github.find_pull_request",
+               return_value=fake_pr_for_alias) as _, \
          patch("canopy.actions.reads.gh.get_pull_request_by_number",
-               return_value=fake_pr):
+               return_value=fake_pr_for_alias):
         result = github_get_pr(ws, "auth-flow")
 
     assert set(result["repos"].keys()) == {"api", "ui"}

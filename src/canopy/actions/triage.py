@@ -102,41 +102,48 @@ def _group_by_feature(
     """Group PRs into feature lanes.
 
     Strategy:
-      1. Build branch → [(canopy_repo, pr)] index.
+      1. Build (repo, branch) → pr index.
       2. For each explicit feature in features.json, claim PRs whose
-         branch == feature.name (v1: feature name == branch name) and
-         whose repo is in feature.repos.
-      3. Remaining branches with PRs become implicit features (one
-         entry per branch, multi- or single-repo).
+         branch matches the lane's expected branch *for that repo*
+         (using the per-repo ``branches`` override map when set, else
+         feature name). This is what groups
+         ``doc-1003-fixes`` (api) + ``DOC-1003-fixes-v2`` (ui) into one
+         feature lane.
+      3. Remaining (repo, branch) pairs that weren't consumed become
+         implicit features: each branch becomes a feature, multi-repo
+         when the same branch appears in 2+ repos, single-repo otherwise.
     """
     from ..features.coordinator import FeatureCoordinator
 
-    by_branch: dict[str, list[tuple[str, dict]]] = {}
+    by_repo_branch: dict[tuple[str, str], dict] = {}
     for repo_name, prs in prs_by_repo.items():
         for pr in prs:
             branch = pr.get("head_branch") or ""
             if not branch:
                 continue
-            by_branch.setdefault(branch, []).append((repo_name, pr))
+            by_repo_branch[(repo_name, branch)] = pr
 
     coord = FeatureCoordinator(workspace)
     features = coord._load_features()
-    consumed_branches: set[str] = set()
+    consumed: set[tuple[str, str]] = set()
     groups: list[dict] = []
 
     for feature_name, feature_data in features.items():
         if feature_data.get("status") != "active":
             continue
-        if feature_name not in by_branch:
-            continue
-        feature_repos = set(feature_data.get("repos") or [])
-        repos_for_feature = {
-            r: pr for r, pr in by_branch[feature_name]
-            if not feature_repos or r in feature_repos
-        }
+        feature_repos = list(feature_data.get("repos") or [])
+        branches_map = feature_data.get("branches") or {}
+
+        repos_for_feature: dict[str, dict] = {}
+        for repo_name in feature_repos:
+            expected_branch = branches_map.get(repo_name, feature_name)
+            key = (repo_name, expected_branch)
+            if key in by_repo_branch and key not in consumed:
+                repos_for_feature[repo_name] = by_repo_branch[key]
+                consumed.add(key)
+
         if not repos_for_feature:
             continue
-        consumed_branches.add(feature_name)
         groups.append({
             "feature": feature_name,
             "linear_issue": feature_data.get("linear_issue", ""),
@@ -145,15 +152,21 @@ def _group_by_feature(
             "repos": repos_for_feature,
         })
 
-    for branch, pr_pairs in by_branch.items():
-        if branch in consumed_branches:
+    # Remaining (repo, branch) pairs become implicit feature groups.
+    # Same branch across repos → one group; otherwise per-branch group.
+    remaining_by_branch: dict[str, dict[str, dict]] = {}
+    for (repo_name, branch), pr in by_repo_branch.items():
+        if (repo_name, branch) in consumed:
             continue
+        remaining_by_branch.setdefault(branch, {})[repo_name] = pr
+
+    for branch, repos in remaining_by_branch.items():
         groups.append({
             "feature": branch,
             "linear_issue": "",
             "linear_url": "",
             "linear_title": "",
-            "repos": {r: pr for r, pr in pr_pairs},
+            "repos": repos,
         })
 
     return groups

@@ -42,8 +42,23 @@ class FeatureLane:
     linear_title: str = ""              # e.g. "Add payment processing"
     linear_url: str = ""                # e.g. "https://linear.app/..."
 
+    # Optional per-repo branch override. When unset, ``branch_for(repo)``
+    # returns the feature name (the historical default). When set,
+    # consumers should always go through ``branch_for`` to get the right
+    # branch name per repo. Used for cases like docsum's
+    # ``doc-3010-UI-fixes`` (api) vs ``DOC-3010-UI-fixes-2`` (ui) where
+    # the same feature has different branch names per repo.
+    branches: dict[str, str] = field(default_factory=dict)
+
     # Populated at query time (not persisted)
     repo_states: dict[str, dict] = field(default_factory=dict)
+
+    def branch_for(self, repo: str) -> str:
+        """Return the expected branch name for ``repo`` in this lane.
+
+        Falls back to the feature name if no per-repo override exists.
+        """
+        return self.branches.get(repo) or self.name
 
     def to_dict(self) -> dict:
         d = {
@@ -57,6 +72,8 @@ class FeatureLane:
             d["linear_issue"] = self.linear_issue
             d["linear_title"] = self.linear_title
             d["linear_url"] = self.linear_url
+        if self.branches:
+            d["branches"] = dict(self.branches)
         return d
 
 
@@ -230,6 +247,7 @@ class FeatureCoordinator:
                 linear_issue=data.get("linear_issue", ""),
                 linear_title=data.get("linear_title", ""),
                 linear_url=data.get("linear_url", ""),
+                branches=dict(data.get("branches") or {}),
             )
             self._enrich_lane(lane)
             lanes.append(lane)

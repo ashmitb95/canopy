@@ -178,9 +178,11 @@ def _compute_feature_drift(lane, heads: dict) -> FeatureDrift:
     repos: list[RepoAlignment] = []
     drifted: list[str] = []
     untracked: list[str] = []
-    expected = lane.name  # v1: feature name == branch name
 
     for repo_name in lane.repos:
+        # Use lane.branch_for to honor per-repo branch overrides
+        # (handles cases like doc-3010-UI-fixes vs DOC-3010-UI-fixes-2).
+        expected = lane.branch_for(repo_name)
         head = heads.get(repo_name)
         if head is None:
             ra = RepoAlignment(

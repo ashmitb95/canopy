@@ -67,6 +67,36 @@ def test_resolve_feature_implicit_branch_match(workspace_with_feature):
     assert resolve_feature(ws, "auth-flow") == "auth-flow"
 
 
+def test_resolve_feature_single_repo_branch_resolves(workspace_with_feature):
+    """Branch existing in only one repo (no features.json entry) should still resolve."""
+    from canopy.git import repo as git
+    git.create_branch(workspace_with_feature / "api", "lonely-branch")
+    ws = _make_workspace(workspace_with_feature)
+    assert resolve_feature(ws, "lonely-branch") == "lonely-branch"
+
+
+def test_resolve_feature_via_branches_map(workspace_with_feature):
+    """Per-repo branches map: alias matching the api-side branch resolves
+    to the feature lane name (not the branch name itself)."""
+    _features_file(workspace_with_feature, {
+        "doc-1003": {
+            "repos": ["api", "ui"],
+            "status": "active",
+            "branches": {
+                "api": "doc-1003-fixes",
+                "ui": "DOC-1003-fixes-v2",
+            },
+        },
+    })
+    from canopy.git import repo as git
+    git.create_branch(workspace_with_feature / "api", "doc-1003-fixes")
+    git.create_branch(workspace_with_feature / "ui", "DOC-1003-fixes-v2")
+    ws = _make_workspace(workspace_with_feature)
+    assert resolve_feature(ws, "doc-1003") == "doc-1003"
+    assert resolve_feature(ws, "doc-1003-fixes") == "doc-1003"
+    assert resolve_feature(ws, "DOC-1003-fixes-v2") == "doc-1003"
+
+
 def test_resolve_feature_unknown_raises_with_available(workspace_with_feature):
     _features_file(workspace_with_feature, {
         "real-feature": {"repos": ["api", "ui"], "status": "active"},

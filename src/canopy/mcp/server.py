@@ -150,6 +150,33 @@ def triage(author: str = "@me", repos: list[str] | None = None) -> dict:
 
 
 @mcp.tool()
+def switch(feature: str, create_worktrees: bool = False,
+           auto_stash: bool = False) -> dict:
+    """Activate a feature as the workspace's current context.
+
+    Three cases:
+      1. Feature has worktrees → mark active, return per_repo_paths pointing
+         at the worktrees. No git mutation.
+      2. Feature is main-tree only (branch exists in main repos) → call
+         realign internally (with auto_stash if passed) to bring repos
+         onto the branch, then mark active with main paths.
+      3. Feature has no worktrees AND no main branch:
+         - if create_worktrees=True: create worktrees on the fly, then case 1
+         - else: BlockerError(code='no_active_state') with fix_actions
+
+    After this, calls without an explicit `feature` argument
+    (canopy_run, feature_state, IDE openers) default to this feature.
+
+    Returns {feature, mode, per_repo_paths, previous_feature?, realign?,
+    worktrees_created?}.
+    """
+    from ..actions.switch import switch as _impl
+    ws = _get_workspace()
+    return _impl(ws, feature, create_worktrees=create_worktrees,
+                 auto_stash=auto_stash)
+
+
+@mcp.tool()
 def realign(feature: str, auto_stash: bool = False,
             repos: list[str] | None = None) -> dict:
     """Bring all repos in the feature lane onto the feature's branch.

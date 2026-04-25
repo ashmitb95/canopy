@@ -57,7 +57,8 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 | Tool | Description |
 |---|---|
 | `triage` | Prioritized list of features needing attention. Cross-repo PR fetch, grouped by feature, sorted by review state. |
-| `realign` | Bring all repos in the feature lane onto the feature's branch. `auto_stash=True` to handle dirty trees. |
+| `switch` | Activate a feature as the workspace context. Three cases: worktree mode (mark active), main-tree mode (calls realign), or fresh feature with `create_worktrees=True`. Writes `.canopy/state/active_feature.json`. |
+| `realign` | Bring all repos in the feature lane onto the feature's branch. Pure drift-fixer; doesn't activate as context. `auto_stash=True` to handle dirty trees. |
 | `drift` | Cached alignment view from `.canopy/state/heads.json`. Fast, hook-driven. |
 
 #### Read primitives (alias-aware)

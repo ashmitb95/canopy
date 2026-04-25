@@ -6,7 +6,7 @@ How AI coding agents (Claude Code primarily; others by analogy) integrate with c
 
 Three pieces, all installed in one step by `canopy init`:
 
-1. **Canopy MCP server** (`canopy-mcp` binary) — 42 tools exposing every canopy operation. Registered in `<workspace>/.mcp.json`.
+1. **Canopy MCP server** (`canopy-mcp` binary) — 43 tools exposing every canopy operation. Registered in `<workspace>/.mcp.json`.
 2. **`using-canopy` skill** at `~/.claude/skills/using-canopy/SKILL.md` — tells the agent *when* to prefer canopy MCP over raw bash.
 3. **Per-workspace MCP config** in `<workspace>/.mcp.json` with `CANOPY_ROOT` set so the server scopes to the right workspace.
 

@@ -90,6 +90,13 @@ def _resolve_cwd(workspace: Workspace, repo: str, feature: str | None) -> Path:
         )
 
     if feature is None:
+        # Fall back to the active-feature context if one is set.
+        # An explicit `feature` arg overrides this; passing None means
+        # "use whatever the user declared as their context (or main)".
+        from ..actions.active_feature import read_active
+        active = read_active(workspace)
+        if active and repo in active.per_repo_paths:
+            return Path(active.per_repo_paths[repo])
         return workspace.get_repo(repo).abs_path
 
     from ..features.coordinator import FeatureCoordinator

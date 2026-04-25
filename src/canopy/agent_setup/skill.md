@@ -19,7 +19,8 @@ Canopy also returns **pre-classified state**: review comments are temporally fil
 |---|---|---|
 | What feature should I work on right now? | `mcp__canopy__triage` | per-repo `gh pr list` + manual grouping |
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads yourself |
-| Switch / fix branches across repos | `mcp__canopy__realign` | `cd repo && git checkout` per repo |
+| Activate a feature as the current context (worktree-aware) | `mcp__canopy__switch` | guessing paths or `cd` to a worktree |
+| Fix drift / get repos onto a branch (no context change) | `mcp__canopy__realign` | `cd repo && git checkout` per repo |
 | Check whether HEADs match expected | `mcp__canopy__drift` | `cd && git branch --show-current` per repo |
 | Read PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + manual filter |
 | Get PR data (title, decision, draft, ...) | `mcp__canopy__github_get_pr` | `gh pr view --json ...` per repo |

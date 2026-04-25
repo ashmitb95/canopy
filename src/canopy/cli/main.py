@@ -1880,14 +1880,36 @@ def cmd_setup_agent(args: argparse.Namespace) -> None:
 
 def cmd_state(args: argparse.Namespace) -> None:
     """Show the feature state + suggested next actions."""
-    from ..actions.errors import ActionError
+    from ..actions.errors import ActionError, BlockerError, FixAction
+    from ..actions.active_feature import read_active
     from ..actions.feature_state import feature_state as state_impl
     from .render import render_blocker
     from .ui import console
 
     workspace = _load_workspace()
+    feature = args.feature
+    if feature is None:
+        active = read_active(workspace)
+        if active is None:
+            err = BlockerError(
+                code="no_active_feature",
+                what="no feature passed and no active feature is set",
+                fix_actions=[
+                    FixAction(action="switch", args={"feature": "<name>"},
+                              safe=True, preview="set active feature with: canopy switch <feature>"),
+                    FixAction(action="state", args={"feature": "<name>"},
+                              safe=True, preview="or pass a feature explicitly: canopy state <feature>"),
+                ],
+            )
+            if args.json:
+                _print_json(err.to_dict())
+            else:
+                render_blocker(err, action="state")
+            sys.exit(1)
+        feature = active.feature
+
     try:
-        result = state_impl(workspace, args.feature)
+        result = state_impl(workspace, feature)
     except ActionError as err:
         if args.json:
             _print_json(err.to_dict())
@@ -2019,6 +2041,55 @@ def cmd_triage(args: argparse.Namespace) -> None:
                 f"      [repo]{repo}[/]  PR #{info['pr_number']}  "
                 f"[muted]{decision}[/]{count_str}"
             )
+    console.print()
+
+
+def cmd_switch(args: argparse.Namespace) -> None:
+    """Activate a feature as the current workspace context."""
+    from ..actions.errors import ActionError
+    from ..actions.switch import switch as switch_impl
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = switch_impl(
+            workspace, args.feature,
+            create_worktrees=getattr(args, "create_worktrees", False),
+            auto_stash=getattr(args, "auto_stash", False),
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="switch")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    mode = result["mode"]
+    feature = result["feature"]
+    glyph = "[success]✓[/]"
+    label = {"worktree": "worktree mode",
+              "main_tree": "main-tree mode",
+              "mixed": "mixed (worktree + main)"}.get(mode, mode)
+    console.print(f"  {glyph} active: [feature]{feature}[/]  [muted]({label})[/]")
+    if result.get("previous_feature"):
+        console.print(f"      [muted]previous: {result['previous_feature']}[/]")
+    if result.get("worktrees_created"):
+        console.print(f"      [muted]worktrees created on the fly[/]")
+    for repo, path in result["per_repo_paths"].items():
+        kind = "worktree" if ".canopy/worktrees" in path else "main"
+        console.print(f"      [repo]{repo}[/]  [muted]→ {path}  ({kind})[/]")
+    if result.get("realign"):
+        ra = result["realign"]
+        if not ra.get("aligned"):
+            console.print(f"      [warning]realign reported issues[/]")
+    console.print()
+    console.print(f"  [muted]now: 'canopy state' / 'canopy run <repo> <cmd>' default to this feature[/]")
     console.print()
 
 
@@ -2439,6 +2510,18 @@ def main() -> None:
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # switch (worktree-context activator)
+    switch_p = subparsers.add_parser(
+        "switch",
+        help="Activate a feature as the current workspace context (worktree- or main-tree-aware)",
+    )
+    switch_p.add_argument("feature", help="Feature alias (name or Linear ID)")
+    switch_p.add_argument("--create-worktrees", action="store_true",
+                           help="If feature has no worktrees and no main branch, create worktrees on the fly")
+    switch_p.add_argument("--auto-stash", action="store_true",
+                           help="(main-tree case) stash dirty trees with feature tag before realign")
+    switch_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # realign
     realign_p = subparsers.add_parser(
         "realign",
@@ -2469,7 +2552,8 @@ def main() -> None:
         "state",
         help="Feature state + suggested next actions (dashboard backend)",
     )
-    state_p.add_argument("feature", help="Feature alias (name or Linear ID)")
+    state_p.add_argument("feature", nargs="?", default=None,
+                          help="Feature alias (name or Linear ID). Defaults to active feature if any.")
     state_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # triage
@@ -2576,6 +2660,7 @@ def main() -> None:
         "pr": cmd_pr,
         "comments": cmd_comments,
         "realign": cmd_realign,
+        "switch": cmd_switch,
         "triage": cmd_triage,
         "state": cmd_state,
         "setup-agent": cmd_setup_agent,

@@ -9,7 +9,7 @@
 <p align="center">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
   <img alt="Tests" src="https://img.shields.io/badge/tests-354%20passing-brightgreen?style=flat-square">
-  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-42-purple?style=flat-square">
+  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-43-purple?style=flat-square">
   <a href="https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy"><img alt="VSCode Extension" src="https://img.shields.io/badge/VSCode-extension-blue?style=flat-square&logo=visualstudiocode"></a>
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-gray?style=flat-square">
 </p>
@@ -91,7 +91,7 @@ canopy preflight <feature>     # run the per-repo checks
 
 ## For AI agents
 
-Canopy ships with a [`using-canopy`](src/canopy/agent_setup/skill.md) skill (installed by `canopy init`) and an MCP server with 42 tools. The skill teaches the agent: *use canopy MCP for path-safe multi-repo ops*. After install, an agent in a workspace where canopy is configured will:
+Canopy ships with a [`using-canopy`](src/canopy/agent_setup/skill.md) skill (installed by `canopy init`) and an MCP server with 43 tools. The skill teaches the agent: *use canopy MCP for path-safe multi-repo ops*. After install, an agent in a workspace where canopy is configured will:
 
 - Call `mcp__canopy__triage` instead of parsing `gh pr list` output across repos
 - Call `mcp__canopy__realign` instead of `cd repo && git checkout` per repo

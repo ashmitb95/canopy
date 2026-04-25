@@ -762,11 +762,20 @@ class FeatureCoordinator:
             self._save_features(features)
             archived = True
 
+        # ── Step 5: Clear active-feature state if this feature is active ──
+        active_cleared = False
+        try:
+            from ..actions.active_feature import clear_active
+            active_cleared = clear_active(self.workspace, only_if_feature=name)
+        except Exception:
+            pass
+
         return {
             "feature": name,
             "worktrees_removed": worktrees_removed,
             "branches_deleted": branches_deleted,
             "archived": archived,
+            "active_cleared": active_cleared,
         }
 
     def review_status(self, name: str) -> dict:

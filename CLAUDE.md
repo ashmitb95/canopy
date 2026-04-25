@@ -42,7 +42,7 @@ src/canopy/
 │   ├── github.py            # GitHub PR + comments (MCP or gh CLI fallback)
 │   └── precommit.py         # detect + run pre-commit hooks
 └── mcp/
-    ├── server.py            # MCP server — 42 tools, stdio transport
+    ├── server.py            # MCP server — 43 tools, stdio transport
     └── client.py            # MCP client — stdio + HTTP+OAuth transports
 ```
 
@@ -87,7 +87,7 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 - **Action contract:** `actions/protocol.py` (planned) will formalize the per-repo `{status, before, after, reason?}` shape. For now, each action returns it ad-hoc.
 - **Skill bundling:** `src/canopy/agent_setup/skill.md` ships in the wheel; `canopy setup-agent` (or `canopy init`) copies it to `~/.claude/skills/using-canopy/SKILL.md`. Foreign skills with the same path are not overwritten without `--reinstall`.
 
-## MCP Server (42 tools)
+## MCP Server (43 tools)
 
 Grouped by topic. Run with `canopy-mcp` (entry point) or `python -m canopy.mcp.server`.
 

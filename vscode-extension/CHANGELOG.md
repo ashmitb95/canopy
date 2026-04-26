@@ -1,5 +1,45 @@
 # Change Log
 
+## 0.4.0
+
+- **Single sidebar tree.** The five separate views (Features, Worktrees, Changes, Review Readiness, Linear Issues) are collapsed into one unified `Canopy` tree with three sections: ACTIVE (canonical feature, expandable to per-repo rows with `↑N · M dirty`), FEATURES (other lanes with repo count + Linear ID), and LINEAR INBOX (todo issues, collapsed by default).
+- Right-click menus and title-bar buttons (Cockpit, New Feature, Refresh, Reinit) all rebind to the new view.
+- Bundle dropped ~7 KB from removing the per-domain providers.
+
+## 0.3.3
+
+- **Progressive dashboard rendering with per-feature cache.** Dashboards used to leave the panel blank for several seconds while five backend calls completed serially, and switching features re-fetched everything every time. Now sections render section-by-section as data arrives, and per-feature caches (race-protected) make repeat opens instant.
+
+## 0.3.2
+
+- **Self-contained vsix.** Bundles `@modelcontextprotocol/sdk` so a fresh install no longer throws `Cannot find module '@modelcontextprotocol/sdk/client/index.js'` at activation. Phase G's stub providers + diagnostic commands live inside `bootstrap()`, so the require-time failure was bricking the extension on first run.
+
+## 0.3.1
+
+- **Workspace-scope cockpit panel** (`Canopy: Open Cockpit`). New theme-pluggable webview that summarizes all features, the canonical-slot model state, and triage feed. Coexists with the per-feature dashboard.
+- **New-feature panel** (`Canopy: Spin up a new feature from Linear`). Linear issue picker → repo selector → slot chooser (canonical vs. worktree). Replaces the bare quick-pick.
+- **State-file watchers.** `.canopy/state/{active_feature,heads,preflight}.json` changes drive auto-refresh, so a `canopy switch` from the CLI surfaces in the dashboard immediately.
+- **Theme system** (`canopy.dashboard.theme`): `navy` (default — deep navy with signal accents) and `minimal` (near-monochrome).
+- **Self-healing activation.** Diagnostic commands (`Show Log`, `Retry Connect`, `Install Backend`) are now registered before the MCP probe, so a missing `canopy-mcp` no longer leaves the user with "no data provider registered" + zero canopy commands in the palette.
+- **Switch fix.** Right-click "Switch to Feature" was calling the deleted `feature_switch` MCP tool; now uses the canonical-slot `switch` action with proper blocker handling.
+- BlockerError plumbing through real CTAs; cap-reached modal for worktree-budget overflow; worktree row + branch ledger + triage feed in cockpit.
+
+## 0.2.5
+
+- **Linear Issues sidebar view.** Lists open Todo / In Progress issues from your Linear workspace; right-click → "Start Feature from Linear Issue" wires the Linear ID into the new feature.
+- `canopy.createFeatureFromIssue` command and `linear-mcp-server` integration.
+- Dashboard upgrades: richer per-repo state, GitHub PR context, status pills.
+- MCP client gains multi-source merge for `feature_list` (explicit + worktree-discovered + workspace_status active features).
+
+## 0.1.9
+
+- Trimmed `installBackend` command — relies on the resolver in 0.1.3 instead of duplicating discovery logic.
+
+## 0.1.7
+
+- README split — top-level README is now a brief intro; long-form docs moved to `docs/architecture.md`, `docs/commands.md`, `docs/mcp.md`, `docs/workspace.md`.
+- New `setupWizard` command flow for first-time `canopy init`.
+
 ## 0.1.6
 
 - **Fixed dashboard crash (`i.map is not a function`)** — list-returning MCP tools (`feature_list`, `log`, `linear_my_issues`, etc.) now come through as arrays again. FastMCP wraps non-dict returns in `{ "result": <list> }` to satisfy the spec's object-only `structuredContent`; the client now unwraps that convention before handing the value to callers.

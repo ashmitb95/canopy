@@ -21,6 +21,8 @@ Canopy also returns **pre-classified state**: review comments are temporally fil
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads yourself |
 | Promote a feature to the canonical slot (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout` per repo, or guessing paths |
 | Hibernate current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` *(`release_current` is the API param; user-facing label is "hibernate")* | manual stash + checkout dance |
+| Commit across the canonical feature (one message, all repos) | `mcp__canopy__commit(message=...)` *(canonical feature inferred; pass `feature=` for non-canonical)* | `mcp__canopy__run(... 'git commit')` per repo |
+| Push the canonical feature to origin | `mcp__canopy__push()` *(add `set_upstream=True` on first push; the `no_upstream` blocker tells you when)* | `mcp__canopy__run(... 'git push')` per repo |
 | Check whether HEADs match expected | `mcp__canopy__drift` | `cd && git branch --show-current` per repo |
 | Read PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + manual filter |
 | Get PR data (title, decision, draft, ...) | `mcp__canopy__github_get_pr` | `gh pr view --json ...` per repo |
@@ -83,6 +85,8 @@ When you see a `BlockerError`, the first step is to read `fix_actions[0]` and de
 - ❌ Parsing `gh api .../pulls/{n}/comments` and writing your own "is this resolved" logic — `mcp__canopy__github_get_pr_comments` returns `actionable_threads` vs `likely_resolved_threads` already.
 - ❌ Calling `git status` in each repo and synthesizing what's dirty/clean — `mcp__canopy__feature_state(feature)` returns this aggregated, plus computed state and next_actions.
 - ❌ Running `git stash push` when there's a feature context — use `mcp__canopy__stash_save_feature(feature, message)` so stashes get tagged and groupable.
+- ❌ `mcp__canopy__run(repo='...', command='git commit ...')` to commit one repo at a time — use `mcp__canopy__commit(message=...)` so the whole canonical feature commits with one message and the wrong-branch / hooks-failed cases come back classified.
+- ❌ `mcp__canopy__run(repo='...', command='git push')` per repo — use `mcp__canopy__push()`. First push needs `set_upstream=True`; the `no_upstream` blocker tells you when (and the fix-action carries the same args + `set_upstream=True` so you can retry mechanically).
 
 ## When canopy doesn't apply
 

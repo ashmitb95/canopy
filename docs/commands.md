@@ -52,12 +52,14 @@ Write actions and execution.
 | `canopy run <repo> <command> [--feature]` | Run a shell command in a canopy-managed repo with cwd resolved internally. The "agent never `cd`s" tool — also useful from a CLI in a deeply nested directory. |
 | `canopy code\|cursor\|fork <feature\|.>` | Open the feature in VS Code / Cursor / Fork.app (alias-aware; generates `.code-workspace` for the IDE ones). |
 | `canopy sync` | Pull default branch + rebase feature branches across repos. |
+| `canopy commit -m <msg> [--feature <f>] [--repo <r,...>] [--paths <p ...>] [--no-hooks] [--amend]` | **Wave 2.3.** Commit across every repo in the canonical (or named) feature with a single message. Defaults to canonical feature. Pre-flight refuses with `BlockerError(code='wrong_branch')` if any in-scope repo has drifted; per-repo hook failures don't cancel the others (status: `hooks_failed` for the failing repo). |
+| `canopy push [--feature <f>] [--repo <r,...>] [--set-upstream] [--force-with-lease] [--dry-run]` | **Wave 2.3.** Push the feature branch in every in-scope repo. Pre-flight raises `BlockerError(code='no_upstream')` if any repo lacks an upstream and `--set-upstream` was not passed; the fix-action carries the same args + `--set-upstream` so an agent retries mechanically. Per-repo statuses: `ok`, `up_to_date`, `rejected`, `failed`. |
 
 ## Verify
 
 | Command | What it does |
 |---|---|
-| `canopy preflight [<feature>]` | Run per-repo pre-commit checks. With `<feature>`, runs against the feature lane and records the result to `.canopy/state/preflight.json` (which feeds `canopy state`'s `ready_to_commit` detection). Without `<feature>`, runs against the current cwd's context. |
+| `canopy preflight [<feature>]` | Run per-repo pre-commit checks. With `<feature>`, runs against the feature lane and records the result to `.canopy/state/preflight.json` (which feeds `canopy state`'s `ready_to_commit` detection). Without `<feature>`, runs against the current cwd's context. **Use as a dry-run before `canopy commit`** — preflight stages and runs hooks but never commits. |
 
 ## Stash (feature-aware)
 
@@ -106,8 +108,10 @@ canopy state <feature>     # get oriented + see next_actions
 canopy switch <feature>    # promote to canonical (handles drift via active rotation)
 canopy comments <feature>  # actionable threads only
 # ... edit code ...
-canopy preflight <feature> # records result for feature_state
-canopy state <feature>     # confirm transition (in_progress → ready_to_commit)
+canopy preflight           # stage + run hooks (dry-run; no commit)
+canopy commit -m "..."     # commit across the canonical feature
+canopy push                # publish (add --set-upstream on first push)
+canopy state <feature>     # confirm transition
 ```
 
 Switching focus mid-flight (canonical-slot model):

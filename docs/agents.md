@@ -50,6 +50,8 @@ The skill encodes this matrix; the agent reads it on session start. Mirror here 
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads |
 | Switch a feature into main (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout`, or guessing paths |
 | Hibernate the current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` | manual stash + checkout dance |
+| Commit across the canonical feature (one message, all repos) | `mcp__canopy__commit` | `canopy run <repo> -- git commit` per repo |
+| Push the canonical feature to origin | `mcp__canopy__push` (add `set_upstream=True` on first push) | `canopy run <repo> -- git push` per repo |
 | Check HEAD alignment | `mcp__canopy__drift` | `git branch --show-current` per repo |
 | PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + custom filter |
 | PR data (title, decision, draft) | `mcp__canopy__github_get_pr` | `gh pr view --json` per repo |

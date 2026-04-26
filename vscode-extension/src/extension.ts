@@ -10,11 +10,7 @@ import { runSetupWizard } from "./commands/setupWizard";
 import { LinearIssue } from "./types";
 import { resolveCanopyMcp } from "./mcpResolver";
 import { StatusBarManager } from "./statusBar";
-import { ChangesProvider } from "./views/changesProvider";
-import { FeaturesProvider } from "./views/featuresProvider";
-import { LinearIssuesProvider } from "./views/linearIssuesProvider";
-import { ReviewProvider } from "./views/reviewProvider";
-import { WorktreesProvider } from "./views/worktreesProvider";
+import { CanopyTreeProvider } from "./views/canopyTreeProvider";
 import { createWatchers } from "./watchers";
 import {
   DashboardPanel,
@@ -27,13 +23,8 @@ import { isSwitchBlocker } from "./canopyClient";
 
 interface Active {
   client: CanopyClient;
-  features: FeaturesProvider;
-  worktrees: WorktreesProvider;
-  changes: ChangesProvider;
-  review: ReviewProvider;
-  linearIssues: LinearIssuesProvider;
+  tree: CanopyTreeProvider;
   status: StatusBarManager;
-  worktreesView: vscode.TreeView<unknown>;
   refresh: () => Promise<void>;
   dispose: () => void;
 }
@@ -97,24 +88,10 @@ async function bootstrap(
   // VS Code "no data provider" message. Real providers replace these
   // once the MCP connects.
   const stubProvider = new EmptyTreeProvider();
-  const stubFeatures = vscode.window.createTreeView("canopy.features", {
+  const stubTree = vscode.window.createTreeView("canopy.tree", {
     treeDataProvider: stubProvider,
   });
-  const stubLinear = vscode.window.createTreeView("canopy.linearIssues", {
-    treeDataProvider: stubProvider,
-  });
-  const stubWorktrees = vscode.window.createTreeView("canopy.worktrees", {
-    treeDataProvider: stubProvider,
-  });
-  const stubChanges = vscode.window.createTreeView("canopy.changes", {
-    treeDataProvider: stubProvider,
-  });
-  const stubReview = vscode.window.createTreeView("canopy.review", {
-    treeDataProvider: stubProvider,
-  });
-  const stubSubs: vscode.Disposable[] = [
-    stubFeatures, stubLinear, stubWorktrees, stubChanges, stubReview,
-  ];
+  const stubSubs: vscode.Disposable[] = [stubTree];
 
   // ── 3. Probe the connection. On failure, show a helpful toast +
   // return early — viewsWelcome takes over from there, and the
@@ -161,38 +138,12 @@ async function bootstrap(
   const status = new StatusBarManager(client);
   context.subscriptions.push(status);
 
-  const features = new FeaturesProvider(client, () => status.activeFeature);
-  const worktrees = new WorktreesProvider(client);
-  const changes = new ChangesProvider(client, () => status.activeFeature);
-  const review = new ReviewProvider(client);
-  const linearIssues = new LinearIssuesProvider(client);
-
-  const linearIssuesView = vscode.window.createTreeView("canopy.linearIssues", {
-    treeDataProvider: linearIssues,
+  const tree = new CanopyTreeProvider(client, () => status.activeFeature);
+  const treeView = vscode.window.createTreeView("canopy.tree", {
+    treeDataProvider: tree,
     showCollapseAll: true,
   });
-  const featuresView = vscode.window.createTreeView("canopy.features", {
-    treeDataProvider: features,
-    showCollapseAll: true,
-  });
-  const worktreesView = vscode.window.createTreeView("canopy.worktrees", {
-    treeDataProvider: worktrees,
-    showCollapseAll: true,
-  });
-  const changesView = vscode.window.createTreeView("canopy.changes", {
-    treeDataProvider: changes,
-    showCollapseAll: true,
-  });
-  const reviewView = vscode.window.createTreeView("canopy.review", {
-    treeDataProvider: review,
-  });
-  context.subscriptions.push(
-    linearIssuesView,
-    featuresView,
-    worktreesView,
-    changesView,
-    reviewView,
-  );
+  context.subscriptions.push(treeView);
 
   const refresh = async () => {
     try {
@@ -201,26 +152,21 @@ async function bootstrap(
       const stack = err instanceof Error ? err.stack ?? err.message : String(err);
       output.appendLine(`[canopy] status.refresh threw:\n${stack}`);
     }
-    features.refresh();
-    worktrees.refresh();
-    changes.refresh();
-    review.refresh();
-    linearIssues.refresh();
+    tree.refresh();
     void updateLinearState(client, root);
-    worktreesView.description = worktrees.budgetLabel ?? "";
-    featuresView.description = status.activeFeature
+    treeView.description = status.activeFeature
       ? `active: ${status.activeFeature}`
       : "";
   };
 
   const watchers = createWatchers(root, {
     onFeaturesChanged: () => {
-      void refresh();
+      tree.refresh();
       CockpitPanel.refreshIfOpen();
       DashboardPanel.invalidateAll();
     },
     onWorktreeChanged: () => {
-      changes.refresh();
+      tree.refresh();
       void status.refresh();
       CockpitPanel.refreshIfOpen();
       DashboardPanel.invalidateAll();
@@ -243,13 +189,8 @@ async function bootstrap(
 
   active = {
     client,
-    features,
-    worktrees,
-    changes,
-    review,
-    linearIssues,
+    tree,
     status,
-    worktreesView,
     refresh,
     dispose: () => {
       void client.dispose();

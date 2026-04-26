@@ -57,7 +57,7 @@ def feature_state(workspace: Workspace, feature: str) -> dict[str, Any]:
     # A worktree-backed feature physically lives at its worktree path,
     # regardless of which feature is "active" right now. Resolve per-repo
     # paths up front so drift + per-repo facts both check the right tree.
-    repo_paths, has_worktrees = _resolve_repo_paths(
+    repo_paths, has_worktrees = resolve_repo_paths(
         workspace, feature_name, repo_branches,
     )
 
@@ -89,7 +89,7 @@ def feature_state(workspace: Workspace, feature: str) -> dict[str, Any]:
     }
 
 
-def _resolve_repo_paths(
+def resolve_repo_paths(
     workspace: Workspace, feature_name: str, repo_branches: dict[str, str],
 ) -> tuple[dict[str, Path], bool]:
     """Per-repo path resolution for state derivation.

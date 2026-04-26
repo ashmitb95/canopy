@@ -84,8 +84,41 @@ async function bootstrap(
   const client = new CanopyClient(resolved.path, root.uri.fsPath, output);
   context.subscriptions.push({ dispose: () => void client.dispose() });
 
-  // Probe the connection up front so we can fail loudly instead of letting
-  // each tree view spew its own ENOENT toast.
+  // ── 1. Always-available diagnostics — registered BEFORE the MCP probe
+  // so they survive a connection failure. Without this the user gets a
+  // tree view that says "no data provider registered" + no Canopy
+  // commands in the palette, which is a dead end for anyone whose
+  // `canopy-mcp` isn't on PATH (the common new-user failure mode).
+  registerDiagnosticCommands(context, output, root, client);
+
+  // ── 2. Stub the tree views so the `viewsWelcome` content (with
+  // "Install Canopy for me" / "Set Path" / "Retry" / "Show Log"
+  // buttons) renders in the empty Features view instead of the generic
+  // VS Code "no data provider" message. Real providers replace these
+  // once the MCP connects.
+  const stubProvider = new EmptyTreeProvider();
+  const stubFeatures = vscode.window.createTreeView("canopy.features", {
+    treeDataProvider: stubProvider,
+  });
+  const stubLinear = vscode.window.createTreeView("canopy.linearIssues", {
+    treeDataProvider: stubProvider,
+  });
+  const stubWorktrees = vscode.window.createTreeView("canopy.worktrees", {
+    treeDataProvider: stubProvider,
+  });
+  const stubChanges = vscode.window.createTreeView("canopy.changes", {
+    treeDataProvider: stubProvider,
+  });
+  const stubReview = vscode.window.createTreeView("canopy.review", {
+    treeDataProvider: stubProvider,
+  });
+  const stubSubs: vscode.Disposable[] = [
+    stubFeatures, stubLinear, stubWorktrees, stubChanges, stubReview,
+  ];
+
+  // ── 3. Probe the connection. On failure, show a helpful toast +
+  // return early — viewsWelcome takes over from there, and the
+  // diagnostic commands stay live so the user can recover.
   try {
     await client.ensureConnected();
     await vscode.commands.executeCommand("setContext", "canopy.state", "ok");
@@ -115,7 +148,15 @@ async function bootstrap(
     } else if (pick === "Show Log") {
       output.show();
     }
+    // Keep stubs registered so viewsWelcome is what the user sees.
+    // The diagnostic commands above remain available for recovery.
+    context.subscriptions.push(...stubSubs);
+    return;
   }
+
+  // ── 4. MCP connected — dispose the stubs so the real providers below
+  // can register fresh tree views with the same view IDs.
+  for (const s of stubSubs) s.dispose();
 
   const status = new StatusBarManager(client);
   context.subscriptions.push(status);
@@ -213,40 +254,10 @@ async function bootstrap(
   };
 
   registerCommands(context, client, refresh);
+  // Diagnostic commands (showLog, retryConnect, installBackend) are now
+  // registered earlier, in registerDiagnosticCommands(). This block keeps
+  // only commands that depend on a connected MCP.
   context.subscriptions.push(
-    vscode.commands.registerCommand("canopy.retryConnect", async () => {
-      output.appendLine("[canopy] retrying MCP connection");
-      // Re-read the setting in case the installer just wrote a new path.
-      await client.dispose();
-      const latestPath = vscode.workspace
-        .getConfiguration("canopy")
-        .get<string>("canopyMcpPath", "canopy-mcp");
-      const latest = resolveCanopyMcp(latestPath, root.uri.fsPath);
-      client.updateMcpPath(latest.path);
-      output.appendLine(
-        `[canopy] retrying with ${latest.path} (${latest.resolvedVia})`,
-      );
-      try {
-        await client.ensureConnected();
-        await vscode.commands.executeCommand(
-          "setContext",
-          "canopy.state",
-          "ok",
-        );
-        await refresh();
-      } catch (err) {
-        void vscode.window.showErrorMessage(
-          `Canopy: still can't connect — ${(err as Error).message}`,
-        );
-      }
-    }),
-    vscode.commands.registerCommand("canopy.showLog", () => output.show()),
-    vscode.commands.registerCommand("canopy.installBackend", async () => {
-      const installed = await runInstallBackend(output);
-      if (installed) {
-        await vscode.commands.executeCommand("canopy.retryConnect");
-      }
-    }),
 
     vscode.commands.registerCommand(
       "canopy.createFeatureFromIssue",
@@ -416,6 +427,81 @@ function registerInitCommand(
   context.subscriptions.push(
     vscode.commands.registerCommand("canopy.init", () => runSetupWizard(output)),
   );
+}
+
+/**
+ * Diagnostic commands that must be available even when the MCP backend
+ * fails to start. Without these registered up-front, a missing
+ * `canopy-mcp` binary leaves the user with a tree view that says "no
+ * data provider registered" and zero canopy commands in the palette
+ * (because the rest of activation never ran).
+ *
+ * Registered:
+ *   - canopy.showLog        — surfaces the output channel
+ *   - canopy.retryConnect   — re-resolves the path + re-attempts connect
+ *   - canopy.installBackend — runs the install wizard, then retries
+ */
+function registerDiagnosticCommands(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+  root: vscode.WorkspaceFolder,
+  client: CanopyClient,
+): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand("canopy.showLog", () => output.show()),
+    vscode.commands.registerCommand("canopy.retryConnect", async () => {
+      output.appendLine("[canopy] retrying MCP connection");
+      await client.dispose();
+      const latestPath = vscode.workspace
+        .getConfiguration("canopy")
+        .get<string>("canopyMcpPath", "canopy-mcp");
+      const latest = resolveCanopyMcp(latestPath, root.uri.fsPath);
+      client.updateMcpPath(latest.path);
+      output.appendLine(
+        `[canopy] retrying with ${latest.path} (${latest.resolvedVia})`,
+      );
+      try {
+        await client.ensureConnected();
+        await vscode.commands.executeCommand(
+          "setContext",
+          "canopy.state",
+          "ok",
+        );
+        // The full extension surface (real tree views + the rest of
+        // the commands) only registers on the first successful boot.
+        // Easiest way to swap in is reload the window — tell the user.
+        const pick = await vscode.window.showInformationMessage(
+          "Canopy: connected. Reload the window to load the full extension surface.",
+          "Reload Window",
+        );
+        if (pick === "Reload Window") {
+          await vscode.commands.executeCommand("workbench.action.reloadWindow");
+        }
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Canopy: still can't connect — ${(err as Error).message}`,
+        );
+      }
+    }),
+    vscode.commands.registerCommand("canopy.installBackend", async () => {
+      const installed = await runInstallBackend(output);
+      if (installed) {
+        await vscode.commands.executeCommand("canopy.retryConnect");
+      }
+    }),
+  );
+}
+
+/**
+ * No-op TreeDataProvider used to register the Canopy view IDs before
+ * the MCP connects. With a provider registered (even an empty one),
+ * VS Code falls back to the `viewsWelcome` content from package.json
+ * — which has the recovery buttons — instead of showing the bare
+ * "no data provider registered" error.
+ */
+class EmptyTreeProvider implements vscode.TreeDataProvider<never> {
+  getTreeItem(): vscode.TreeItem { return new vscode.TreeItem(""); }
+  getChildren(): never[] { return []; }
 }
 
 function registerCommands(

@@ -204,6 +204,79 @@ def switch(feature: str, release_current: bool = False,
 
 
 @mcp.tool()
+def commit(message: str, feature: str | None = None,
+           repos: list[str] | None = None, paths: list[str] | None = None,
+           no_hooks: bool = False, amend: bool = False) -> dict:
+    """Commit across every repo in a feature lane with a single message (Wave 2.3).
+
+    Defaults to the canonical feature when ``feature`` is omitted (reads
+    ``.canopy/state/active_feature.json``). ``--paths`` filters staging
+    to those files; otherwise stages all tracked changes (``git add -u``).
+
+    Pre-flight: every in-scope repo must be on the feature's expected
+    branch. Mismatches raise ``BlockerError(code='wrong_branch')`` with
+    a per-repo expected/actual map; no commits fire.
+
+    Per-repo result statuses:
+      - ``ok``           — committed; carries ``sha``, ``files_changed``.
+      - ``nothing``      — no changes staged.
+      - ``hooks_failed`` — pre-commit / commit-msg hook rejected; carries
+                            tail of ``hook_output``. Other repos continue.
+      - ``failed``       — git error (gpg, locked index, etc.).
+
+    Returns ``{feature, results: {<repo>: {...}}}`` on success, or a
+    structured ``BlockerError``-shaped dict on pre-flight rejection.
+    """
+    from ..actions.commit import commit as _impl
+    from ..actions.errors import ActionError
+    ws = _get_workspace()
+    try:
+        return _impl(
+            ws, message,
+            feature=feature, repos=repos, paths=paths,
+            no_hooks=no_hooks, amend=amend,
+        )
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
+def push(feature: str | None = None, repos: list[str] | None = None,
+         set_upstream: bool = False, force_with_lease: bool = False,
+         dry_run: bool = False) -> dict:
+    """Push the feature branch in every in-scope repo (Wave 2.3).
+
+    Defaults to the canonical feature. Pre-flight raises
+    ``BlockerError(code='no_upstream')`` if any in-scope repo lacks an
+    upstream and ``set_upstream`` was not passed; the fix-action carries
+    the same call args plus ``set_upstream=True`` so the agent retries
+    mechanically.
+
+    Per-repo result statuses:
+      - ``ok``         — pushed; carries ``pushed_count``, ``ref``.
+      - ``up_to_date`` — branch is already at upstream; nothing to push.
+      - ``rejected``   — non-fast-forward without ``force_with_lease``.
+      - ``failed``     — git error (network, auth, etc.).
+
+    Returns ``{feature, results: {<repo>: {...}}}`` on success, or a
+    structured ``BlockerError``-shaped dict on pre-flight rejection.
+    """
+    from ..actions.errors import ActionError
+    from ..actions.push import push as _impl
+    ws = _get_workspace()
+    try:
+        return _impl(
+            ws,
+            feature=feature, repos=repos,
+            set_upstream=set_upstream,
+            force_with_lease=force_with_lease,
+            dry_run=dry_run,
+        )
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
 def stash_save_feature(feature: str, message: str = "",
                         repos: list[str] | None = None) -> dict:
     """Stash dirty changes (incl. untracked) with a feature tag.

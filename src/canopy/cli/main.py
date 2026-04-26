@@ -2107,6 +2107,107 @@ def cmd_switch(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_commit(args: argparse.Namespace) -> None:
+    """Feature-scoped multi-repo commit (Wave 2.3)."""
+    from ..actions.commit import commit as commit_impl
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = commit_impl(
+            workspace,
+            args.message,
+            feature=args.feature,
+            repos=_split_csv(args.repos),
+            paths=args.paths or None,
+            no_hooks=args.no_hooks,
+            amend=args.amend,
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="commit")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    console.print(f"  [feature]{result['feature']}[/]")
+    for repo, r in result["results"].items():
+        status = r["status"]
+        if status == "ok":
+            sha = r["sha"][:8]
+            files = r["files_changed"]
+            tag = " (amended)" if r.get("amended") else ""
+            console.print(f"    [success]✓[/] [repo]{repo}[/]  {sha}  ({files} files{tag})")
+        elif status == "nothing":
+            console.print(f"    [muted]·[/] [repo]{repo}[/]  no changes")
+        elif status == "hooks_failed":
+            console.print(f"    [error]✗[/] [repo]{repo}[/]  hook failed")
+            for line in (r.get("hook_output") or "").splitlines()[:5]:
+                console.print(f"        [muted]{line}[/]")
+        else:  # failed
+            console.print(f"    [error]✗[/] [repo]{repo}[/]  {r.get('reason', 'failed')}")
+    console.print()
+
+
+def cmd_push(args: argparse.Namespace) -> None:
+    """Feature-scoped multi-repo push (Wave 2.3)."""
+    from ..actions.errors import ActionError
+    from ..actions.push import push as push_impl
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = push_impl(
+            workspace,
+            feature=args.feature,
+            repos=_split_csv(args.repos),
+            set_upstream=args.set_upstream,
+            force_with_lease=args.force_with_lease,
+            dry_run=args.dry_run,
+        )
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="push")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    console.print(f"  [feature]{result['feature']}[/]")
+    for repo, r in result["results"].items():
+        status = r["status"]
+        if status == "ok":
+            count = r.get("pushed_count", 0)
+            ref = r.get("ref", "")
+            extras = []
+            if r.get("set_upstream"):
+                extras.append("upstream set")
+            if r.get("dry_run"):
+                extras.append("dry-run")
+            extra = f" ({', '.join(extras)})" if extras else ""
+            console.print(f"    [success]✓[/] [repo]{repo}[/]  {ref}  +{count}{extra}")
+        elif status == "up_to_date":
+            console.print(f"    [muted]·[/] [repo]{repo}[/]  up to date")
+        elif status == "rejected":
+            console.print(f"    [error]✗[/] [repo]{repo}[/]  rejected")
+            console.print(f"        [muted]{r.get('reason', '')}[/]")
+        else:  # failed
+            console.print(f"    [error]✗[/] [repo]{repo}[/]  {r.get('reason', 'failed')}")
+    console.print()
+
+
 def cmd_stash_save_feature(args: argparse.Namespace) -> None:
     """Feature-tagged stash save (extends `canopy stash save --feature`)."""
     from ..actions.errors import ActionError
@@ -2484,6 +2585,42 @@ def main() -> None:
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # commit (feature-scoped multi-repo commit — Wave 2.3)
+    commit_p = subparsers.add_parser(
+        "commit",
+        help="Commit across every repo in the canonical (or named) feature",
+    )
+    commit_p.add_argument("-m", "--message", required=True,
+                            help="Commit message (single message across all repos)")
+    commit_p.add_argument("--feature", default=None,
+                            help="Feature alias; defaults to canonical feature")
+    commit_p.add_argument("--repo", "--repos", dest="repos", default=None,
+                            help="Comma-separated subset of repos within the feature")
+    commit_p.add_argument("--paths", nargs="*", default=None,
+                            help="Filter staging to these paths (relative to each repo root)")
+    commit_p.add_argument("--no-hooks", action="store_true",
+                            help="Pass --no-verify to skip pre-commit / commit-msg hooks")
+    commit_p.add_argument("--amend", action="store_true",
+                            help="Amend HEAD in each repo instead of creating new commits")
+    commit_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # push (feature-scoped multi-repo push — Wave 2.3)
+    push_p = subparsers.add_parser(
+        "push",
+        help="Push the feature branch in every repo (canonical by default)",
+    )
+    push_p.add_argument("--feature", default=None,
+                          help="Feature alias; defaults to canonical feature")
+    push_p.add_argument("--repo", "--repos", dest="repos", default=None,
+                          help="Comma-separated subset of repos within the feature")
+    push_p.add_argument("--set-upstream", action="store_true",
+                          help="Pass --set-upstream for repos that lack an upstream")
+    push_p.add_argument("--force-with-lease", action="store_true",
+                          help="Pass --force-with-lease to allow safe non-fast-forward pushes")
+    push_p.add_argument("--dry-run", action="store_true",
+                          help="Enumerate what would happen without firing pushes")
+    push_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # switch (canonical-slot focus primitive — Wave 2.9)
     switch_p = subparsers.add_parser(
         "switch",
@@ -2626,6 +2763,8 @@ def main() -> None:
         "pr": cmd_pr,
         "comments": cmd_comments,
         "switch": cmd_switch,
+        "commit": cmd_commit,
+        "push": cmd_push,
         "triage": cmd_triage,
         "state": cmd_state,
         "setup-agent": cmd_setup_agent,

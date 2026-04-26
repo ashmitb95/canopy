@@ -43,66 +43,28 @@
     "views": {
       "canopy": [
         {
-          "id": "canopy.linearIssues",
-          "name": "Linear Issues",
+          "id": "canopy.tree",
+          "name": "Canopy",
           "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Linear Issues",
-          "when": "canopy.state == 'ok'"
-        },
-        {
-          "id": "canopy.features",
-          "name": "Features",
-          "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Features"
-        },
-        {
-          "id": "canopy.worktrees",
-          "name": "Worktrees",
-          "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Worktrees",
-          "when": "canopy.state == 'ok'"
-        },
-        {
-          "id": "canopy.changes",
-          "name": "Changes",
-          "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Changes",
-          "when": "canopy.state == 'ok'"
-        },
-        {
-          "id": "canopy.review",
-          "name": "Review Readiness",
-          "icon": "media/canopy-icon.svg",
-          "contextualTitle": "Canopy Review Readiness",
-          "when": "canopy.state == 'ok'"
+          "contextualTitle": "Canopy"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "canopy.features",
+        "view": "canopy.tree",
         "when": "canopy.state == 'no-workspace'",
         "contents": "No Canopy workspace detected.\n\nA workspace is a directory containing a `canopy.toml` file.\n\n[Initialize Canopy here](command:canopy.init)\n\nLearn more about [Canopy](https://github.com/ashmitb95/canopy)."
       },
       {
-        "view": "canopy.features",
+        "view": "canopy.tree",
         "when": "canopy.state == 'no-mcp'",
         "contents": "Canopy detected a workspace, but can't start `canopy-mcp`.\n\n[Install Canopy for me](command:canopy.installBackend)\n\nOr wire up an existing install:\n\n[Set canopy-mcp Path](command:workbench.action.openSettings?%22canopy.canopyMcpPath%22)\n\n[Retry](command:canopy.retryConnect)\n\n[Show Log](command:canopy.showLog)"
       },
       {
-        "view": "canopy.features",
+        "view": "canopy.tree",
         "when": "canopy.state == 'loading'",
         "contents": "Starting canopy-mcp…"
-      },
-      {
-        "view": "canopy.linearIssues",
-        "when": "canopy.linearState == 'not-configured'",
-        "contents": "Linear isn't connected to this workspace yet.\n\nCanopy auto-detects Linear configs in `.mcp.json` (shared with Claude Code) and `.canopy/mcps.json`. If you've already set Linear up elsewhere, copy that entry in.\n\nOr let Canopy wire it up for you:\n\n[Connect Linear](command:canopy.configureLinear)\n\n[Edit mcps.json manually](command:canopy.openMcpsConfig)\n\nGet your API key at [linear.app/settings/api](https://linear.app/settings/api)."
-      },
-      {
-        "view": "canopy.linearIssues",
-        "when": "canopy.linearState == 'empty'",
-        "contents": "No Todo or In Progress issues showing up.\n\nThis could mean your Linear key is wrong, the MCP server failed to start, or you really have no active issues.\n\n[Refresh](command:canopy.refresh)\n\n[Reconnect Linear](command:canopy.configureLinear)\n\n[Show Log](command:canopy.showLog)"
       }
     ],
     "commands": [
@@ -196,54 +158,49 @@
       "view/title": [
         {
           "command": "canopy.openCockpit",
-          "when": "view == canopy.features",
+          "when": "view == canopy.tree",
           "group": "navigation@0"
         },
         {
           "command": "canopy.openNewFeature",
-          "when": "view == canopy.features",
+          "when": "view == canopy.tree",
           "group": "navigation@1"
         },
         {
           "command": "canopy.refresh",
-          "when": "view == canopy.features || view == canopy.worktrees || view == canopy.changes || view == canopy.review || view == canopy.linearIssues",
+          "when": "view == canopy.tree",
           "group": "navigation@2"
         },
         {
           "command": "canopy.reinit",
-          "when": "view == canopy.features",
+          "when": "view == canopy.tree",
           "group": "9_danger@1"
-        },
-        {
-          "command": "canopy.reinitDryRun",
-          "when": "view == canopy.features",
-          "group": "9_danger@2"
         }
       ],
       "view/item/context": [
         {
           "command": "canopy.openDashboard",
-          "when": "view == canopy.features && viewItem == feature",
+          "when": "view == canopy.tree && viewItem == feature",
           "group": "1_open@1"
         },
         {
           "command": "canopy.switchFeature",
-          "when": "view == canopy.features && viewItem == feature",
+          "when": "view == canopy.tree && viewItem == feature",
           "group": "1_open@2"
         },
         {
           "command": "canopy.openInIde",
-          "when": "view == canopy.features && viewItem == feature",
+          "when": "view == canopy.tree && viewItem == feature",
           "group": "1_open@3"
         },
         {
           "command": "canopy.featureDone",
-          "when": "view == canopy.features && viewItem == feature",
+          "when": "view == canopy.tree && viewItem == feature",
           "group": "9_destructive@1"
         },
         {
           "command": "canopy.createFeatureFromIssue",
-          "when": "view == canopy.linearIssues && viewItem == linear.issue",
+          "when": "view == canopy.tree && viewItem == linear.issue",
           "group": "1_open@1"
         }
       ]

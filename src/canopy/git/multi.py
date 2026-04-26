@@ -319,8 +319,8 @@ def commit_all(
             results[state.config.name] = "nothing to commit"
             continue
         try:
-            sha = git.commit(state.abs_path, message)
-            results[state.config.name] = sha[:12]
+            result = git.commit(state.abs_path, message)
+            results[state.config.name] = result["sha"][:12]
         except git.GitError as e:
             results[state.config.name] = str(e)
 

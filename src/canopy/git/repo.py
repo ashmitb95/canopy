@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
 class GitError(Exception):
@@ -237,10 +238,155 @@ def unstage_files(repo_path: Path, files: list[str]) -> None:
         _run(["restore", "--staged"] + files, cwd=repo_path)
 
 
-def commit(repo_path: Path, message: str) -> str:
-    """Create a commit with the given message. Returns the new commit sha."""
-    _run(["commit", "-m", message], cwd=repo_path)
-    return head_sha(repo_path)
+def stage_all_tracked(repo_path: Path) -> None:
+    """Stage all tracked, modified files (mirror of `git add -u`)."""
+    _run(["add", "-u"], cwd=repo_path)
+
+
+def staged_file_count(repo_path: Path) -> int:
+    """Count files currently in the index awaiting commit."""
+    output = _run_ok(["diff", "--cached", "--name-only"], cwd=repo_path)
+    if not output:
+        return 0
+    return len([line for line in output.split("\n") if line.strip()])
+
+
+def commit(
+    repo_path: Path,
+    message: str,
+    *,
+    amend: bool = False,
+    no_hooks: bool = False,
+    allow_empty: bool = False,
+) -> dict[str, Any]:
+    """Create a commit. Returns ``{sha, files_changed}``.
+
+    ``files_changed`` is the count of files touched by the new commit
+    (uses ``git show --name-only`` against the resulting HEAD, so it
+    works for the first commit and for ``--amend``).
+
+    Args:
+        amend: pass ``--amend``. Reuses the existing message via ``-m``
+            anyway (caller controls the new message).
+        no_hooks: pass ``--no-verify`` to skip pre-commit / commit-msg hooks.
+        allow_empty: pass ``--allow-empty``.
+    """
+    args = ["commit", "-m", message]
+    if amend:
+        args.append("--amend")
+    if no_hooks:
+        args.append("--no-verify")
+    if allow_empty:
+        args.append("--allow-empty")
+    _run(args, cwd=repo_path)
+    sha = head_sha(repo_path)
+    show_out = _run_ok(
+        ["show", "--name-only", "--pretty=format:", "HEAD"], cwd=repo_path,
+    )
+    files_changed = len([line for line in show_out.split("\n") if line.strip()])
+    return {"sha": sha, "files_changed": files_changed}
+
+
+# ── Push / upstream queries ──────────────────────────────────────────────
+
+def has_upstream(repo_path: Path, branch: str | None = None) -> bool:
+    """Check whether ``branch`` (or current branch) has a configured upstream."""
+    target = f"{branch}@{{upstream}}" if branch else "@{upstream}"
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", target],
+        capture_output=True, text=True, cwd=repo_path,
+    )
+    return result.returncode == 0
+
+
+def upstream_ref(repo_path: Path, branch: str | None = None) -> str:
+    """Return the upstream ref (e.g. ``origin/main``), or empty string if unset."""
+    target = f"{branch}@{{upstream}}" if branch else "@{upstream}"
+    return _run_ok(
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", target],
+        cwd=repo_path,
+    )
+
+
+def unpushed_count(repo_path: Path, branch: str | None = None) -> int:
+    """Count commits HEAD (or branch) is ahead of its upstream.
+
+    Returns 0 when the branch is up-to-date OR has no upstream — caller
+    should check ``has_upstream`` to disambiguate.
+    """
+    target = branch or "HEAD"
+    upstream = f"{branch}@{{upstream}}" if branch else "@{upstream}"
+    result = subprocess.run(
+        ["git", "rev-list", "--count", f"{upstream}..{target}"],
+        capture_output=True, text=True, cwd=repo_path,
+    )
+    if result.returncode != 0:
+        return 0
+    try:
+        return int(result.stdout.strip() or "0")
+    except ValueError:
+        return 0
+
+
+def push(
+    repo_path: Path,
+    *,
+    branch: str | None = None,
+    remote: str = "origin",
+    set_upstream: bool = False,
+    force_with_lease: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Run ``git push`` and return a structured result.
+
+    Returns one of:
+      - ``{status: "ok", pushed_count, ref, set_upstream?, dry_run?}``
+      - ``{status: "rejected", reason}`` — non-fast-forward without ``force_with_lease``
+      - ``{status: "failed", reason}`` — any other git failure (network, auth, etc.)
+
+    The caller is responsible for the "up-to-date / nothing to push"
+    short-circuit (use ``unpushed_count`` first); this primitive always
+    invokes ``git push``.
+    """
+    pushed_count = (
+        unpushed_count(repo_path, branch) if not dry_run else 0
+    )
+
+    args = ["push"]
+    if set_upstream:
+        args.append("--set-upstream")
+    if force_with_lease:
+        args.append("--force-with-lease")
+    if dry_run:
+        args.append("--dry-run")
+    args.append(remote)
+    if branch:
+        args.append(branch)
+
+    result = subprocess.run(
+        ["git"] + args,
+        capture_output=True, text=True, cwd=repo_path,
+    )
+    if result.returncode == 0:
+        out: dict[str, Any] = {
+            "status": "ok",
+            "pushed_count": pushed_count,
+            "ref": f"{remote}/{branch}" if branch else upstream_ref(repo_path),
+        }
+        if set_upstream:
+            out["set_upstream"] = True
+        if dry_run:
+            out["dry_run"] = True
+        return out
+
+    stderr = (result.stderr or "").strip()
+    tail = stderr.splitlines()[-3:] if stderr else []
+    reason = "\n".join(tail) or stderr or "push failed"
+
+    # Non-fast-forward / hook rejection — git uses "rejected" or "non-fast-forward"
+    if "rejected" in stderr or "non-fast-forward" in stderr:
+        return {"status": "rejected", "reason": reason}
+    return {"status": "failed", "reason": reason}
 
 
 # ── Diff / log ────────────────────────────────────────────────────────────

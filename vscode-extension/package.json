@@ -126,11 +126,13 @@
       },
       {
         "command": "canopy.openCockpit",
-        "title": "Canopy: Open Cockpit (workspace dashboard)"
+        "title": "Canopy: Open Cockpit (workspace dashboard)",
+        "icon": "$(dashboard)"
       },
       {
         "command": "canopy.openNewFeature",
-        "title": "Canopy: Spin up a new feature from Linear"
+        "title": "Canopy: Spin up a new feature from Linear",
+        "icon": "$(add)"
       },
       {
         "command": "canopy.preflight",
@@ -193,7 +195,12 @@
     "menus": {
       "view/title": [
         {
-          "command": "canopy.createFeature",
+          "command": "canopy.openCockpit",
+          "when": "view == canopy.features",
+          "group": "navigation@0"
+        },
+        {
+          "command": "canopy.openNewFeature",
           "when": "view == canopy.features",
           "group": "navigation@1"
         },

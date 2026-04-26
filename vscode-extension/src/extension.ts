@@ -173,10 +173,21 @@ async function bootstrap(
   };
 
   const watchers = createWatchers(root, {
-    onFeaturesChanged: () => void refresh(),
+    onFeaturesChanged: () => {
+      void refresh();
+      CockpitPanel.refreshIfOpen();
+    },
     onWorktreeChanged: () => {
       changes.refresh();
       void status.refresh();
+      CockpitPanel.refreshIfOpen();
+    },
+    // Wave 2.9 state files (active_feature.json, heads.json,
+    // preflight.json) — drive the cockpit's auto-refresh so a
+    // `canopy switch` from the CLI surfaces in the dashboard
+    // immediately.
+    onStateFilesChanged: () => {
+      CockpitPanel.refreshIfOpen();
     },
   });
   context.subscriptions.push(watchers);

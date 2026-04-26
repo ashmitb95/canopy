@@ -3,12 +3,25 @@ import * as vscode from "vscode";
 interface WatcherCallbacks {
   onFeaturesChanged: () => void;
   onWorktreeChanged: () => void;
+  /**
+   * Wave 2.9 state files — fired when the active-feature pointer
+   * changes (canopy switch), when the post-checkout hook records a
+   * head, or when preflight records a fresh result. Drives the
+   * cockpit's auto-refresh.
+   */
+  onStateFilesChanged?: () => void;
 }
 
 /**
- * Two debounced FileSystemWatchers: one on .canopy/features.json (rebuilds
- * Features + Worktrees + Review trees) and one on .canopy/worktrees/.../HEAD
- * (rebuilds Changes only — cheaper).
+ * Debounced FileSystemWatchers covering canopy's persistent state:
+ *
+ *   1. `.canopy/features.json`            (300ms) → tree views + cockpit
+ *   2. `.canopy/worktrees/**\/.git/{HEAD,index}` (500ms) → Changes view
+ *   3. `.canopy/state/{active_feature,heads,preflight}.json` (200ms) → cockpit
+ *
+ * State-file changes get the tightest debounce since the cockpit's
+ * "what's canonical" + "is preflight stale" displays are user-facing
+ * and we want them to react quickly to a `canopy switch` from the CLI.
  */
 export function createWatchers(
   workspaceRoot: vscode.WorkspaceFolder,
@@ -37,6 +50,19 @@ export function createWatchers(
   worktreeWatcher.onDidChange(fireWorktree);
   worktreeWatcher.onDidDelete(fireWorktree);
   disposables.push(worktreeWatcher);
+
+  if (cb.onStateFilesChanged) {
+    const statePattern = new vscode.RelativePattern(
+      workspaceRoot,
+      ".canopy/state/{active_feature,heads,preflight}.json",
+    );
+    const stateWatcher = vscode.workspace.createFileSystemWatcher(statePattern);
+    const fireState = debounce(cb.onStateFilesChanged, 200);
+    stateWatcher.onDidCreate(fireState);
+    stateWatcher.onDidChange(fireState);
+    stateWatcher.onDidDelete(fireState);
+    disposables.push(stateWatcher);
+  }
 
   return vscode.Disposable.from(...disposables);
 }

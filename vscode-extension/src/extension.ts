@@ -217,11 +217,13 @@ async function bootstrap(
     onFeaturesChanged: () => {
       void refresh();
       CockpitPanel.refreshIfOpen();
+      DashboardPanel.invalidateAll();
     },
     onWorktreeChanged: () => {
       changes.refresh();
       void status.refresh();
       CockpitPanel.refreshIfOpen();
+      DashboardPanel.invalidateAll();
     },
     // Wave 2.9 state files (active_feature.json, heads.json,
     // preflight.json) — drive the cockpit's auto-refresh so a
@@ -229,6 +231,7 @@ async function bootstrap(
     // immediately.
     onStateFilesChanged: () => {
       CockpitPanel.refreshIfOpen();
+      DashboardPanel.invalidateAll();
     },
   });
   context.subscriptions.push(watchers);

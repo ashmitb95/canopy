@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <em>The typed multi-repo surface your AI agent needs. CLI you'll like too.</em>
+</p>
+
+<p align="center">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
   <img alt="Tests" src="https://img.shields.io/badge/tests-436%20passing-brightgreen?style=flat-square">
   <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-43-purple?style=flat-square">
@@ -21,7 +25,7 @@ If you work across multiple repos, you've felt this:
 - Your AI agent shells `cd /wrong/repo && command` because shell state doesn't persist between its tool calls.
 - PR review comments pile up across repos and the agent burns context re-deriving "is this still actionable?"
 
-Canopy gives your AI agent the same typed multi-repo surface you have at the CLI — switch, commit, push, triage, review, all of it. Same JSON, same primitives, same drift safety. The detail table is below — first, the verb that does the lifting.
+Canopy was built around one constraint: an AI agent has to be able to drive multi-repo work safely — typed inputs, structured outputs, recoverable errors. Get that right, and you can hand the agent real authority over feature lifecycles. The CLI you get for free, because the same primitives work for human hands. The detail table is below — first, the verb that does the lifting.
 
 <p align="center">
   <img src="docs/cli-switch.svg" alt="canopy switch sin-7-empty-state" width="720">
@@ -29,7 +33,7 @@ Canopy gives your AI agent the same typed multi-repo surface you have at the CLI
 
 **`canopy switch <feature>`** promotes a feature into the canonical slot — checks it out in your main directory across every repo it touches, parks the previously-focused feature to a warm worktree, preserves dirty work via stash. Multi-repo focus, one verb, no `cd`.
 
-Everything else canopy does is in service of that command: pre-flight checks before commit, status across repos, PR triage, agent integration. **One command at the center; the rest are accessories.**
+Everything else — preflight, status, triage, review, commit, push — is in service of that switch. Each command has a typed `mcp__canopy__*` equivalent returning the same JSON. **One primitive at the center, two surfaces.** The CLI is the surface humans like. The MCP server is the surface that makes canopy load-bearing.
 
 ## Why it's load-bearing
 

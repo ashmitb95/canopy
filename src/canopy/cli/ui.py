@@ -22,22 +22,22 @@ from rich.status import Status
 # ── Theme ────────────────────────────────────────────────────────────────
 
 CANOPY_THEME = Theme({
-    "header": "bold bright_green",
-    "subheader": "bold white",
-    "repo": "bold cyan",
-    "branch": "yellow",
-    "feature": "bold magenta",
-    "path": "dim",
-    "dirty": "bold red",
-    "clean": "green",
-    "ahead": "green",
-    "behind": "red",
-    "info": "dim cyan",
-    "success": "bold green",
-    "warning": "bold yellow",
-    "error": "bold red",
-    "muted": "dim",
-    "linear": "bold blue",
+    "header":    "bold",                    # weight, not color — let default-fg shine
+    "subheader": "bold dim",
+    "repo":      "bold",
+    "branch":    "color(180)",              # muted khaki
+    "feature":   "bold color(218)",         # soft pink — primary accent
+    "path":      "color(245)",              # warm grey
+    "dirty":     "color(218)",              # soft pink (dirty ≠ error)
+    "clean":     "dim",
+    "ahead":     "color(151)",              # sage
+    "behind":    "color(174)",              # dusty rose
+    "info":      "dim",
+    "success":   "color(151)",              # sage
+    "warning":   "color(218)",              # soft pink
+    "error":     "bold color(174)",         # dusty rose
+    "muted":     "color(244)",              # warm grey, slightly darker
+    "linear":    "color(146)",              # muted lavender
 })
 
 console = Console(theme=CANOPY_THEME)
@@ -54,7 +54,7 @@ SYM_TREE_LAST = "└──"
 SYM_BRANCH = "⎇"
 SYM_DIRTY = "◌"
 SYM_CLEAN = "◉"
-SYM_LINK = "🔗"
+SYM_LINK = "↗"
 
 
 # ── Spinners ─────────────────────────────────────────────────────────────

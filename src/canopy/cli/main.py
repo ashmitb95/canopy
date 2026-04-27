@@ -199,10 +199,11 @@ def cmd_init(args: argparse.Namespace) -> None:
 
 def cmd_status(args: argparse.Namespace) -> None:
     """Show cross-repo workspace status."""
-    from .ui import console, separator, SYM_BRANCH
+    from .ui import console, separator, spinner, SYM_BRANCH
 
     workspace = _load_workspace()
-    workspace.refresh()
+    with spinner("Reading workspace state…"):
+        workspace.refresh()
 
     if args.json:
         _print_json(workspace.to_dict())
@@ -485,8 +486,11 @@ def cmd_sync(args: argparse.Namespace) -> None:
     """Pull + rebase across all repos."""
     workspace = _load_workspace()
     from ..git.multi import sync_all
+    from .ui import spinner
 
-    results = sync_all(workspace, strategy=args.strategy)
+    repo_count = len(workspace.repos)
+    with spinner(f"Syncing {repo_count} repo{'s' if repo_count != 1 else ''}…"):
+        results = sync_all(workspace, strategy=args.strategy)
 
     if args.json:
         _print_json({"results": results})
@@ -1038,11 +1042,12 @@ def cmd_fork(args: argparse.Namespace) -> None:
 def _cmd_preflight_feature(args: argparse.Namespace) -> None:
     """Feature-scoped preflight via coordinator.review_prep (records result)."""
     from ..features.coordinator import FeatureCoordinator
-    from .ui import console, separator, SYM_CHECK, SYM_DOT, SYM_CROSS
+    from .ui import console, separator, spinner, SYM_CHECK, SYM_DOT, SYM_CROSS
 
     workspace = _load_workspace()
     coord = FeatureCoordinator(workspace)
-    result = coord.review_prep(args.feature)
+    with spinner(f"Running preflight on {args.feature}…"):
+        result = coord.review_prep(args.feature)
 
     if args.json:
         _print_json(result)
@@ -2049,16 +2054,17 @@ def cmd_switch(args: argparse.Namespace) -> None:
     from ..actions.errors import ActionError
     from ..actions.switch import switch as switch_impl
     from .render import render_blocker
-    from .ui import console
+    from .ui import console, spinner
 
     workspace = _load_workspace()
     try:
-        result = switch_impl(
-            workspace, args.feature,
-            release_current=getattr(args, "release_current", False),
-            no_evict=getattr(args, "no_evict", False),
-            evict=getattr(args, "evict", None),
-        )
+        with spinner(f"Switching to {args.feature}…"):
+            result = switch_impl(
+                workspace, args.feature,
+                release_current=getattr(args, "release_current", False),
+                no_evict=getattr(args, "no_evict", False),
+                evict=getattr(args, "evict", None),
+            )
     except ActionError as err:
         if args.json:
             _print_json(err.to_dict())
@@ -2112,19 +2118,21 @@ def cmd_commit(args: argparse.Namespace) -> None:
     from ..actions.commit import commit as commit_impl
     from ..actions.errors import ActionError
     from .render import render_blocker
-    from .ui import console
+    from .ui import console, spinner
 
     workspace = _load_workspace()
+    spin_msg = "Committing (running hooks)…" if not args.no_hooks else "Committing…"
     try:
-        result = commit_impl(
-            workspace,
-            args.message,
-            feature=args.feature,
-            repos=_split_csv(args.repos),
-            paths=args.paths or None,
-            no_hooks=args.no_hooks,
-            amend=args.amend,
-        )
+        with spinner(spin_msg):
+            result = commit_impl(
+                workspace,
+                args.message,
+                feature=args.feature,
+                repos=_split_csv(args.repos),
+                paths=args.paths or None,
+                no_hooks=args.no_hooks,
+                amend=args.amend,
+            )
     except ActionError as err:
         if args.json:
             _print_json(err.to_dict())
@@ -2161,18 +2169,20 @@ def cmd_push(args: argparse.Namespace) -> None:
     from ..actions.errors import ActionError
     from ..actions.push import push as push_impl
     from .render import render_blocker
-    from .ui import console
+    from .ui import console, spinner
 
     workspace = _load_workspace()
+    spin_msg = "Dry-run push (no network)…" if args.dry_run else "Pushing…"
     try:
-        result = push_impl(
-            workspace,
-            feature=args.feature,
-            repos=_split_csv(args.repos),
-            set_upstream=args.set_upstream,
-            force_with_lease=args.force_with_lease,
-            dry_run=args.dry_run,
-        )
+        with spinner(spin_msg):
+            result = push_impl(
+                workspace,
+                feature=args.feature,
+                repos=_split_csv(args.repos),
+                set_upstream=args.set_upstream,
+                force_with_lease=args.force_with_lease,
+                dry_run=args.dry_run,
+            )
     except ActionError as err:
         if args.json:
             _print_json(err.to_dict())

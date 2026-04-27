@@ -21,7 +21,7 @@ If you work across multiple repos, you've felt this:
 - Your AI agent shells `cd /wrong/repo && command` because shell state doesn't persist between its tool calls.
 - PR review comments pile up across repos and the agent burns context re-deriving "is this still actionable?"
 
-Canopy closes each gap: multi-repo focus as one atomic verb, drift detection via per-repo post-checkout hooks, a path-safe agent surface where every tool takes `feature` / `repo` as parameters, and a temporal classifier on review threads. The detail table is below — first, the verb that does the lifting.
+Canopy gives your AI agent the same typed multi-repo surface you have at the CLI — switch, commit, push, triage, review, all of it. Same JSON, same primitives, same drift safety. The detail table is below — first, the verb that does the lifting.
 
 <p align="center">
   <img src="docs/cli-switch.svg" alt="canopy switch sin-7-empty-state" width="720">
@@ -30,6 +30,43 @@ Canopy closes each gap: multi-repo focus as one atomic verb, drift detection via
 **`canopy switch <feature>`** promotes a feature into the canonical slot — checks it out in your main directory across every repo it touches, parks the previously-focused feature to a warm worktree, preserves dirty work via stash. Multi-repo focus, one verb, no `cd`.
 
 Everything else canopy does is in service of that command: pre-flight checks before commit, status across repos, PR triage, agent integration. **One command at the center; the rest are accessories.**
+
+## Why it's load-bearing
+
+Multi-repo work breaks in specific, predictable ways. `canopy switch` and its accessories close each:
+
+| Failure mode | Canopy's fix |
+|---|---|
+| You switch one repo's branch, forget the other; next push goes to the wrong place. | `canopy switch <feature>` is atomic across every participating repo. Drift in the meantime is detected in real time by a post-checkout hook and surfaced via `canopy drift` / `canopy state`. |
+| You're juggling 2–3 features at once; switching loses your in-progress work or buries it in a stash you forget. | `canopy switch` runs in **active rotation** by default — the previously-focused feature evacuates to a warm worktree (dirty work follows via stash → pop). Switching back is instant. |
+| You start using `git worktree add` to keep features parallel. By feature 4 you have a scatter of `~/work/auth-feature-api/` / `~/scratch/api-newauth/` dirs with no naming convention. Cleanup means remembering paths to `git worktree remove`, then `git branch -D` per repo. | Canopy enforces `.canopy/worktrees/<feature>/<repo>/` — predictable layout, one place to look. `canopy list` shows every feature with its worktree paths. `canopy done <feature>` removes every worktree and deletes every branch across all repos in one verb. |
+| You're on `dev` in main with two warm feature worktrees parked alongside. You want to commit, run preflight, or push on a feature without `cd`-ing into its worktree directory. Raw git makes you switch your shell's `cwd` first. | `canopy commit --feature <X>` / `canopy preflight --feature <X>` / `canopy push --feature <X>` operate against the warm worktree directly — your `cwd` doesn't move. Or `canopy switch <X>` to promote the warm feature into the canonical slot first (dev evacuates to its own worktree, dirty work follows via stash → pop). |
+| Your AI agent shells `cd /wrong/repo && command` because shell state doesn't persist between tool calls. | Every canopy tool takes `feature` / `repo` as parameters; path resolution lives inside canopy. The agent has no surface area for the mistake. |
+| Your agent re-derives PR state on every run because nothing it learned in the previous turn persists. It re-parses `gh pr list`, re-walks `git status` per repo, re-classifies threads — burning context on bookkeeping. | `mcp__canopy__triage` and `mcp__canopy__feature_state` return cached structured data: PR numbers, review state, dirty counts, per-repo paths. Agent reads, doesn't re-derive. Same JSON across runs. |
+| Drift happens silently *between* the agent's tool calls — it ran `git checkout X` in one repo, the next call assumes alignment, things go sideways. | Per-repo post-checkout hooks write `.canopy/state/heads.json` atomically (fcntl-locked). `mcp__canopy__drift` reads cached state in <50ms. The agent sees the misalignment that happened between calls — even when it didn't cause it. |
+| You and your agent see different views of workspace state. You're looking at `canopy status`; the agent's reading some other JSON it cached three turns ago. Decisions diverge. | The CLI and MCP server are thin wrappers over the same actions. `canopy state X` and `mcp__canopy__feature_state(feature='X')` return identical bytes. Single source of truth, two surfaces. |
+| PR review comments pile up across repos; the agent burns context re-deriving "is this still actionable?". | `canopy review <feature>` returns threads pre-classified as `actionable` vs `likely_resolved`. The temporal classifier filters out comments addressed in subsequent commits. |
+
+<p align="center">
+  <img src="docs/cli-drift.svg" alt="canopy drift" width="720">
+</p>
+
+## The agent contract
+
+Other multi-repo helpers — raw `git worktree add`, monorepo-specific bash wrappers, per-team scripts that wrap them — are built for humans at a terminal. Agents can't use them safely: shell state evaporates between tool calls, paths get constructed wrong, errors come back as stderr text the agent has to interpret.
+
+Canopy exposes **43 typed MCP tools**. Each takes `feature` / `repo` as parameters, returns JSON, fails with a structured `BlockerError(code, what, expected, actual, fix_actions)`. The agent never specifies a path, never parses stderr, never re-derives state.
+
+```python
+# Brittle — agent constructs the path, parses stderr, hopes for the best:
+bash("cd /Users/me/projects/canopy-test/.canopy/worktrees/sin-7/test-api && git status")
+
+# Path-safe — canopy owns resolution and returns structured data:
+mcp__canopy__feature_status(feature="sin-7-empty-state")
+# → {repos: {test-api: {abs_path: "...", current_branch: "...", changed_file_count: 1, ahead: 1, ...}}}
+```
+
+This is the headline difference between canopy and the alternatives. Other tools manage worktrees; canopy gives an agent a *contract* — typed inputs, structured outputs, recoverable errors — that makes multi-repo work safe to delegate.
 
 ## Install
 
@@ -65,23 +102,6 @@ Every CLI command has an `mcp__canopy__*` equivalent for the agent side, returni
 
 <p align="center">
   <img src="docs/cli-status.svg" alt="canopy status" width="720">
-</p>
-
-## Why it's load-bearing
-
-Multi-repo work breaks in four specific ways. `canopy switch` and its accessories close each:
-
-| Failure mode | Canopy's fix |
-|---|---|
-| You switch one repo's branch, forget the other; next push goes to the wrong place. | `canopy switch <feature>` is atomic across every participating repo. Drift in the meantime is detected in real time by a post-checkout hook and surfaced via `canopy drift` / `canopy state`. |
-| You're juggling 2–3 features at once; switching loses your in-progress work or buries it in a stash you forget. | `canopy switch` runs in **active rotation** by default — the previously-focused feature evacuates to a warm worktree (dirty work follows via stash → pop). Switching back is instant. |
-| You start using `git worktree add` to keep features parallel. By feature 4 you have a scatter of `~/work/auth-feature-api/` / `~/scratch/api-newauth/` dirs with no naming convention. Cleanup means remembering paths to `git worktree remove`, then `git branch -D` per repo. | Canopy enforces `.canopy/worktrees/<feature>/<repo>/` — predictable layout, one place to look. `canopy list` shows every feature with its worktree paths. `canopy done <feature>` removes every worktree and deletes every branch across all repos in one verb. |
-| You're on `dev` in main with two warm feature worktrees parked alongside. You want to commit, run preflight, or push on a feature without `cd`-ing into its worktree directory. Raw git makes you switch your shell's `cwd` first. | `canopy commit --feature <X>` / `canopy preflight --feature <X>` / `canopy push --feature <X>` operate against the warm worktree directly — your `cwd` doesn't move. Or `canopy switch <X>` to promote the warm feature into the canonical slot first (dev evacuates to its own worktree, dirty work follows via stash → pop). |
-| Your AI agent shells `cd /wrong/repo && command` because shell state doesn't persist between tool calls. | Every canopy tool takes `feature` / `repo` as parameters; path resolution lives inside canopy. The agent has no surface area for the mistake. |
-| PR review comments pile up across repos; the agent burns context re-deriving "is this still actionable?". | `canopy review <feature>` returns threads pre-classified as `actionable` vs `likely_resolved`. The temporal classifier filters out comments addressed in subsequent commits. |
-
-<p align="center">
-  <img src="docs/cli-drift.svg" alt="canopy drift" width="720">
 </p>
 
 ## Switch in detail

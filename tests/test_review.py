@@ -200,7 +200,7 @@ class TestPrecommitDetection:
 
     def test_detect_worktree_hook(self, workspace_dir):
         """Worktrees inherit hooks from the main repo."""
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         # Add a pre-commit hook to the main repo
         hooks_dir = api / ".git" / "hooks"
         hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -209,7 +209,7 @@ class TestPrecommitDetection:
         hook.chmod(0o755)
 
         # Create a worktree
-        wt_path = workspace_dir / ".canopy" / "worktrees" / "test-feat" / "api"
+        wt_path = workspace_dir / ".canopy" / "worktrees" / "test-feat" / "repo-a"
         wt_path.parent.mkdir(parents=True, exist_ok=True)
         _git(["worktree", "add", "-b", "test-feat", str(wt_path)], cwd=api)
 
@@ -323,16 +323,16 @@ class TestReviewPrep:
         lane = coordinator.create("prep-test", use_worktrees=True)
 
         # Make changes in a worktree
-        wt_path = canopy_toml / ".canopy" / "worktrees" / "prep-test" / "api"
+        wt_path = canopy_toml / ".canopy" / "worktrees" / "prep-test" / "repo-a"
         (wt_path / "new_file.py").write_text("# new file\n")
 
         result = coordinator.review_prep("prep-test", message="fix: address review")
 
         assert result["feature"] == "prep-test"
         assert result["message"] == "fix: address review"
-        assert "api" in result["repos"]
+        assert "repo-a" in result["repos"]
 
-        api_result = result["repos"]["api"]
+        api_result = result["repos"]["repo-a"]
         assert api_result["staged"] is True
         assert api_result["dirty_count"] >= 1
         assert api_result["precommit"]["type"] == "none"
@@ -340,10 +340,10 @@ class TestReviewPrep:
 
         # Cleanup
         from canopy.git import repo as git_repo
-        api_main = canopy_toml / "api"
+        api_main = canopy_toml / "repo-a"
         git_repo.worktree_remove(api_main, wt_path, force=True)
-        ui_wt_path = canopy_toml / ".canopy" / "worktrees" / "prep-test" / "ui"
-        ui_main = canopy_toml / "ui"
+        ui_wt_path = canopy_toml / ".canopy" / "worktrees" / "prep-test" / "repo-b"
+        ui_main = canopy_toml / "repo-b"
         git_repo.worktree_remove(ui_main, ui_wt_path, force=True)
 
     def test_prep_clean_repos(self, workspace_with_feature, canopy_toml):
@@ -368,7 +368,7 @@ class TestReviewPrep:
 
         # Cleanup
         from canopy.git import repo as git_repo
-        for repo_name in ["api", "ui"]:
+        for repo_name in ["repo-a", "repo-b"]:
             wt_path = canopy_toml / ".canopy" / "worktrees" / "clean-test" / repo_name
             main_path = canopy_toml / repo_name
             git_repo.worktree_remove(main_path, wt_path, force=True)
@@ -388,7 +388,7 @@ class TestReviewPrep:
 
         # Install a passing pre-commit hook in the api repo
         # The hook lives in the main repo's .git/hooks/ — worktrees inherit it
-        api_main = canopy_toml / "api"
+        api_main = canopy_toml / "repo-a"
         hooks_dir = api_main / ".git" / "hooks"
         hooks_dir.mkdir(parents=True, exist_ok=True)
         hook = hooks_dir / "pre-commit"
@@ -396,19 +396,19 @@ class TestReviewPrep:
         hook.chmod(0o755)
 
         # Make a change
-        wt_path = canopy_toml / ".canopy" / "worktrees" / "hook-test" / "api"
+        wt_path = canopy_toml / ".canopy" / "worktrees" / "hook-test" / "repo-a"
         (wt_path / "touched.py").write_text("# touched\n")
 
         result = coordinator.review_prep("hook-test")
 
-        api_result = result["repos"]["api"]
+        api_result = result["repos"]["repo-a"]
         assert api_result["precommit"]["type"] == "git_hook"
         assert api_result["precommit"]["passed"] is True
         assert api_result["staged"] is True
 
         # Cleanup
         from canopy.git import repo as git_repo
-        for repo_name in ["api", "ui"]:
+        for repo_name in ["repo-a", "repo-b"]:
             wt_path = canopy_toml / ".canopy" / "worktrees" / "hook-test" / repo_name
             main_path = canopy_toml / repo_name
             git_repo.worktree_remove(main_path, wt_path, force=True)

@@ -41,8 +41,8 @@ def _make_workspace(workspace_dir) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
-            RepoConfig(name="api", path="./api", role="backend", lang="python"),
-            RepoConfig(name="ui", path="./ui", role="frontend", lang="typescript"),
+            RepoConfig(name="repo-a", path="./repo-a", role="backend", lang="python"),
+            RepoConfig(name="repo-b", path="./repo-b", role="frontend", lang="typescript"),
         ],
         root=workspace_dir,
     )
@@ -145,51 +145,51 @@ class TestMcpConfig:
 
 class TestLinearHelpers:
     def test_format_branch_name_with_title(self):
-        result = format_branch_name("ENG-123", "Add payment flow")
-        assert result == "eng-123-add-payment-flow"
+        result = format_branch_name("SIN-123", "Add payment flow")
+        assert result == "sin-123-add-payment-flow"
 
     def test_format_branch_name_custom(self):
-        result = format_branch_name("ENG-123", "whatever", custom_name="payment-flow")
+        result = format_branch_name("SIN-123", "whatever", custom_name="payment-flow")
         assert result == "payment-flow"
 
     def test_format_branch_name_no_title(self):
-        result = format_branch_name("ENG-123")
-        assert result == "eng-123"
+        result = format_branch_name("SIN-123")
+        assert result == "sin-123"
 
     def test_format_branch_name_special_chars(self):
-        result = format_branch_name("ENG-123", "Add (payment) flow! #2")
-        assert result == "eng-123-add-payment-flow-2"
+        result = format_branch_name("SIN-123", "Add (payment) flow! #2")
+        assert result == "sin-123-add-payment-flow-2"
 
     def test_format_branch_name_long_title(self):
-        result = format_branch_name("ENG-1", "a" * 100)
+        result = format_branch_name("SIN-1", "a" * 100)
         # Should be capped
         assert len(result) <= 60
 
     def test_normalize_issue_flat(self):
         data = {
-            "identifier": "ENG-123",
+            "identifier": "SIN-123",
             "title": "Fix auth",
             "state": {"name": "In Progress"},
             "url": "https://linear.app/...",
         }
-        result = _normalize_issue(data, "ENG-123")
-        assert result["identifier"] == "ENG-123"
+        result = _normalize_issue(data, "SIN-123")
+        assert result["identifier"] == "SIN-123"
         assert result["title"] == "Fix auth"
         assert result["state"] == "In Progress"
 
     def test_normalize_issue_list(self):
-        data = [{"identifier": "ENG-123", "title": "Fix auth"}]
-        result = _normalize_issue(data, "ENG-123")
-        assert result["identifier"] == "ENG-123"
+        data = [{"identifier": "SIN-123", "title": "Fix auth"}]
+        result = _normalize_issue(data, "SIN-123")
+        assert result["identifier"] == "SIN-123"
 
     def test_normalize_issue_nested(self):
-        data = {"issues": [{"identifier": "ENG-123", "title": "Fix auth"}]}
-        result = _normalize_issue(data, "ENG-123")
-        assert result["identifier"] == "ENG-123"
+        data = {"issues": [{"identifier": "SIN-123", "title": "Fix auth"}]}
+        result = _normalize_issue(data, "SIN-123")
+        assert result["identifier"] == "SIN-123"
 
     def test_normalize_issue_empty_list(self):
         with pytest.raises(LinearIssueNotFoundError):
-            _normalize_issue([], "ENG-123")
+            _normalize_issue([], "SIN-123")
 
     def test_is_linear_configured(self, tmp_path):
         assert is_linear_configured(tmp_path) is False
@@ -209,9 +209,9 @@ class TestLinearHelpers:
                 if self.content is None:
                     self.content = []
 
-        result = FakeResult(content=[FakeBlock(text='{"identifier": "ENG-1", "title": "Test"}')])
+        result = FakeResult(content=[FakeBlock(text='{"identifier": "SIN-1", "title": "Test"}')])
         parsed = _parse_issue_result(result)
-        assert parsed["identifier"] == "ENG-1"
+        assert parsed["identifier"] == "SIN-1"
 
 
 # ── list_my_issues ──────────────────────────────────────────────────────
@@ -236,16 +236,16 @@ class TestListMyIssues:
         fake_payload = json.dumps({
             "issues": [
                 {
-                    "identifier": "ENG-518",
+                    "identifier": "SIN-518",
                     "title": "Add SSO",
                     "state": {"name": "Triage"},
-                    "url": "https://linear.app/x/ENG-518",
+                    "url": "https://linear.app/x/SIN-518",
                 },
                 {
-                    "identifier": "ENG-522",
+                    "identifier": "SIN-522",
                     "title": "Rate-limit auth",
                     "state": "Backlog",
-                    "url": "https://linear.app/x/ENG-522",
+                    "url": "https://linear.app/x/SIN-522",
                 },
             ]
         })
@@ -255,10 +255,10 @@ class TestListMyIssues:
             issues = list_my_issues(tmp_path)
 
         assert len(issues) == 2
-        assert issues[0]["identifier"] == "ENG-518"
+        assert issues[0]["identifier"] == "SIN-518"
         assert issues[0]["title"] == "Add SSO"
         assert issues[0]["state"] == "Triage"
-        assert issues[1]["identifier"] == "ENG-522"
+        assert issues[1]["identifier"] == "SIN-522"
 
     def test_returns_empty_when_all_tools_fail(self, tmp_path):
         config = {"linear": {"command": "echo"}}
@@ -293,7 +293,7 @@ class TestInlineMcpErrorDetection:
         assert _looks_like_mcp_error("MCP error -32602: Input validation error")
         assert _looks_like_mcp_error("error: lower case is fine too")
         assert _looks_like_mcp_error('{"x": 1} ... Input validation error somewhere')
-        assert not _looks_like_mcp_error('{"identifier": "ENG-1"}')
+        assert not _looks_like_mcp_error('{"identifier": "SIN-1"}')
         assert not _looks_like_mcp_error("")
         assert not _looks_like_mcp_error("Error reading is part of the title")  # fine — leading "Error " not "Error:"
 
@@ -426,8 +426,8 @@ class TestListMyIssuesStrict:
 
         payload = json.dumps({
             "issues": [
-                {"identifier": "ENG-1", "title": "a", "url": "u1"},
-                {"identifier": "ENG-2", "title": "b", "url": "u2"},
+                {"identifier": "SIN-1", "title": "a", "url": "u1"},
+                {"identifier": "SIN-2", "title": "b", "url": "u2"},
             ],
         })
 
@@ -474,19 +474,19 @@ class TestFeatureCreateWithLinear:
         lane = coordinator.create(
             "payment-flow",
             use_worktrees=True,
-            linear_issue="ENG-123",
+            linear_issue="SIN-123",
             linear_title="Add payment processing",
-            linear_url="https://linear.app/test/ENG-123",
+            linear_url="https://linear.app/test/SIN-123",
         )
 
-        assert lane.linear_issue == "ENG-123"
+        assert lane.linear_issue == "SIN-123"
         assert lane.linear_title == "Add payment processing"
-        assert lane.linear_url == "https://linear.app/test/ENG-123"
+        assert lane.linear_url == "https://linear.app/test/SIN-123"
 
         # Verify persisted in features.json
         features_path = workspace_dir / ".canopy" / "features.json"
         features = json.loads(features_path.read_text())
-        assert features["payment-flow"]["linear_issue"] == "ENG-123"
+        assert features["payment-flow"]["linear_issue"] == "SIN-123"
         assert features["payment-flow"]["linear_title"] == "Add payment processing"
 
     def test_create_without_linear(self, workspace_dir):
@@ -506,19 +506,19 @@ class TestFeatureCreateWithLinear:
         coordinator.create(
             "linked-feat",
             use_worktrees=True,
-            linear_issue="ENG-456",
+            linear_issue="SIN-456",
             linear_title="Fix login bug",
-            linear_url="https://linear.app/test/ENG-456",
+            linear_url="https://linear.app/test/SIN-456",
         )
 
         # Fresh coordinator to simulate reload
         coordinator2 = FeatureCoordinator(ws)
         lane = coordinator2.status("linked-feat")
-        assert lane.linear_issue == "ENG-456"
+        assert lane.linear_issue == "SIN-456"
         assert lane.linear_title == "Fix login bug"
 
         d = lane.to_dict()
-        assert d["linear_issue"] == "ENG-456"
+        assert d["linear_issue"] == "SIN-456"
 
     def test_list_active_loads_linear_metadata(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
@@ -527,7 +527,7 @@ class TestFeatureCreateWithLinear:
         coordinator.create(
             "feat-with-linear",
             use_worktrees=True,
-            linear_issue="ENG-789",
+            linear_issue="SIN-789",
             linear_title="Migrate database",
         )
 
@@ -535,7 +535,7 @@ class TestFeatureCreateWithLinear:
         lanes = coordinator2.list_active()
         linked = [l for l in lanes if l.name == "feat-with-linear"]
         assert len(linked) == 1
-        assert linked[0].linear_issue == "ENG-789"
+        assert linked[0].linear_issue == "SIN-789"
 
     def test_worktrees_live_after_linear_create(self, workspace_dir):
         """worktrees_live still works when features have Linear metadata."""
@@ -545,11 +545,11 @@ class TestFeatureCreateWithLinear:
         coordinator.create(
             "live-linear",
             use_worktrees=True,
-            linear_issue="ENG-100",
+            linear_issue="SIN-100",
             linear_title="Add caching",
         )
 
         result = coordinator.worktrees_live()
         assert "live-linear" in result["features"]
-        api_info = result["features"]["live-linear"]["repos"]["api"]
+        api_info = result["features"]["live-linear"]["repos"]["repo-a"]
         assert api_info["branch"] == "live-linear"

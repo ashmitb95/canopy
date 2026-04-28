@@ -5,10 +5,10 @@ the validation:
 
 | Feature   | Repo | Comments | Notes                                       |
 |-----------|------|----------|---------------------------------------------|
-| DOC-3029  | api  | 4        | All post-commit → all ACTIONABLE            |
-| DOC-3010  | api  | 6        | 4 post-commit, 2 pre-commit on touched file |
-| DOC-3008  | ui   | 11       | 1 post-commit, 10 likely_resolved           |
-| DOC-2827  | mixed| many     | mix; bot threads kept                       |
+| SIN-3029  | api  | 4        | All post-commit → all ACTIONABLE            |
+| SIN-3010  | api  | 6        | 4 post-commit, 2 pre-commit on touched file |
+| SIN-3008  | ui   | 11       | 1 post-commit, 10 likely_resolved           |
+| SIN-2827  | mixed| many     | mix; bot threads kept                       |
 """
 import os
 import subprocess
@@ -77,7 +77,7 @@ def repo(tmp_path):
 # ── Case 1: ACTIONABLE because comment posted AFTER latest commit ────────
 
 def test_post_commit_comment_is_actionable(repo):
-    """DOC-3029 case: comment timestamp is after branch HEAD timestamp."""
+    """SIN-3029 case: comment timestamp is after branch HEAD timestamp."""
     comments = [{
         "path": "file_a.py", "line": 1, "body": "fix this",
         "author": "reviewer", "created_at": "2026-04-23T10:00:00Z",
@@ -95,7 +95,7 @@ def test_pre_commit_comment_on_touched_file_is_likely_resolved(repo):
     file_a → likely resolved (the addressing commit is the most recent one)."""
     comments = [{
         "path": "file_a.py", "line": 1, "body": "use status from fastapi",
-        "author": "larpasi", "created_at": "2026-04-18T10:00:00Z",
+        "author": "alice", "created_at": "2026-04-18T10:00:00Z",
         "url": "https://github.com/x/y/pull/1#c1",
     }]
     out = classify_threads(comments, repo, "main")
@@ -103,7 +103,7 @@ def test_pre_commit_comment_on_touched_file_is_likely_resolved(repo):
     assert len(out["likely_resolved_threads"]) == 1
     lr = out["likely_resolved_threads"][0]
     assert lr["path"] == "file_a.py"
-    assert lr["author"] == "larpasi"
+    assert lr["author"] == "alice"
     # Most recent post-comment commit wins
     assert lr["addressed_at"].startswith("2026-04-22")
     assert "after the comment" in lr["reason"]
@@ -112,11 +112,11 @@ def test_pre_commit_comment_on_touched_file_is_likely_resolved(repo):
 # ── Case 3: ACTIONABLE because untouched file even though comment is old ──
 
 def test_pre_commit_comment_on_untouched_file_is_actionable(repo):
-    """DOC-3010 'validate the account' on repository.py: comment is old,
+    """SIN-3010 'validate the account' on repository.py: comment is old,
     file wasn't touched by interim commits → still ACTIONABLE."""
     comments = [{
         "path": "file_b.py", "line": 1, "body": "validate the account",
-        "author": "larpasi", "created_at": "2026-04-18T10:00:00Z",
+        "author": "alice", "created_at": "2026-04-18T10:00:00Z",
     }]
     out = classify_threads(comments, repo, "main")
     assert len(out["actionable_threads"]) == 1

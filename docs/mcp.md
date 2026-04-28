@@ -64,7 +64,7 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 
 | Tool | Description |
 |---|---|
-| `linear_get_issue` | Fetch a Linear issue. Accepts ID (`ENG-412`) or feature alias (resolves via lane's `linear_issue`). |
+| `linear_get_issue` | Fetch a Linear issue. Accepts ID (`SIN-412`) or feature alias (resolves via lane's `linear_issue`). |
 | `github_get_pr` | PR data per repo. Accepts feature alias, `<repo>#<n>`, or PR URL. |
 | `github_get_branch` | Branch HEAD/divergence/upstream per repo. Accepts feature or `<repo>:<branch>`. |
 | `github_get_pr_comments` | Temporally classified review comments. Same alias forms as `github_get_pr`. |

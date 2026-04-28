@@ -14,25 +14,25 @@ def test_discover_repos(workspace_dir):
 
     assert len(repos) == 2
     names = {r.name for r in repos}
-    assert "api" in names
-    assert "ui" in names
+    assert "repo-a" in names
+    assert "repo-b" in names
 
 
 def test_discover_repos_detects_language(workspace_dir):
     repos = discover_repos(workspace_dir)
     repo_map = {r.name: r for r in repos}
 
-    assert repo_map["api"].lang == "python"
+    assert repo_map["repo-a"].lang == "python"
     # ui has .tsx and .ts files
-    assert repo_map["ui"].lang in ("typescript", "javascript")
+    assert repo_map["repo-b"].lang in ("typescript", "javascript")
 
 
 def test_discover_repos_detects_role(workspace_dir):
     repos = discover_repos(workspace_dir)
     repo_map = {r.name: r for r in repos}
 
-    assert repo_map["api"].role == "backend"
-    assert repo_map["ui"].role == "frontend"
+    assert repo_map["repo-a"].role == "backend"
+    assert repo_map["repo-b"].role == "frontend"
 
 
 def test_generate_toml(workspace_dir):
@@ -41,8 +41,8 @@ def test_generate_toml(workspace_dir):
     assert '[workspace]' in toml_str
     assert 'name = "my-project"' in toml_str
     assert '[[repos]]' in toml_str
-    assert 'name = "api"' in toml_str
-    assert 'name = "ui"' in toml_str
+    assert 'name = "repo-a"' in toml_str
+    assert 'name = "repo-b"' in toml_str
 
 
 def test_discover_empty_dir(tmp_path):
@@ -57,7 +57,7 @@ def test_workspace_basic(canopy_toml):
     ws = Workspace(config)
 
     assert len(ws.repos) == 2
-    assert ws.repos[0].config.name == "api"
+    assert ws.repos[0].config.name == "repo-a"
     assert ws.repos[0].current_branch == "main"
     assert ws.repos[0].head_sha  # should have a sha
 
@@ -66,8 +66,8 @@ def test_workspace_get_repo(canopy_toml):
     config = load_config(canopy_toml)
     ws = Workspace(config)
 
-    api = ws.get_repo("api")
-    assert api.config.name == "api"
+    api = ws.get_repo("repo-a")
+    assert api.config.name == "repo-a"
 
     with pytest.raises(KeyError):
         ws.get_repo("nonexistent")
@@ -107,7 +107,7 @@ def test_workspace_refresh_enriches(canopy_toml, workspace_with_feature):
     ws = Workspace(config)
     ws.refresh()
 
-    api = ws.get_repo("api")
+    api = ws.get_repo("repo-a")
     # api is on auth-flow branch with commits ahead of main
     assert api.current_branch == "auth-flow"
     assert api.ahead_of_default >= 1

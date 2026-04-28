@@ -81,7 +81,7 @@ When you see a `BlockerError`, the first step is to read `fix_actions[0]` and de
 
 - ❌ `cd <repo> && git checkout <branch>` — use `mcp__canopy__switch(feature=...)` so all participating repos move together with verification (and the previously-canonical feature evacuates to a warm worktree, preserving its work-in-progress).
 - ❌ Iterating `gh pr list --author @me` per repo and grouping yourself — `mcp__canopy__triage` already groups by feature lane and applies priority tiers.
-- ❌ `cd <repo> && pnpm test` — use `mcp__canopy__run(repo='ui', command='pnpm test')`. The shell state from a previous tool call is not yours.
+- ❌ `cd <repo> && pnpm test` — use `mcp__canopy__run(repo='repo-b', command='pnpm test')`. The shell state from a previous tool call is not yours.
 - ❌ Parsing `gh api .../pulls/{n}/comments` and writing your own "is this resolved" logic — `mcp__canopy__github_get_pr_comments` returns `actionable_threads` vs `likely_resolved_threads` already.
 - ❌ Calling `git status` in each repo and synthesizing what's dirty/clean — `mcp__canopy__feature_state(feature)` returns this aggregated, plus computed state and next_actions.
 - ❌ Running `git stash push` when there's a feature context — use `mcp__canopy__stash_save_feature(feature, message)` so stashes get tagged and groupable.

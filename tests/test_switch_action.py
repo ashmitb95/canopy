@@ -30,7 +30,7 @@ from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
 
-def _ws(workspace_dir, repos=("api", "ui"), max_worktrees=0) -> Workspace:
+def _ws(workspace_dir, repos=("repo-a", "repo-b"), max_worktrees=0) -> Workspace:
     return Workspace(WorkspaceConfig(
         name="t",
         repos=[RepoConfig(name=r, path=f"./{r}", role="x", lang="x") for r in repos],
@@ -53,7 +53,7 @@ def _git(args, cwd):
     )
 
 
-def _make_feature_branches(workspace_dir, name, repos=("api", "ui")):
+def _make_feature_branches(workspace_dir, name, repos=("repo-a", "repo-b")):
     """Create branch ``name`` (with one commit) in each repo."""
     for r in repos:
         _git(["checkout", "-q", "-b", name], cwd=workspace_dir / r)
@@ -72,7 +72,7 @@ class TestActiveRotation:
         assert result["feature"] == "auth-flow"
         assert result["mode"] == "active_rotation"
         # Both repos now on auth-flow
-        for repo in ("api", "ui"):
+        for repo in ("repo-a", "repo-b"):
             assert git.current_branch(workspace_with_feature / repo) == "auth-flow"
         # Active state recorded
         active = read_active(ws)
@@ -95,7 +95,7 @@ class TestActiveRotation:
         assert result["previously_canonical"] == "auth-flow"
 
         # auth-flow now lives in a warm worktree
-        for repo in ("api", "ui"):
+        for repo in ("repo-a", "repo-b"):
             assert git.current_branch(workspace_with_feature / repo) == "feat-b"
             wt = warm_worktree_path(ws, "auth-flow", repo)
             assert wt.exists()
@@ -110,14 +110,14 @@ class TestActiveRotation:
 
         # Make X canonical, dirty it
         switch(ws, "auth-flow")
-        scratch = workspace_with_feature / "api" / "scratch.txt"
+        scratch = workspace_with_feature / "repo-a" / "scratch.txt"
         scratch.write_text("uncommitted scribbles\n")
 
         # Evacuate via switch
         switch(ws, "feat-b")
 
         # File should follow auth-flow into its warm worktree
-        wt_api = warm_worktree_path(ws, "auth-flow", "api")
+        wt_api = warm_worktree_path(ws, "auth-flow", "repo-a")
         moved = wt_api / "scratch.txt"
         assert moved.exists() and "uncommitted scribbles" in moved.read_text()
         # Main api repo should not have it anymore
@@ -145,13 +145,13 @@ class TestWindDownMode:
 
         switch(ws, "auth-flow")
         # Dirty main (api side, which is on auth-flow)
-        (workspace_with_feature / "api" / "more.txt").write_text("untracked\n")
+        (workspace_with_feature / "repo-a" / "more.txt").write_text("untracked\n")
 
         switch(ws, "feat-b", release_current=True)
 
         # Inspect api stashes — should have a [canopy auth-flow ...] entry
         stash_list_output = subprocess.run(
-            ["git", "stash", "list"], cwd=workspace_with_feature / "api",
+            ["git", "stash", "list"], cwd=workspace_with_feature / "repo-a",
             capture_output=True, text=True, check=True,
         ).stdout
         assert "canopy auth-flow" in stash_list_output
@@ -198,7 +198,7 @@ class TestCapReached:
         assert "auth-flow" not in warm_features(ws)
         # feat-b is warm; feat-c canonical
         assert "feat-b" in warm_features(ws)
-        for repo in ("api", "ui"):
+        for repo in ("repo-a", "repo-b"):
             assert git.current_branch(workspace_with_feature / repo) == "feat-c"
 
     def test_eviction_stashes_dirty_warm_worktree(self, workspace_with_feature):
@@ -210,20 +210,20 @@ class TestCapReached:
         switch(ws, "auth-flow")
         switch(ws, "feat-b")
         # Dirty the auth-flow warm worktree
-        wt_api = warm_worktree_path(ws, "auth-flow", "api")
+        wt_api = warm_worktree_path(ws, "auth-flow", "repo-a")
         (wt_api / "evicted_work.txt").write_text("about to be evicted\n")
 
         result = switch(ws, "feat-c")
 
         # Eviction recorded that auto-stash happened
         ev = result["eviction"]
-        api_repo_result = next(r for r in ev["repos"] if r["repo"] == "api")
+        api_repo_result = next(r for r in ev["repos"] if r["repo"] == "repo-a")
         assert api_repo_result["stashed"] is True
         assert api_repo_result["stash_ref"] == "stash@{0}"
 
         # The auth-flow branch in api should have a tagged stash recoverable
         stashes = subprocess.run(
-            ["git", "stash", "list"], cwd=workspace_with_feature / "api",
+            ["git", "stash", "list"], cwd=workspace_with_feature / "repo-a",
             capture_output=True, text=True, check=True,
         ).stdout
         assert "canopy auth-flow" in stashes
@@ -245,7 +245,7 @@ def test_switching_to_warm_feature_removes_its_worktree(workspace_with_feature):
     result = switch(ws, "auth-flow")
 
     # auth-flow is canonical again
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         assert git.current_branch(workspace_with_feature / repo) == "auth-flow"
     # Its warm worktree should be gone
     assert "auth-flow" not in warm_features(ws)
@@ -274,7 +274,7 @@ class TestLazyMigration:
         """No active_feature.json AND auth-flow checked out in main → migrate
         seeds canonical=auth-flow + last_touched."""
         _features_file(workspace_with_feature, {
-            "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+            "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
         })
         # Make main repos check out auth-flow first (fixture leaves them on it)
         ws = _ws(workspace_with_feature)
@@ -299,8 +299,8 @@ def test_switch_creates_missing_branch_from_default(workspace_dir):
     result = switch(ws, "brand-new-feat")
 
     assert result.get("branches_created") is not None
-    assert {b["repo"] for b in result["branches_created"]} == {"api", "ui"}
-    for repo in ("api", "ui"):
+    assert {b["repo"] for b in result["branches_created"]} == {"repo-a", "repo-b"}
+    for repo in ("repo-a", "repo-b"):
         assert git.current_branch(workspace_dir / repo) == "brand-new-feat"
 
 

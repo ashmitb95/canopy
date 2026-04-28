@@ -34,8 +34,8 @@ def _make_workspace(workspace_dir) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
-            RepoConfig(name="api", path="./api", role="backend", lang="python"),
-            RepoConfig(name="ui", path="./ui", role="frontend", lang="typescript"),
+            RepoConfig(name="repo-a", path="./repo-a", role="backend", lang="python"),
+            RepoConfig(name="repo-b", path="./repo-b", role="frontend", lang="typescript"),
         ],
         root=workspace_dir,
     )
@@ -46,7 +46,7 @@ def _make_workspace(workspace_dir) -> Workspace:
 
 class TestStashRepo:
     def test_stash_save_and_list(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "src" / "new_file.py").write_text("hello\n")
         _git(["add", "."], cwd=api)
 
@@ -57,11 +57,11 @@ class TestStashRepo:
         assert "test stash" in stashes[0]["message"]
 
     def test_stash_save_clean(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         assert git.stash_save(api) is False
 
     def test_stash_pop(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "src" / "stashed.py").write_text("stashed content\n")
         _git(["add", "."], cwd=api)
         git.stash_save(api, "to pop")
@@ -71,7 +71,7 @@ class TestStashRepo:
         assert (api / "src" / "stashed.py").exists()
 
     def test_stash_drop(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "src" / "tmp.py").write_text("tmp\n")
         _git(["add", "."], cwd=api)
         git.stash_save(api, "to drop")
@@ -85,14 +85,14 @@ class TestStashRepo:
 
 class TestBranchRepo:
     def test_delete_branch(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         git.create_branch(api, "to-delete")
         assert git.branch_exists(api, "to-delete")
         git.delete_branch(api, "to-delete")
         assert not git.branch_exists(api, "to-delete")
 
     def test_delete_branch_force(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         git.create_branch(api, "unmerged")
         _git(["checkout", "unmerged"], cwd=api)
         (api / "unmerged.py").write_text("x\n")
@@ -107,14 +107,14 @@ class TestBranchRepo:
         assert not git.branch_exists(api, "unmerged")
 
     def test_rename_branch(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         git.create_branch(api, "old-name")
         git.rename_branch(api, "old-name", "new-name")
         assert not git.branch_exists(api, "old-name")
         assert git.branch_exists(api, "new-name")
 
     def test_all_branches(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         git.create_branch(api, "feature-x")
         branches = git.all_branches(api)
         names = [b["name"] for b in branches]
@@ -129,7 +129,7 @@ class TestBranchRepo:
 
 class TestLogRepo:
     def test_log_structured(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         entries = git.log_structured(api, max_count=5)
         assert len(entries) >= 1
         entry = entries[0]
@@ -145,22 +145,22 @@ class TestLogRepo:
 
 class TestWorktreeRepo:
     def test_is_worktree_false(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         assert git.is_worktree(api) is False
 
     def test_worktree_main_path_none(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         assert git.worktree_main_path(api) is None
 
     def test_worktree_list_single(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         worktrees = git.worktree_list(api)
         assert len(worktrees) == 1
         assert worktrees[0]["branch"] == "main"
 
     def test_worktree_linked(self, workspace_dir):
         """Create a linked worktree and verify detection."""
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         wt_path = workspace_dir / "api-feature"
         _git(["worktree", "add", str(wt_path), "-b", "wt-branch"], cwd=api)
 
@@ -185,60 +185,60 @@ class TestWorktreeRepo:
 class TestStashMulti:
     def test_stash_save_all(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "dirty.py").write_text("dirty\n")
         _git(["add", "."], cwd=api)
 
         results = multi.stash_save_all(ws, message="bulk stash")
-        assert results["api"] == "stashed"
-        assert results["ui"] == "clean"
+        assert results["repo-a"] == "stashed"
+        assert results["repo-b"] == "clean"
 
     def test_stash_list_all(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "dirty.py").write_text("dirty\n")
         _git(["add", "."], cwd=api)
         multi.stash_save_all(ws, message="test")
 
         results = multi.stash_list_all(ws)
-        assert "api" in results
-        assert len(results["api"]) == 1
-        assert "ui" not in results  # clean, no stash
+        assert "repo-a" in results
+        assert len(results["repo-a"]) == 1
+        assert "repo-b" not in results  # clean, no stash
 
     def test_stash_pop_all(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "dirty.py").write_text("dirty\n")
         _git(["add", "."], cwd=api)
         multi.stash_save_all(ws, message="to pop")
 
         results = multi.stash_pop_all(ws)
-        assert results["api"] == "ok"
-        assert results["ui"] == "no stash"
+        assert results["repo-a"] == "ok"
+        assert results["repo-b"] == "no stash"
 
     def test_stash_drop_all(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "dirty.py").write_text("dirty\n")
         _git(["add", "."], cwd=api)
         multi.stash_save_all(ws, message="to drop")
 
         results = multi.stash_drop_all(ws)
-        assert results["api"] == "ok"
-        assert results["ui"] == "no stash"
+        assert results["repo-a"] == "ok"
+        assert results["repo-b"] == "no stash"
 
     def test_stash_filtered_repos(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
-        api = workspace_dir / "api"
-        ui = workspace_dir / "ui"
+        api = workspace_dir / "repo-a"
+        ui = workspace_dir / "repo-b"
         (api / "dirty.py").write_text("dirty\n")
         _git(["add", "."], cwd=api)
         (ui / "dirty.ts").write_text("dirty\n")
         _git(["add", "."], cwd=ui)
 
-        results = multi.stash_save_all(ws, repos=["api"])
-        assert "api" in results
-        assert "ui" not in results
+        results = multi.stash_save_all(ws, repos=["repo-a"])
+        assert "repo-a" in results
+        assert "repo-b" not in results
 
 
 # ── git.multi: commit ───────────────────────────────────────────────────
@@ -246,25 +246,25 @@ class TestStashMulti:
 class TestCommitMulti:
     def test_commit_all(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
-        api = workspace_dir / "api"
-        ui = workspace_dir / "ui"
+        api = workspace_dir / "repo-a"
+        ui = workspace_dir / "repo-b"
 
         (api / "new.py").write_text("new\n")
         _git(["add", "."], cwd=api)
 
         results = multi.commit_all(ws, "cross-repo commit")
-        assert len(results["api"]) == 12  # short sha
-        assert results["ui"] == "nothing to commit"
+        assert len(results["repo-a"]) == 12  # short sha
+        assert results["repo-b"] == "nothing to commit"
 
     def test_commit_filtered(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         (api / "new.py").write_text("new\n")
         _git(["add", "."], cwd=api)
 
-        results = multi.commit_all(ws, "only api", repos=["api"])
-        assert "api" in results
-        assert "ui" not in results
+        results = multi.commit_all(ws, "only api", repos=["repo-a"])
+        assert "repo-a" in results
+        assert "repo-b" not in results
 
 
 # ── git.multi: log ──────────────────────────────────────────────────────
@@ -275,8 +275,8 @@ class TestLogMulti:
         entries = multi.log_all(ws, max_count=10)
         assert len(entries) >= 2  # at least one from each repo
         repos = {e["repo"] for e in entries}
-        assert "api" in repos
-        assert "ui" in repos
+        assert "repo-a" in repos
+        assert "repo-b" in repos
 
     def test_log_all_sorted_by_date(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
@@ -292,9 +292,9 @@ class TestBranchMulti:
     def test_branches_all(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
         results = multi.branches_all(ws)
-        assert "api" in results
-        assert "ui" in results
-        api_names = [b["name"] for b in results["api"]]
+        assert "repo-a" in results
+        assert "repo-b" in results
+        api_names = [b["name"] for b in results["repo-a"]]
         assert "main" in api_names
 
     def test_delete_branch_all(self, workspace_with_feature):
@@ -303,29 +303,29 @@ class TestBranchMulti:
         multi.checkout_all(ws, "main")
         # force=True because auth-flow has unmerged commits
         results = multi.delete_branch_all(ws, "auth-flow", force=True)
-        assert results["api"] == "ok"
-        assert results["ui"] == "ok"
+        assert results["repo-a"] == "ok"
+        assert results["repo-b"] == "ok"
 
     def test_delete_branch_not_found(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
         results = multi.delete_branch_all(ws, "nonexistent")
-        assert results["api"] == "not found"
-        assert results["ui"] == "not found"
+        assert results["repo-a"] == "not found"
+        assert results["repo-b"] == "not found"
 
     def test_rename_branch_all(self, workspace_with_feature):
         ws = _make_workspace(workspace_with_feature)
         # Switch to main first
         multi.checkout_all(ws, "main")
         results = multi.rename_branch_all(ws, "auth-flow", "auth-v2")
-        assert results["api"] == "ok"
-        assert results["ui"] == "ok"
-        assert git.branch_exists(workspace_with_feature / "api", "auth-v2")
-        assert not git.branch_exists(workspace_with_feature / "api", "auth-flow")
+        assert results["repo-a"] == "ok"
+        assert results["repo-b"] == "ok"
+        assert git.branch_exists(workspace_with_feature / "repo-a", "auth-v2")
+        assert not git.branch_exists(workspace_with_feature / "repo-a", "auth-flow")
 
     def test_rename_branch_not_found(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
         results = multi.rename_branch_all(ws, "ghost", "new-ghost")
-        assert results["api"] == "not found"
+        assert results["repo-a"] == "not found"
 
 
 # ── discovery: worktree detection ───────────────────────────────────────
@@ -335,15 +335,15 @@ class TestDiscoveryWorktree:
         """Worktrees should be discovered with is_worktree=True."""
         from canopy.workspace.discovery import discover_repos
 
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         wt_path = workspace_dir / "api-wt"
         _git(["worktree", "add", str(wt_path), "-b", "wt-test"], cwd=api)
 
         repos = discover_repos(workspace_dir)
         names = {r.name: r for r in repos}
-        assert "api" in names
+        assert "repo-a" in names
         assert "api-wt" in names
-        assert names["api"].is_worktree is False
+        assert names["repo-a"].is_worktree is False
         assert names["api-wt"].is_worktree is True
         assert names["api-wt"].worktree_main is not None
 

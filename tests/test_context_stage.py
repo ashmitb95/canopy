@@ -32,8 +32,8 @@ def _make_workspace(workspace_dir) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
-            RepoConfig(name="api", path="./api", role="backend", lang="python"),
-            RepoConfig(name="ui", path="./ui", role="frontend", lang="typescript"),
+            RepoConfig(name="repo-a", path="./repo-a", role="backend", lang="python"),
+            RepoConfig(name="repo-b", path="./repo-b", role="frontend", lang="typescript"),
         ],
         root=workspace_dir,
     )
@@ -59,25 +59,25 @@ class TestContextFeatureDir:
         assert ctx.context_type == "feature_dir"
         assert ctx.feature == "auth-flow"
         assert len(ctx.repo_paths) == 2
-        assert set(ctx.repo_names) == {"api", "ui"}
+        assert set(ctx.repo_names) == {"repo-a", "repo-b"}
         assert ctx.branch == "auth-flow"
 
     def test_detect_repo_worktree(self, canopy_toml):
         feature_dir = _setup_feature_worktrees(canopy_toml)
-        api_wt = feature_dir / "api"
+        api_wt = feature_dir / "repo-a"
 
         ctx = detect_context(cwd=api_wt)
 
         assert ctx.context_type == "repo_worktree"
         assert ctx.feature == "auth-flow"
         assert len(ctx.repo_paths) == 1
-        assert ctx.repo_names == ["api"]
+        assert ctx.repo_names == ["repo-a"]
         assert ctx.branch == "auth-flow"
 
     def test_detect_subdirectory_of_repo_worktree(self, canopy_toml):
         """Context detection should work from subdirs inside a worktree."""
         feature_dir = _setup_feature_worktrees(canopy_toml)
-        api_wt = feature_dir / "api"
+        api_wt = feature_dir / "repo-a"
         subdir = api_wt / "src"
         subdir.mkdir(parents=True, exist_ok=True)
 
@@ -85,19 +85,19 @@ class TestContextFeatureDir:
 
         assert ctx.context_type == "repo_worktree"
         assert ctx.feature == "auth-flow"
-        assert ctx.repo_names == ["api"]
+        assert ctx.repo_names == ["repo-a"]
 
 
 # ── Context detection: normal repo ───────────────────────────────────────
 
 class TestContextNormalRepo:
     def test_detect_normal_repo(self, canopy_toml):
-        api_path = canopy_toml / "api"
+        api_path = canopy_toml / "repo-a"
 
         ctx = detect_context(cwd=api_path)
 
         assert ctx.context_type == "repo"
-        assert ctx.repo_names == ["api"]
+        assert ctx.repo_names == ["repo-a"]
         assert ctx.workspace_root == canopy_toml
 
     def test_detect_repo_on_feature_branch(self, workspace_with_feature):
@@ -108,15 +108,15 @@ class TestContextNormalRepo:
 name = "test-workspace"
 
 [[repos]]
-name = "api"
-path = "./api"
+name = "repo-a"
+path = "./repo-a"
 
 [[repos]]
-name = "ui"
-path = "./ui"
+name = "repo-b"
+path = "./repo-b"
 """
         (workspace_with_feature / "canopy.toml").write_text(toml_content)
-        api_path = workspace_with_feature / "api"
+        api_path = workspace_with_feature / "repo-a"
 
         ctx = detect_context(cwd=api_path)
 
@@ -165,8 +165,8 @@ class TestPreflightFromFeatureDir:
         feature_dir = _setup_feature_worktrees(canopy_toml)
 
         # Make changes in both worktree repos
-        (feature_dir / "api" / "new_api.py").write_text("api change\n")
-        (feature_dir / "ui" / "new_ui.ts").write_text("ui change\n")
+        (feature_dir / "repo-a" / "new_api.py").write_text("api change\n")
+        (feature_dir / "repo-b" / "new_ui.ts").write_text("ui change\n")
 
         # Simulate what cmd_preflight does
         ctx = detect_context(cwd=feature_dir)
@@ -187,18 +187,18 @@ class TestPreflightFromFeatureDir:
             }
 
         # Both should be staged (no hooks in test repos = pass)
-        assert results["api"]["status"] == "staged"
-        assert results["ui"]["status"] == "staged"
+        assert results["repo-a"]["status"] == "staged"
+        assert results["repo-b"]["status"] == "staged"
 
         # Verify NO commits were made — preflight does not commit
-        api_log = git.log_structured(feature_dir / "api", max_count=1)
+        api_log = git.log_structured(feature_dir / "repo-a", max_count=1)
         assert api_log[0]["subject"] != "new_api.py"  # no commit with our changes
 
         # But changes should be staged (in the index)
-        staged_api = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "api")
+        staged_api = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "repo-a")
         assert "new_api.py" in staged_api
 
-        staged_ui = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "ui")
+        staged_ui = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "repo-b")
         assert "new_ui.ts" in staged_ui
 
     def test_preflight_single_repo_worktree(self, canopy_toml):
@@ -208,9 +208,9 @@ class TestPreflightFromFeatureDir:
         feature_dir = _setup_feature_worktrees(canopy_toml)
 
         # Change only api
-        (feature_dir / "api" / "api_only.py").write_text("only api\n")
+        (feature_dir / "repo-a" / "api_only.py").write_text("only api\n")
 
-        ctx = detect_context(cwd=feature_dir / "api")
+        ctx = detect_context(cwd=feature_dir / "repo-a")
         assert ctx.context_type == "repo_worktree"
         assert len(ctx.repo_paths) == 1
 
@@ -221,7 +221,7 @@ class TestPreflightFromFeatureDir:
         assert hook_result["passed"] is True
 
         # Should be staged, not committed
-        staged = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "api")
+        staged = git._run(["diff", "--cached", "--name-only"], cwd=feature_dir / "repo-a")
         assert "api_only.py" in staged
 
     def test_preflight_clean_repos(self, canopy_toml):
@@ -236,8 +236,8 @@ class TestPreflightFromFeatureDir:
                 results[repo_name] = "clean"
                 continue
 
-        assert results["api"] == "clean"
-        assert results["ui"] == "clean"
+        assert results["repo-a"] == "clean"
+        assert results["repo-b"] == "clean"
 
     def test_preflight_partial_changes(self, canopy_toml):
         """Only repos with changes should get staged."""
@@ -246,7 +246,7 @@ class TestPreflightFromFeatureDir:
         feature_dir = _setup_feature_worktrees(canopy_toml)
 
         # Only change api
-        (feature_dir / "api" / "partial.py").write_text("partial\n")
+        (feature_dir / "repo-a" / "partial.py").write_text("partial\n")
 
         ctx = detect_context(cwd=feature_dir)
         results = {}
@@ -259,5 +259,5 @@ class TestPreflightFromFeatureDir:
             hook_result = run_precommit(repo_path)
             results[repo_name] = "staged" if hook_result["passed"] else "failed"
 
-        assert results["api"] == "staged"
-        assert results["ui"] == "clean"
+        assert results["repo-a"] == "staged"
+        assert results["repo-b"] == "clean"

@@ -59,17 +59,17 @@ def workspace_dir(tmp_path):
     ws.mkdir()
 
     # Create api repo
-    _create_repo(ws / "api", {
+    _create_repo(ws / "repo-a", {
         "src/app.py": "from models import User\n\ndef main():\n    pass\n",
         "src/models.py": "class User:\n    name: str\n    email: str\n",
         "requirements.txt": "flask\n",
     })
 
     # Create ui repo
-    _create_repo(ws / "ui", {
+    _create_repo(ws / "repo-b", {
         "src/App.tsx": "export default function App() { return <div>Hello</div> }\n",
         "src/types.ts": "export interface User { name: string; email: string; }\n",
-        "package.json": '{"name": "ui", "version": "1.0.0"}\n',
+        "package.json": '{"name": "repo-b", "version": "1.0.0"}\n',
     })
 
     return ws
@@ -81,8 +81,8 @@ def workspace_with_feature(workspace_dir):
 
     Creates 'auth-flow' branch in both api and ui with some commits.
     """
-    api = workspace_dir / "api"
-    ui = workspace_dir / "ui"
+    api = workspace_dir / "repo-a"
+    ui = workspace_dir / "repo-b"
 
     # Create feature branch in api with changes
     _git(["checkout", "-b", "auth-flow"], cwd=api)
@@ -117,14 +117,14 @@ def canopy_toml(workspace_dir):
 name = "test-workspace"
 
 [[repos]]
-name = "api"
-path = "./api"
+name = "repo-a"
+path = "./repo-a"
 role = "backend"
 lang = "python"
 
 [[repos]]
-name = "ui"
-path = "./ui"
+name = "repo-b"
+path = "./repo-b"
 role = "frontend"
 lang = "typescript"
 """

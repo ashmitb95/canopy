@@ -13,7 +13,7 @@ from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
 
-def _make_workspace(workspace_dir, repos=("api", "ui")) -> Workspace:
+def _make_workspace(workspace_dir, repos=("repo-a", "repo-b")) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
@@ -59,9 +59,9 @@ def _no_comments(*a, **kw):
 def test_drift_state_supersedes_everything(workspace_with_feature):
     """Once aligned with feature 'auth-flow', moving ui to main → drifted."""
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
-    _git(["checkout", "main"], cwd=workspace_with_feature / "ui")
+    _git(["checkout", "main"], cwd=workspace_with_feature / "repo-b")
     ws = _make_workspace(workspace_with_feature)
 
     with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
@@ -70,16 +70,16 @@ def test_drift_state_supersedes_everything(workspace_with_feature):
 
     assert result["state"] == "drifted"
     assert result["next_actions"][0]["action"] == "realign"
-    assert "ui" in result["summary"]["alignment"]["drifted_repos"]
+    assert "repo-b" in result["summary"]["alignment"]["drifted_repos"]
 
 
 # ── in_progress (dirty, no fresh preflight) ─────────────────────────────
 
 def test_in_progress_when_dirty_and_no_preflight(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
-    (workspace_with_feature / "api" / "src" / "app.py").write_text("modified\n")
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("modified\n")
     ws = _make_workspace(workspace_with_feature)
 
     with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
@@ -88,16 +88,16 @@ def test_in_progress_when_dirty_and_no_preflight(workspace_with_feature):
 
     assert result["state"] == "in_progress"
     assert result["next_actions"][0]["action"] == "preflight"
-    assert "api" in result["summary"]["dirty_repos"]
+    assert "repo-a" in result["summary"]["dirty_repos"]
 
 
 # ── ready_to_commit (dirty + fresh preflight passed) ────────────────────
 
 def test_ready_to_commit_when_preflight_passed_for_current_head(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
-    (workspace_with_feature / "api" / "src" / "app.py").write_text("modified\n")
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("modified\n")
     ws = _make_workspace(workspace_with_feature)
 
     # Record a preflight result with the current HEADs as the recorded shas.
@@ -105,8 +105,8 @@ def test_ready_to_commit_when_preflight_passed_for_current_head(workspace_with_f
         workspace_with_feature, "auth-flow",
         passed=True,
         head_sha_per_repo={
-            "api": git.head_sha(workspace_with_feature / "api"),
-            "ui": git.head_sha(workspace_with_feature / "ui"),
+            "repo-a": git.head_sha(workspace_with_feature / "repo-a"),
+            "repo-b": git.head_sha(workspace_with_feature / "repo-b"),
         },
     )
 
@@ -121,16 +121,16 @@ def test_ready_to_commit_when_preflight_passed_for_current_head(workspace_with_f
 def test_stale_preflight_warns_and_falls_back_to_in_progress(workspace_with_feature):
     """A recorded preflight with an old sha should be 'stale' → in_progress."""
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
-    (workspace_with_feature / "api" / "src" / "app.py").write_text("modified\n")
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("modified\n")
     ws = _make_workspace(workspace_with_feature)
 
     # Record with bogus old sha
     record_result(
         workspace_with_feature, "auth-flow",
         passed=True,
-        head_sha_per_repo={"api": "0" * 40, "ui": "0" * 40},
+        head_sha_per_repo={"repo-a": "0" * 40, "repo-b": "0" * 40},
     )
 
     with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
@@ -146,10 +146,10 @@ def test_stale_preflight_warns_and_falls_back_to_in_progress(workspace_with_feat
 def test_ready_to_push_when_clean_and_ahead(workspace_with_feature, tmp_path):
     """Set up a fake remote so divergence reports api as ahead."""
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
-    api = workspace_with_feature / "api"
-    ui = workspace_with_feature / "ui"
+    api = workspace_with_feature / "repo-a"
+    ui = workspace_with_feature / "repo-b"
     # Fake remote: bare repo, push initial state, then api adds another commit
     for name, repo_path in [("api-remote", api), ("ui-remote", ui)]:
         bare = tmp_path / f"{name}.git"
@@ -169,16 +169,16 @@ def test_ready_to_push_when_clean_and_ahead(workspace_with_feature, tmp_path):
 
     assert result["state"] == "ready_to_push"
     assert result["next_actions"][0]["action"] == "push"
-    assert "api" in result["summary"]["ahead_repos"]
+    assert "repo-a" in result["summary"]["ahead_repos"]
 
 
 # ── needs_work (clean + caught up + actionable comments) ────────────────
 
 def test_needs_work_with_actionable_comments(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
     })
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
     fake_pr = {"number": 1, "title": "x", "url": "u", "state": "open",
@@ -203,9 +203,9 @@ def test_needs_work_with_actionable_comments(workspace_with_feature):
 
 def test_approved_when_all_prs_approved(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
     })
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
     fake_pr = {"number": 1, "title": "x", "url": "u", "state": "open",
@@ -224,9 +224,9 @@ def test_approved_when_all_prs_approved(workspace_with_feature):
 
 def test_awaiting_review_when_pr_open_no_feedback(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
     })
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
     fake_pr = {"number": 1, "title": "x", "url": "u", "state": "open",
@@ -245,9 +245,9 @@ def test_awaiting_review_when_pr_open_no_feedback(workspace_with_feature):
 
 def test_no_prs_when_clean_and_no_prs(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
     })
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
     with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
@@ -262,9 +262,9 @@ def test_no_prs_when_clean_and_no_prs(workspace_with_feature):
 
 def test_changes_requested_decision_is_needs_work(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
     })
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
     fake_pr = {"number": 1, "title": "x", "url": "u", "state": "open",
@@ -290,8 +290,8 @@ def test_worktree_backed_feature_not_drifted_when_main_on_other_branch(
     in main. The bug suggested 'realign' as the next action — which would
     actively destroy any in-flight work in main.
     """
-    api = workspace_dir / "api"
-    ui = workspace_dir / "ui"
+    api = workspace_dir / "repo-a"
+    ui = workspace_dir / "repo-b"
 
     # Simulate a different feature checked out in main
     _git(["checkout", "-b", "in-flight"], cwd=api)
@@ -329,8 +329,8 @@ def test_drifted_worktree_feature_suggests_switch_not_realign(workspace_dir):
     inside the worktree), the suggested fix is `switch`, not `realign`.
     Realign would touch main, which is the exact thing worktrees were
     supposed to protect."""
-    api = workspace_dir / "api"
-    ui = workspace_dir / "ui"
+    api = workspace_dir / "repo-a"
+    ui = workspace_dir / "repo-b"
 
     _git(["checkout", "-b", "in-flight"], cwd=api)
     _git(["checkout", "-b", "in-flight"], cwd=ui)
@@ -341,7 +341,7 @@ def test_drifted_worktree_feature_suggests_switch_not_realign(workspace_dir):
     coord.create("sin-10-demo", use_worktrees=True)
 
     # Manually break the worktree — checkout a different branch inside it
-    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-10-demo" / "api"
+    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-10-demo" / "repo-a"
     _git(["checkout", "-b", "manual-detour"], cwd=wt_api)
 
     with patch("canopy.actions.feature_state.gh.find_pull_request",
@@ -360,8 +360,8 @@ def test_per_repo_facts_use_worktree_path_for_dirty_check(workspace_dir):
 
     Make main clean but introduce a dirty file inside the worktree;
     feature_state must report the feature as dirty (via dirty_repos)."""
-    api = workspace_dir / "api"
-    ui = workspace_dir / "ui"
+    api = workspace_dir / "repo-a"
+    ui = workspace_dir / "repo-b"
 
     _git(["checkout", "-b", "in-flight"], cwd=api)
     _git(["checkout", "-b", "in-flight"], cwd=ui)
@@ -372,7 +372,7 @@ def test_per_repo_facts_use_worktree_path_for_dirty_check(workspace_dir):
     coord.create("sin-11-demo", use_worktrees=True)
 
     # Modify a file inside the api worktree
-    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-11-demo" / "api"
+    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-11-demo" / "repo-a"
     (wt_api / "src" / "app.py").write_text("dirty in worktree\n")
 
     with patch("canopy.actions.feature_state.gh.find_pull_request",
@@ -381,6 +381,6 @@ def test_per_repo_facts_use_worktree_path_for_dirty_check(workspace_dir):
                side_effect=_no_comments):
         result = feature_state(ws, "sin-11-demo")
 
-    assert "api" in result["summary"]["dirty_repos"], (
+    assert "repo-a" in result["summary"]["dirty_repos"], (
         f"expected api in dirty_repos (worktree was dirty); summary={result['summary']}"
     )

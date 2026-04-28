@@ -33,8 +33,8 @@ def _make_workspace(workspace_dir) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
-            RepoConfig(name="api", path="./api", role="backend", lang="python"),
-            RepoConfig(name="ui", path="./ui", role="frontend", lang="typescript"),
+            RepoConfig(name="repo-a", path="./repo-a", role="backend", lang="python"),
+            RepoConfig(name="repo-b", path="./repo-b", role="frontend", lang="typescript"),
         ],
         root=workspace_dir,
     )
@@ -51,27 +51,27 @@ class TestFeatureCreateWorktree:
         lane = coordinator.create("payment-flow", use_worktrees=True)
 
         assert lane.name == "payment-flow"
-        assert "api" in lane.repos
-        assert "ui" in lane.repos
+        assert "repo-a" in lane.repos
+        assert "repo-b" in lane.repos
 
         # Worktree directories should exist
         wt_base = workspace_dir / ".canopy" / "worktrees" / "payment-flow"
-        assert (wt_base / "api").exists()
-        assert (wt_base / "ui").exists()
+        assert (wt_base / "repo-a").exists()
+        assert (wt_base / "repo-b").exists()
 
         # They should be on the right branch
-        assert git.current_branch(wt_base / "api") == "payment-flow"
-        assert git.current_branch(wt_base / "ui") == "payment-flow"
+        assert git.current_branch(wt_base / "repo-a") == "payment-flow"
+        assert git.current_branch(wt_base / "repo-b") == "payment-flow"
 
         # Main repos should still be on main
-        assert git.current_branch(workspace_dir / "api") == "main"
-        assert git.current_branch(workspace_dir / "ui") == "main"
+        assert git.current_branch(workspace_dir / "repo-a") == "main"
+        assert git.current_branch(workspace_dir / "repo-b") == "main"
 
         # Features.json should record worktree info
         features_path = workspace_dir / ".canopy" / "features.json"
         features = json.loads(features_path.read_text())
         assert features["payment-flow"]["use_worktrees"] is True
-        assert "api" in features["payment-flow"]["worktree_paths"]
+        assert "repo-a" in features["payment-flow"]["worktree_paths"]
 
     def test_create_with_custom_worktree_base(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
@@ -82,20 +82,20 @@ class TestFeatureCreateWorktree:
             "custom-wt", use_worktrees=True, worktree_base=custom_base
         )
 
-        assert (custom_base / "custom-wt" / "api").exists()
-        assert (custom_base / "custom-wt" / "ui").exists()
+        assert (custom_base / "custom-wt" / "repo-a").exists()
+        assert (custom_base / "custom-wt" / "repo-b").exists()
 
     def test_create_worktree_subset(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
         coordinator = FeatureCoordinator(ws)
 
         lane = coordinator.create(
-            "api-only-wt", repos=["api"], use_worktrees=True
+            "api-only-wt", repos=["repo-a"], use_worktrees=True
         )
 
         wt_base = workspace_dir / ".canopy" / "worktrees" / "api-only-wt"
-        assert (wt_base / "api").exists()
-        assert not (wt_base / "ui").exists()
+        assert (wt_base / "repo-a").exists()
+        assert not (wt_base / "repo-b").exists()
 
 
 # ── Worktree-smart enrich / status ──────────────────────────────────────
@@ -123,8 +123,8 @@ class TestResolvePaths:
         coordinator.create("resolve-wt", use_worktrees=True)
         paths = coordinator.resolve_paths("resolve-wt")
 
-        assert "api" in paths
-        assert "ui" in paths
+        assert "repo-a" in paths
+        assert "repo-b" in paths
         # Should point to worktree directories
         for repo, path in paths.items():
             assert "resolve-wt" in path
@@ -137,10 +137,10 @@ class TestResolvePaths:
 
         paths = coordinator.resolve_paths("auth-flow")
 
-        assert "api" in paths
-        assert "ui" in paths
+        assert "repo-a" in paths
+        assert "repo-b" in paths
         # Should point to the repo directories (branch is current)
-        assert paths["api"] == str((workspace_with_feature / "api").resolve())
+        assert paths["repo-a"] == str((workspace_with_feature / "repo-a").resolve())
 
     def test_resolve_dot_workspace(self, workspace_dir):
         """resolve_paths for '.' isn't supported — that's the IDE command."""
@@ -159,8 +159,8 @@ class TestWorkspaceFileGeneration:
         from canopy.cli.main import _generate_workspace_file
 
         paths = [
-            str(workspace_dir / "api"),
-            str(workspace_dir / "ui"),
+            str(workspace_dir / "repo-a"),
+            str(workspace_dir / "repo-b"),
         ]
         ws_file = _generate_workspace_file(workspace_dir, "test-feature", paths)
 
@@ -175,7 +175,7 @@ class TestWorkspaceFileGeneration:
 
 class TestWorktreeAddAndQuery:
     def test_worktree_add_creates_directory(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         wt_path = workspace_dir / "api-new-wt"
 
         git.worktree_add(api, wt_path, "new-wt-branch", create_branch=True)
@@ -188,7 +188,7 @@ class TestWorktreeAddAndQuery:
         git.worktree_remove(api, wt_path)
 
     def test_worktree_for_branch_found(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         wt_path = workspace_dir / "api-find-wt"
 
         git.worktree_add(api, wt_path, "find-me", create_branch=True)
@@ -201,12 +201,12 @@ class TestWorktreeAddAndQuery:
         git.worktree_remove(api, wt_path)
 
     def test_worktree_for_branch_not_found(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         result = git.worktree_for_branch(api, "nonexistent-branch")
         assert result is None
 
     def test_worktree_add_existing_branch(self, workspace_dir):
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         git.create_branch(api, "pre-existing")
         wt_path = workspace_dir / "api-pre-existing"
 
@@ -220,7 +220,7 @@ class TestWorktreeAddAndQuery:
 
     def test_worktree_add_does_not_inherit_upstream(self, workspace_dir, tmp_path):
         """New branches created via worktree_add must not inherit upstream."""
-        api = workspace_dir / "api"
+        api = workspace_dir / "repo-a"
         # Set up a bare remote and push so origin/main exists.
         remote = tmp_path / "remote.git"
         remote.mkdir()
@@ -255,8 +255,8 @@ class TestWorktreesLive:
         result = coordinator.worktrees_live()
 
         assert result["features"] == {}
-        assert "api" in result["repos"]
-        assert "ui" in result["repos"]
+        assert "repo-a" in result["repos"]
+        assert "repo-b" in result["repos"]
 
     def test_live_scan_with_feature_worktrees(self, workspace_dir):
         """Create feature worktrees, then scan — should reflect live state."""
@@ -268,10 +268,10 @@ class TestWorktreesLive:
 
         assert "live-test" in result["features"]
         feat = result["features"]["live-test"]
-        assert "api" in feat["repos"]
-        assert "ui" in feat["repos"]
+        assert "repo-a" in feat["repos"]
+        assert "repo-b" in feat["repos"]
 
-        api_info = feat["repos"]["api"]
+        api_info = feat["repos"]["repo-a"]
         assert api_info["branch"] == "live-test"
         assert api_info["dirty"] is False
         assert api_info["dirty_count"] == 0
@@ -283,11 +283,11 @@ class TestWorktreesLive:
         coordinator = FeatureCoordinator(ws)
         coordinator.create("dirty-test", use_worktrees=True)
 
-        wt_path = workspace_dir / ".canopy" / "worktrees" / "dirty-test" / "api"
+        wt_path = workspace_dir / ".canopy" / "worktrees" / "dirty-test" / "repo-a"
         (wt_path / "new_file.py").write_text("print('hello')")
 
         result = coordinator.worktrees_live()
-        api_info = result["features"]["dirty-test"]["repos"]["api"]
+        api_info = result["features"]["dirty-test"]["repos"]["repo-a"]
         assert api_info["dirty"] is True
         assert api_info["dirty_count"] >= 1
         assert "new_file.py" in api_info["dirty_files"]
@@ -299,7 +299,7 @@ class TestWorktreesLive:
         coordinator.create("wt-list-test", use_worktrees=True)
 
         result = coordinator.worktrees_live()
-        api_wts = result["repos"]["api"]["worktrees"]
+        api_wts = result["repos"]["repo-a"]["worktrees"]
         assert len(api_wts) >= 2
         branches = [wt.get("branch", "") for wt in api_wts]
         assert "wt-list-test" in branches

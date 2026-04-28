@@ -30,8 +30,8 @@ def _make_workspace(workspace_dir) -> Workspace:
     return Workspace(WorkspaceConfig(
         name="test",
         repos=[
-            RepoConfig(name="api", path="./api", role="x", lang="x"),
-            RepoConfig(name="ui", path="./ui", role="x", lang="x"),
+            RepoConfig(name="repo-a", path="./repo-a", role="x", lang="x"),
+            RepoConfig(name="repo-b", path="./repo-b", role="x", lang="x"),
         ],
         root=workspace_dir,
     ))
@@ -46,13 +46,13 @@ def _features_file(workspace_dir, payload):
 def test_commit_then_push_set_upstream_end_to_end(workspace_with_feature, tmp_path):
     """Full happy path: dirty → commit → push --set-upstream → remote sees branch."""
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
     # Wire bare remotes for each repo.
     bare_paths = {}
-    for repo_name in ("api", "ui"):
+    for repo_name in ("repo-a", "repo-b"):
         bare = workspace_with_feature / f"{repo_name}.git"
         bare.mkdir()
         _git(["init", "--bare", "-b", "main"], cwd=bare)
@@ -61,37 +61,37 @@ def test_commit_then_push_set_upstream_end_to_end(workspace_with_feature, tmp_pa
         bare_paths[repo_name] = bare
 
     # Modify a tracked file in each repo (simulating real WIP).
-    (workspace_with_feature / "api" / "src" / "models.py").write_text(
+    (workspace_with_feature / "repo-a" / "src" / "models.py").write_text(
         "class User:\n    name: str\n    new_field: int\n"
     )
-    (workspace_with_feature / "ui" / "src" / "types.ts").write_text(
+    (workspace_with_feature / "repo-b" / "src" / "types.ts").write_text(
         "export interface User { name: string; new: number; }\n"
     )
 
     commit_result = commit(ws, "wave 2.3 integration", feature="auth-flow")
     assert commit_result["feature"] == "auth-flow"
-    api_sha = commit_result["results"]["api"]["sha"]
-    ui_sha = commit_result["results"]["ui"]["sha"]
+    api_sha = commit_result["results"]["repo-a"]["sha"]
+    ui_sha = commit_result["results"]["repo-b"]["sha"]
     assert len(api_sha) == 40
     assert len(ui_sha) == 40
 
     # The commits exist locally on auth-flow.
-    assert git.head_sha(workspace_with_feature / "api") == api_sha
-    assert git.head_sha(workspace_with_feature / "ui") == ui_sha
+    assert git.head_sha(workspace_with_feature / "repo-a") == api_sha
+    assert git.head_sha(workspace_with_feature / "repo-b") == ui_sha
 
     # First push needs --set-upstream (the no_upstream blocker would catch
     # otherwise — covered in test_push.py; here we go straight to the
     # successful path).
     push_result = push(ws, feature="auth-flow", set_upstream=True)
     assert push_result["feature"] == "auth-flow"
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         per = push_result["results"][repo]
         assert per["status"] == "ok"
         assert per.get("set_upstream") is True
 
     # Bare remote actually has the auth-flow ref now, pointing at the
     # local commit.
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         local_sha = git.head_sha(workspace_with_feature / repo)
         remote_sha = subprocess.run(
             ["git", "rev-parse", "auth-flow"],
@@ -101,5 +101,5 @@ def test_commit_then_push_set_upstream_end_to_end(workspace_with_feature, tmp_pa
 
     # Second push (no new commits) is a no-op everywhere.
     again = push(ws, feature="auth-flow")
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         assert again["results"][repo]["status"] == "up_to_date"

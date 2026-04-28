@@ -21,13 +21,13 @@ def test_fix_action_default_safe():
 
 def test_fix_action_to_dict():
     fa = FixAction(
-        action="realign", args={"feature": "doc-3029"},
+        action="realign", args={"feature": "sin-3029"},
         safe=False, preview="will discard ui's dirty changes",
     )
     d = fa.to_dict()
     assert d == {
         "action": "realign",
-        "args": {"feature": "doc-3029"},
+        "args": {"feature": "sin-3029"},
         "safe": False,
         "preview": "will discard ui's dirty changes",
     }
@@ -50,12 +50,12 @@ def test_blocker_full_payload():
     err = BlockerError(
         code="drift_detected",
         what="branches don't match feature lane",
-        expected={"branches": {"api": "doc-3029", "ui": "doc-3029"}},
-        actual={"branches": {"api": "doc-3029", "ui": "main"}},
+        expected={"branches": {"repo-a": "sin-3029", "repo-b": "sin-3029"}},
+        actual={"branches": {"repo-a": "sin-3029", "repo-b": "main"}},
         fix_actions=[
-            FixAction(action="realign", args={"feature": "doc-3029"},
-                       safe=True, preview="checkout doc-3029 in ui (clean)"),
-            FixAction(action="ship", args={"feature": "doc-3029", "auto_realign": True},
+            FixAction(action="realign", args={"feature": "sin-3029"},
+                       safe=True, preview="checkout sin-3029 in ui (clean)"),
+            FixAction(action="ship", args={"feature": "sin-3029", "auto_realign": True},
                        safe=True),
         ],
         details={"workspace_root": "/x/y/z"},
@@ -63,8 +63,8 @@ def test_blocker_full_payload():
     d = err.to_dict()
     assert d["status"] == "blocked"
     assert d["code"] == "drift_detected"
-    assert d["expected"] == {"branches": {"api": "doc-3029", "ui": "doc-3029"}}
-    assert d["actual"] == {"branches": {"api": "doc-3029", "ui": "main"}}
+    assert d["expected"] == {"branches": {"repo-a": "sin-3029", "repo-b": "sin-3029"}}
+    assert d["actual"] == {"branches": {"repo-a": "sin-3029", "repo-b": "main"}}
     assert len(d["fix_actions"]) == 2
     assert d["fix_actions"][0]["action"] == "realign"
     assert d["details"] == {"workspace_root": "/x/y/z"}
@@ -141,30 +141,30 @@ def test_render_blocker_handles_dict_input():
         "status": "blocked",
         "code": "drift_detected",
         "what": "branches don't match",
-        "expected": {"api": "doc-3029"},
-        "actual": {"api": "main"},
-        "fix_actions": [{"action": "realign", "args": {"feature": "doc-3029"},
-                          "safe": True, "preview": "checkout doc-3029 in api"}],
+        "expected": {"repo-a": "sin-3029"},
+        "actual": {"repo-a": "main"},
+        "fix_actions": [{"action": "realign", "args": {"feature": "sin-3029"},
+                          "safe": True, "preview": "checkout sin-3029 in api"}],
     }
     out = _capture_render(payload, action="ship")
     assert "ship blocked" in out
     assert "expected" in out
     assert "actual" in out
-    assert "canopy realign doc-3029" in out
-    assert "checkout doc-3029 in api" in out
+    assert "canopy realign sin-3029" in out
+    assert "checkout sin-3029 in api" in out
 
 
 def test_render_blocker_renders_expected_and_actual():
     err = BlockerError(
         code="drift_detected", what="x",
-        expected={"api": "doc-3029", "ui": "doc-3029"},
-        actual={"api": "doc-3029", "ui": "main"},
+        expected={"repo-a": "sin-3029", "repo-b": "sin-3029"},
+        actual={"repo-a": "sin-3029", "repo-b": "main"},
     )
     out = _capture_render(err, action="ship")
     assert "expected:" in out
     assert "actual:" in out
-    assert "api=doc-3029" in out
-    assert "ui=main" in out
+    assert "repo-a=sin-3029" in out
+    assert "repo-b=main" in out
 
 
 def test_render_blocker_renders_fix_actions_with_safety_tag():

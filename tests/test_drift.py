@@ -14,7 +14,7 @@ from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
 
-def _make_workspace(workspace_dir, repos=("api", "ui")) -> Workspace:
+def _make_workspace(workspace_dir, repos=("repo-a", "repo-b")) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
@@ -29,14 +29,17 @@ def _make_workspace(workspace_dir, repos=("api", "ui")) -> Workspace:
 def _write_heads(workspace_dir, **per_repo):
     """Write .canopy/state/heads.json with given repo entries.
 
-    Pass kwargs like api={"branch": "auth-flow", "sha": "deadbeef..."}.
+    Pass kwargs like repo_a={"branch": "auth-flow", "sha": "deadbeef..."}.
+    Underscores in kwarg names are translated to dashes for the JSON key
+    (`repo_a` → `repo-a`) since Python identifiers can't contain dashes.
     Defaults ts to now and prev_sha to sha.
     """
     state_dir = workspace_dir / ".canopy" / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     state = {}
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    for repo, entry in per_repo.items():
+    for repo_kw, entry in per_repo.items():
+        repo = repo_kw.replace("_", "-")
         state[repo] = {
             "branch": entry["branch"],
             "sha": entry.get("sha", "0" * 40),
@@ -71,10 +74,10 @@ def test_no_active_features_returns_empty_aligned_report(workspace_dir):
 
 def test_aligned_two_repo_feature(workspace_with_feature):
     """Both repos on auth-flow branch matches features.json."""
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
     _write_heads(workspace_with_feature,
-                 api={"branch": "auth-flow"},
-                 ui={"branch": "auth-flow"})
+                 repo_a={"branch": "auth-flow"},
+                 repo_b={"branch": "auth-flow"})
     ws = _make_workspace(workspace_with_feature)
 
     report = detect_drift(ws)
@@ -90,19 +93,19 @@ def test_aligned_two_repo_feature(workspace_with_feature):
 
 def test_drift_in_one_repo(workspace_with_feature):
     """api on auth-flow, ui on main → drift in ui."""
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
     _write_heads(workspace_with_feature,
-                 api={"branch": "auth-flow"},
-                 ui={"branch": "main"})
+                 repo_a={"branch": "auth-flow"},
+                 repo_b={"branch": "main"})
     ws = _make_workspace(workspace_with_feature)
 
     report = detect_drift(ws)
     assert report.overall_aligned is False
     fd = report.features[0]
     assert fd.aligned is False
-    assert fd.drifted_repos == ["ui"]
+    assert fd.drifted_repos == ["repo-b"]
     assert fd.untracked_repos == []
-    ui_alignment = next(r for r in fd.repos if r.repo == "ui")
+    ui_alignment = next(r for r in fd.repos if r.repo == "repo-b")
     assert ui_alignment.expected == "auth-flow"
     assert ui_alignment.actual == "main"
     assert ui_alignment.aligned is False
@@ -110,8 +113,8 @@ def test_drift_in_one_repo(workspace_with_feature):
 
 def test_untracked_repo_counted_as_drift(workspace_with_feature):
     """Repo in feature.repos but missing from heads.json is untracked."""
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
-    _write_heads(workspace_with_feature, api={"branch": "auth-flow"})
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
+    _write_heads(workspace_with_feature, repo_a={"branch": "auth-flow"})
     ws = _make_workspace(workspace_with_feature)
 
     report = detect_drift(ws)
@@ -119,18 +122,18 @@ def test_untracked_repo_counted_as_drift(workspace_with_feature):
     fd = report.features[0]
     assert fd.aligned is False
     assert fd.drifted_repos == []
-    assert fd.untracked_repos == ["ui"]
-    ui_alignment = next(r for r in fd.repos if r.repo == "ui")
+    assert fd.untracked_repos == ["repo-b"]
+    ui_alignment = next(r for r in fd.repos if r.repo == "repo-b")
     assert ui_alignment.actual is None
     assert ui_alignment.aligned is False
 
 
 def test_filter_by_feature_name(workspace_with_feature):
     """When feature_name passed, only that feature is reported."""
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
-    _create_explicit_feature(workspace_with_feature, "other-feature", ["api"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
+    _create_explicit_feature(workspace_with_feature, "other-feature", ["repo-a"])
     _write_heads(workspace_with_feature,
-                 api={"branch": "auth-flow"}, ui={"branch": "auth-flow"})
+                 repo_a={"branch": "auth-flow"}, repo_b={"branch": "auth-flow"})
     ws = _make_workspace(workspace_with_feature)
 
     report = detect_drift(ws, feature_name="auth-flow")
@@ -139,7 +142,7 @@ def test_filter_by_feature_name(workspace_with_feature):
 
 
 def test_filter_by_unknown_feature(workspace_with_feature):
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
     ws = _make_workspace(workspace_with_feature)
     report = detect_drift(ws, feature_name="nonexistent")
     assert report.overall_aligned is False
@@ -149,13 +152,13 @@ def test_filter_by_unknown_feature(workspace_with_feature):
 
 def test_single_repo_feature_aligned(workspace_with_feature):
     """ui-only feature should align even when api is on a different branch."""
-    _create_explicit_feature(workspace_with_feature, "ui-only-feat", ["ui"])
+    _create_explicit_feature(workspace_with_feature, "ui-only-feat", ["repo-b"])
     # Create the branch in ui so the feature is real
     from canopy.git import repo as git
-    git.create_branch(workspace_with_feature / "ui", "ui-only-feat")
+    git.create_branch(workspace_with_feature / "repo-b", "ui-only-feat")
     _write_heads(workspace_with_feature,
-                 api={"branch": "main"},          # api on main; not in feature
-                 ui={"branch": "ui-only-feat"})
+                 repo_a={"branch": "main"},          # api on main; not in feature
+                 repo_b={"branch": "ui-only-feat"})
     ws = _make_workspace(workspace_with_feature)
 
     report = detect_drift(ws, feature_name="ui-only-feat")
@@ -167,59 +170,59 @@ def test_single_repo_feature_aligned(workspace_with_feature):
 
 def test_single_repo_feature_drift(workspace_with_feature):
     """ui-only feature drifts when ui is on the wrong branch, regardless of api."""
-    _create_explicit_feature(workspace_with_feature, "ui-only-feat", ["ui"])
+    _create_explicit_feature(workspace_with_feature, "ui-only-feat", ["repo-b"])
     from canopy.git import repo as git
-    git.create_branch(workspace_with_feature / "ui", "ui-only-feat")
+    git.create_branch(workspace_with_feature / "repo-b", "ui-only-feat")
     _write_heads(workspace_with_feature,
-                 api={"branch": "feature-x"},     # irrelevant
-                 ui={"branch": "main"})           # ui not on its expected branch
+                 repo_a={"branch": "feature-x"},     # irrelevant
+                 repo_b={"branch": "main"})           # ui not on its expected branch
     ws = _make_workspace(workspace_with_feature)
 
     report = detect_drift(ws, feature_name="ui-only-feat")
     fd = report.features[0]
     assert fd.aligned is False
-    assert fd.drifted_repos == ["ui"]
+    assert fd.drifted_repos == ["repo-b"]
 
 
 def test_state_age_is_populated(workspace_with_feature):
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
     _write_heads(workspace_with_feature,
-                 api={"branch": "auth-flow", "ts": "2026-01-01T00:00:00Z"},
-                 ui={"branch": "auth-flow"})
+                 repo_a={"branch": "auth-flow", "ts": "2026-01-01T00:00:00Z"},
+                 repo_b={"branch": "auth-flow"})
     ws = _make_workspace(workspace_with_feature)
 
     report = detect_drift(ws)
-    api_alignment = next(r for r in report.features[0].repos if r.repo == "api")
+    api_alignment = next(r for r in report.features[0].repos if r.repo == "repo-a")
     assert api_alignment.state_age_seconds is not None
     assert api_alignment.state_age_seconds > 0  # in the past
 
 
 def test_report_to_dict_serializable(workspace_with_feature):
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
     _write_heads(workspace_with_feature,
-                 api={"branch": "auth-flow"}, ui={"branch": "main"})
+                 repo_a={"branch": "auth-flow"}, repo_b={"branch": "main"})
     ws = _make_workspace(workspace_with_feature)
     report = detect_drift(ws)
     s = json.dumps(report.to_dict())
     parsed = json.loads(s)
     assert parsed["overall_aligned"] is False
-    assert parsed["features"][0]["drifted_repos"] == ["ui"]
+    assert parsed["features"][0]["drifted_repos"] == ["repo-b"]
 
 
 # ── assert_aligned ───────────────────────────────────────────────────────
 
 def test_assert_aligned_passes_when_aligned(workspace_with_feature):
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
     _write_heads(workspace_with_feature,
-                 api={"branch": "auth-flow"}, ui={"branch": "auth-flow"})
+                 repo_a={"branch": "auth-flow"}, repo_b={"branch": "auth-flow"})
     ws = _make_workspace(workspace_with_feature)
     assert_aligned(ws, "auth-flow")  # no raise
 
 
 def test_assert_aligned_raises_blocker_on_drift(workspace_with_feature):
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
     _write_heads(workspace_with_feature,
-                 api={"branch": "auth-flow"}, ui={"branch": "main"})
+                 repo_a={"branch": "auth-flow"}, repo_b={"branch": "main"})
     ws = _make_workspace(workspace_with_feature)
 
     with pytest.raises(BlockerError) as exc_info:
@@ -228,9 +231,9 @@ def test_assert_aligned_raises_blocker_on_drift(workspace_with_feature):
     err = exc_info.value
     assert err.code == "drift_detected"
     assert "auth-flow" in err.what
-    assert err.expected["branches"] == {"api": "auth-flow", "ui": "auth-flow"}
-    assert err.actual["branches"] == {"api": "auth-flow", "ui": "main"}
-    assert err.details["drifted_repos"] == ["ui"]
+    assert err.expected["branches"] == {"repo-a": "auth-flow", "repo-b": "auth-flow"}
+    assert err.actual["branches"] == {"repo-a": "auth-flow", "repo-b": "main"}
+    assert err.details["drifted_repos"] == ["repo-b"]
     assert err.details["untracked_repos"] == []
     # Fix action: realign
     assert len(err.fix_actions) == 1
@@ -238,7 +241,7 @@ def test_assert_aligned_raises_blocker_on_drift(workspace_with_feature):
     assert fix.action == "realign"
     assert fix.args == {"feature": "auth-flow"}
     assert fix.safe is True
-    assert "ui" in (fix.preview or "")
+    assert "repo-b" in (fix.preview or "")
 
 
 def test_assert_aligned_raises_unknown_feature(workspace_with_feature):
@@ -251,8 +254,8 @@ def test_assert_aligned_raises_unknown_feature(workspace_with_feature):
 
 def test_assert_aligned_raises_blocker_on_untracked(workspace_with_feature):
     """Repo missing from heads.json counts as drift for assertion purposes."""
-    _create_explicit_feature(workspace_with_feature, "auth-flow", ["api", "ui"])
-    _write_heads(workspace_with_feature, api={"branch": "auth-flow"})
+    _create_explicit_feature(workspace_with_feature, "auth-flow", ["repo-a", "repo-b"])
+    _write_heads(workspace_with_feature, repo_a={"branch": "auth-flow"})
     ws = _make_workspace(workspace_with_feature)
 
     with pytest.raises(BlockerError) as exc_info:
@@ -260,4 +263,4 @@ def test_assert_aligned_raises_blocker_on_untracked(workspace_with_feature):
 
     err = exc_info.value
     assert err.code == "drift_detected"
-    assert err.details["untracked_repos"] == ["ui"]
+    assert err.details["untracked_repos"] == ["repo-b"]

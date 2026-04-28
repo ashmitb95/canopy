@@ -33,7 +33,7 @@ Read primitives — alias-aware fetches against Linear and GitHub. Use these ins
 
 | Command | What it does |
 |---|---|
-| `canopy issue <alias>` | Linear issue by ID (`ENG-412`) or feature alias (lookup via lane's `linear_issue`). |
+| `canopy issue <alias>` | Linear issue by ID (`SIN-412`) or feature alias (lookup via lane's `linear_issue`). |
 | `canopy pr <alias>` | PR data per repo. Alias forms: feature, `<repo>#<n>`, PR URL. |
 | `canopy branch info <alias>` | Branch HEAD, upstream, ahead/behind per repo. Alias forms: feature, `<repo>:<branch>`. |
 | `canopy comments <alias>` | Temporally classified PR review comments — `actionable_threads` vs `likely_resolved_threads` vs resolved count. Alias: feature, `<repo>#<n>`, PR URL. |

@@ -21,7 +21,7 @@ def _git(args, cwd):
     )
 
 
-def _make_workspace(workspace_dir, repos=("api", "ui")) -> Workspace:
+def _make_workspace(workspace_dir, repos=("repo-a", "repo-b")) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
@@ -51,7 +51,7 @@ def _wire_remote(repo_path):
 @pytest.fixture
 def workspace_with_remotes(workspace_with_feature):
     """Wire a bare remote for each repo so push has somewhere to go."""
-    for name in ("api", "ui"):
+    for name in ("repo-a", "repo-b"):
         _wire_remote(workspace_with_feature / name)
     return workspace_with_feature
 
@@ -60,7 +60,7 @@ def workspace_with_remotes(workspace_with_feature):
 
 def test_push_blocks_when_no_canonical_and_no_feature(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
 
@@ -73,16 +73,16 @@ def test_push_blocks_when_no_canonical_and_no_feature(workspace_with_remotes):
 
 def test_push_blocks_when_no_upstream_and_no_flag(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
 
     with pytest.raises(BlockerError) as exc:
         push(ws, feature="auth-flow")
     assert exc.value.code == "no_upstream"
-    assert "api" in exc.value.details["per_repo"]
-    assert "ui" in exc.value.details["per_repo"]
-    assert exc.value.details["per_repo"]["api"] == "auth-flow"
+    assert "repo-a" in exc.value.details["per_repo"]
+    assert "repo-b" in exc.value.details["per_repo"]
+    assert exc.value.details["per_repo"]["repo-a"] == "auth-flow"
     # Fix action should propose set_upstream=True for the same feature.
     fix = exc.value.fix_actions[0]
     assert fix.action == "push"
@@ -93,13 +93,13 @@ def test_push_blocks_when_no_upstream_and_no_flag(workspace_with_remotes):
 
 def test_push_set_upstream_publishes_each_repo(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
 
     result = push(ws, feature="auth-flow", set_upstream=True)
     assert result["feature"] == "auth-flow"
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         assert result["results"][repo]["status"] == "ok"
         assert result["results"][repo].get("set_upstream") is True
         assert git.has_upstream(workspace_with_remotes / repo, "auth-flow")
@@ -109,13 +109,13 @@ def test_push_set_upstream_publishes_each_repo(workspace_with_remotes):
 
 def test_push_up_to_date_after_initial_publish(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
     push(ws, feature="auth-flow", set_upstream=True)
 
     again = push(ws, feature="auth-flow")
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         assert again["results"][repo]["status"] == "up_to_date"
         assert again["results"][repo]["pushed_count"] == 0
 
@@ -124,39 +124,39 @@ def test_push_up_to_date_after_initial_publish(workspace_with_remotes):
 
 def test_push_pushed_count_advances(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
     push(ws, feature="auth-flow", set_upstream=True)
 
     # Add a new commit in api only.
-    api = workspace_with_remotes / "api"
+    api = workspace_with_remotes / "repo-a"
     (api / "new.py").write_text("new\n")
     _git(["add", "."], cwd=api)
     _git(["commit", "-m", "second on auth-flow"], cwd=api)
 
     result = push(ws, feature="auth-flow")
-    assert result["results"]["api"]["status"] == "ok"
-    assert result["results"]["api"]["pushed_count"] == 1
-    assert result["results"]["ui"]["status"] == "up_to_date"
+    assert result["results"]["repo-a"]["status"] == "ok"
+    assert result["results"]["repo-a"]["pushed_count"] == 1
+    assert result["results"]["repo-b"]["status"] == "up_to_date"
 
 
 # ── Dry-run ─────────────────────────────────────────────────────────────
 
 def test_push_dry_run_does_not_advance_remote(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
     push(ws, feature="auth-flow", set_upstream=True)
 
-    api = workspace_with_remotes / "api"
+    api = workspace_with_remotes / "repo-a"
     (api / "new.py").write_text("new\n")
     _git(["add", "."], cwd=api)
     _git(["commit", "-m", "second"], cwd=api)
 
     result = push(ws, feature="auth-flow", dry_run=True)
-    assert result["results"]["api"].get("dry_run") is True
+    assert result["results"]["repo-a"].get("dry_run") is True
     # Real upstream still 1 commit behind after dry-run.
     assert git.unpushed_count(api, "auth-flow") == 1
 
@@ -165,22 +165,22 @@ def test_push_dry_run_does_not_advance_remote(workspace_with_remotes):
 
 def test_push_repos_filter(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
 
     result = push(
-        ws, feature="auth-flow", repos=["api"], set_upstream=True,
+        ws, feature="auth-flow", repos=["repo-a"], set_upstream=True,
     )
-    assert "api" in result["results"]
-    assert "ui" not in result["results"]
+    assert "repo-a" in result["results"]
+    assert "repo-b" not in result["results"]
 
 
 # ── Canonical fallback ──────────────────────────────────────────────────
 
 def test_push_uses_canonical_when_no_feature(workspace_with_remotes):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
     write_active(ws, feature="auth-flow", per_repo_paths={
@@ -189,7 +189,7 @@ def test_push_uses_canonical_when_no_feature(workspace_with_remotes):
 
     result = push(ws, set_upstream=True)
     assert result["feature"] == "auth-flow"
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         assert result["results"][repo]["status"] == "ok"
 
 
@@ -197,15 +197,15 @@ def test_push_uses_canonical_when_no_feature(workspace_with_remotes):
 
 def test_push_rejected_on_non_fast_forward(workspace_with_remotes, tmp_path):
     _features_file(workspace_with_remotes, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
     push(ws, feature="auth-flow", set_upstream=True)
 
     # Push a divergent commit to api's bare from a clone, then create a
     # local commit that rejects on the next push.
-    api = workspace_with_remotes / "api"
-    bare = workspace_with_remotes / "api.git"
+    api = workspace_with_remotes / "repo-a"
+    bare = workspace_with_remotes / "repo-a.git"
     second = tmp_path / "second-api"
     second.mkdir()
     _git(["clone", "--branch", "auth-flow", str(bare), str(second)], cwd=tmp_path)
@@ -222,5 +222,5 @@ def test_push_rejected_on_non_fast_forward(workspace_with_remotes, tmp_path):
     _git(["commit", "-m", "local on auth-flow"], cwd=api)
 
     result = push(ws, feature="auth-flow")
-    assert result["results"]["api"]["status"] == "rejected"
-    assert "reason" in result["results"]["api"]
+    assert result["results"]["repo-a"]["status"] == "rejected"
+    assert "reason" in result["results"]["repo-a"]

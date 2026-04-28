@@ -207,8 +207,8 @@ class TestFeatureDone:
         result = coordinator.done("to-clean", force=True)
 
         assert not wt_dir.exists()
-        assert "api" in result["worktrees_removed"]
-        assert "ui" in result["worktrees_removed"]
+        assert "repo-a" in result["worktrees_removed"]
+        assert "repo-b" in result["worktrees_removed"]
 
     def test_done_deletes_branches(self, workspace_with_feature, canopy_toml):
         """canopy done deletes local branches."""
@@ -223,12 +223,12 @@ class TestFeatureDone:
         coordinator.create("to-delete", use_worktrees=True)
         result = coordinator.done("to-delete", force=True)
 
-        assert result["branches_deleted"]["api"] == "ok"
-        assert result["branches_deleted"]["ui"] == "ok"
+        assert result["branches_deleted"]["repo-a"] == "ok"
+        assert result["branches_deleted"]["repo-b"] == "ok"
 
         # Verify branches are actually gone
-        assert not git.branch_exists(canopy_toml / "api", "to-delete")
-        assert not git.branch_exists(canopy_toml / "ui", "to-delete")
+        assert not git.branch_exists(canopy_toml / "repo-a", "to-delete")
+        assert not git.branch_exists(canopy_toml / "repo-b", "to-delete")
 
     def test_done_archives_feature(self, workspace_with_feature, canopy_toml):
         """canopy done marks feature as 'done' in features.json."""
@@ -261,7 +261,7 @@ class TestFeatureDone:
         coordinator.create("dirty-test", use_worktrees=True)
 
         # Make a worktree dirty
-        wt_path = canopy_toml / ".canopy" / "worktrees" / "dirty-test" / "api"
+        wt_path = canopy_toml / ".canopy" / "worktrees" / "dirty-test" / "repo-a"
         (wt_path / "dirty_file.py").write_text("# dirty\n")
 
         with pytest.raises(ValueError, match="uncommitted changes"):

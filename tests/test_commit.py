@@ -15,7 +15,7 @@ from canopy.workspace.workspace import Workspace
 
 # ── Fixtures + helpers ───────────────────────────────────────────────────
 
-def _make_workspace(workspace_dir, repos=("api", "ui")) -> Workspace:
+def _make_workspace(workspace_dir, repos=("repo-a", "repo-b")) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
@@ -52,21 +52,21 @@ def _set_canonical(workspace_dir, feature, ws):
 
 def test_commit_all_repos_explicit_feature(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
     # Modify a tracked file in each repo so there's something to commit.
-    (workspace_with_feature / "api" / "src" / "models.py").write_text(
+    (workspace_with_feature / "repo-a" / "src" / "models.py").write_text(
         "class User:\n    new_field: str\n"
     )
-    (workspace_with_feature / "ui" / "src" / "types.ts").write_text(
+    (workspace_with_feature / "repo-b" / "src" / "types.ts").write_text(
         "export interface User { name: string; }\n"
     )
 
     result = commit(ws, "wave 2.3 test", feature="auth-flow")
     assert result["feature"] == "auth-flow"
-    for repo in ("api", "ui"):
+    for repo in ("repo-a", "repo-b"):
         assert result["results"][repo]["status"] == "ok"
         assert "sha" in result["results"][repo]
         assert result["results"][repo]["files_changed"] == 1
@@ -76,24 +76,24 @@ def test_commit_all_repos_explicit_feature(workspace_with_feature):
 
 def test_commit_uses_canonical_when_no_feature_passed(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
     _set_canonical(workspace_with_feature, "auth-flow", ws)
 
-    (workspace_with_feature / "api" / "src" / "app.py").write_text("changed\n")
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("changed\n")
 
     result = commit(ws, "from canonical")
     assert result["feature"] == "auth-flow"
-    assert result["results"]["api"]["status"] == "ok"
-    assert result["results"]["ui"]["status"] == "nothing"
+    assert result["results"]["repo-a"]["status"] == "ok"
+    assert result["results"]["repo-b"]["status"] == "nothing"
 
 
 # ── No canonical, no explicit → blocker ──────────────────────────────────
 
 def test_commit_blocks_when_no_canonical_and_no_feature(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
@@ -106,83 +106,83 @@ def test_commit_blocks_when_no_canonical_and_no_feature(workspace_with_feature):
 
 def test_commit_blocks_when_repo_on_wrong_branch(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    _git(["checkout", "main"], cwd=workspace_with_feature / "ui")
+    _git(["checkout", "main"], cwd=workspace_with_feature / "repo-b")
 
     with pytest.raises(BlockerError) as exc:
         commit(ws, "drifted", feature="auth-flow")
     assert exc.value.code == "wrong_branch"
-    assert "ui" in exc.value.details["per_repo"]
-    assert exc.value.details["per_repo"]["ui"]["expected"] == "auth-flow"
-    assert exc.value.details["per_repo"]["ui"]["actual"] == "main"
+    assert "repo-b" in exc.value.details["per_repo"]
+    assert exc.value.details["per_repo"]["repo-b"]["expected"] == "auth-flow"
+    assert exc.value.details["per_repo"]["repo-b"]["actual"] == "main"
 
 
 # ── Nothing to commit per-repo ──────────────────────────────────────────
 
 def test_commit_returns_nothing_when_repo_clean(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
     # api is dirty, ui is clean.
-    (workspace_with_feature / "api" / "src" / "app.py").write_text("changed\n")
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("changed\n")
 
     result = commit(ws, "partial", feature="auth-flow")
-    assert result["results"]["api"]["status"] == "ok"
-    assert result["results"]["ui"]["status"] == "nothing"
+    assert result["results"]["repo-a"]["status"] == "ok"
+    assert result["results"]["repo-b"]["status"] == "nothing"
 
 
 # ── Hook failure ────────────────────────────────────────────────────────
 
 def test_commit_reports_hooks_failed(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    api = workspace_with_feature / "api"
+    api = workspace_with_feature / "repo-a"
     hook = api / ".git" / "hooks" / "pre-commit"
     hook.write_text("#!/bin/sh\necho 'pre-commit failed'\nexit 1\n")
     hook.chmod(0o755)
 
     (api / "src" / "app.py").write_text("changed\n")
-    (workspace_with_feature / "ui" / "src" / "types.ts").write_text("changed\n")
+    (workspace_with_feature / "repo-b" / "src" / "types.ts").write_text("changed\n")
 
     result = commit(ws, "with hook", feature="auth-flow")
-    assert result["results"]["api"]["status"] == "hooks_failed"
-    assert "pre-commit" in result["results"]["api"]["hook_output"]
+    assert result["results"]["repo-a"]["status"] == "hooks_failed"
+    assert "pre-commit" in result["results"]["repo-a"]["hook_output"]
     # ui still committed; one repo's hook failure doesn't cancel the others.
-    assert result["results"]["ui"]["status"] == "ok"
+    assert result["results"]["repo-b"]["status"] == "ok"
 
 
 def test_commit_no_hooks_skips_failing_hook(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    api = workspace_with_feature / "api"
+    api = workspace_with_feature / "repo-a"
     hook = api / ".git" / "hooks" / "pre-commit"
     hook.write_text("#!/bin/sh\nexit 1\n")
     hook.chmod(0o755)
 
     (api / "src" / "app.py").write_text("changed\n")
     result = commit(ws, "skip", feature="auth-flow", no_hooks=True)
-    assert result["results"]["api"]["status"] == "ok"
+    assert result["results"]["repo-a"]["status"] == "ok"
 
 
 # ── Per-repo paths filter ────────────────────────────────────────────────
 
 def test_commit_paths_filter_only_stages_named_files(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    api = workspace_with_feature / "api"
+    api = workspace_with_feature / "repo-a"
     (api / "src" / "app.py").write_text("changed app\n")
     (api / "src" / "models.py").write_text("changed models\n")
 
@@ -190,8 +190,8 @@ def test_commit_paths_filter_only_stages_named_files(workspace_with_feature):
     result = commit(
         ws, "scoped", feature="auth-flow", paths=["src/app.py"],
     )
-    assert result["results"]["api"]["status"] == "ok"
-    assert result["results"]["api"]["files_changed"] == 1
+    assert result["results"]["repo-a"]["status"] == "ok"
+    assert result["results"]["repo-a"]["files_changed"] == 1
     # models.py should still be dirty (unstaged) in api.
     assert git.dirty_file_count(api) == 1
 
@@ -200,21 +200,21 @@ def test_commit_paths_filter_only_stages_named_files(workspace_with_feature):
 
 def test_commit_repos_filter_skips_other_repos(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    (workspace_with_feature / "api" / "src" / "app.py").write_text("changed\n")
-    (workspace_with_feature / "ui" / "src" / "types.ts").write_text("changed\n")
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("changed\n")
+    (workspace_with_feature / "repo-b" / "src" / "types.ts").write_text("changed\n")
 
-    result = commit(ws, "api only", feature="auth-flow", repos=["api"])
-    assert "api" in result["results"]
-    assert "ui" not in result["results"]
+    result = commit(ws, "api only", feature="auth-flow", repos=["repo-a"])
+    assert "repo-a" in result["results"]
+    assert "repo-b" not in result["results"]
 
 
 def test_commit_repos_filter_outside_feature_blocks(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
@@ -227,12 +227,12 @@ def test_commit_repos_filter_outside_feature_blocks(workspace_with_feature):
 
 def test_commit_amend_replaces_head_in_each_repo(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    api = workspace_with_feature / "api"
-    ui = workspace_with_feature / "ui"
+    api = workspace_with_feature / "repo-a"
+    ui = workspace_with_feature / "repo-b"
     pre_api = git.head_sha(api)
     pre_ui = git.head_sha(ui)
 
@@ -241,17 +241,17 @@ def test_commit_amend_replaces_head_in_each_repo(workspace_with_feature):
     (ui / "src" / "types.ts").write_text("amended types\n")
 
     result = commit(ws, "amended", feature="auth-flow", amend=True)
-    assert result["results"]["api"]["status"] == "ok"
-    assert result["results"]["api"].get("amended") is True
-    assert result["results"]["api"]["sha"] != pre_api
-    assert result["results"]["ui"]["sha"] != pre_ui
+    assert result["results"]["repo-a"]["status"] == "ok"
+    assert result["results"]["repo-a"].get("amended") is True
+    assert result["results"]["repo-a"]["sha"] != pre_api
+    assert result["results"]["repo-b"]["sha"] != pre_ui
 
 
 # ── Empty-message guard ─────────────────────────────────────────────────
 
 def test_commit_empty_message_raises(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
     with pytest.raises(BlockerError) as exc:

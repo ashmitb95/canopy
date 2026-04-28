@@ -175,7 +175,7 @@ See [mcp.md](mcp.md) for transport details (stdio, HTTP+OAuth).
 Every command + MCP tool that takes a feature accepts an alias. Resolution order:
 
 1. **Exact match** — alias matches a feature name in `features.json`.
-2. **Per-repo branches map match** — alias matches a value in any lane's `branches` map (e.g., passing `DOC-1003-fixes-v2` resolves to `doc-1003`).
+2. **Per-repo branches map match** — alias matches a value in any lane's `branches` map (e.g., passing `SIN-1003-fixes-v2` resolves to `sin-1003`).
 3. **Implicit multi-repo feature** — alias matches a branch present in 2+ repos (no features.json entry needed).
 4. **Implicit single-repo feature** — alias matches a branch present in any single repo (no features.json entry needed).
 5. **Linear ID match** — alias matches the `linear_issue` field of any lane.

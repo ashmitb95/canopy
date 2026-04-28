@@ -13,10 +13,10 @@ def test_load_config(canopy_toml):
 
     assert config.name == "test-workspace"
     assert len(config.repos) == 2
-    assert config.repos[0].name == "api"
+    assert config.repos[0].name == "repo-a"
     assert config.repos[0].role == "backend"
     assert config.repos[0].lang == "python"
-    assert config.repos[1].name == "ui"
+    assert config.repos[1].name == "repo-b"
     assert config.repos[1].role == "frontend"
 
 
@@ -35,8 +35,8 @@ def test_load_config_missing_name(tmp_path):
 [workspace]
 
 [[repos]]
-name = "api"
-path = "./api"
+name = "repo-a"
+path = "./repo-a"
 """)
     with pytest.raises(ConfigError, match="Missing.*name"):
         load_config(tmp_path)
@@ -57,11 +57,11 @@ def test_load_config_duplicate_repo_names(tmp_path):
 name = "test"
 
 [[repos]]
-name = "api"
-path = "./api"
+name = "repo-a"
+path = "./repo-a"
 
 [[repos]]
-name = "api"
+name = "repo-a"
 path = "./api2"
 """)
     with pytest.raises(ConfigError, match="Duplicate"):

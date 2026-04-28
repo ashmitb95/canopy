@@ -20,7 +20,7 @@ from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
 
-def _make_workspace(workspace_dir, repos=("api", "ui")) -> Workspace:
+def _make_workspace(workspace_dir, repos=("repo-a", "repo-b")) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
@@ -50,40 +50,40 @@ def _set_remote(repo_path, url):
 def test_linear_get_issue_by_id_directly(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
     fake_issue = {
-        "identifier": "ENG-412", "title": "Test", "state": "Active",
-        "url": "https://linear.app/x/issue/ENG-412", "description": "d",
+        "identifier": "SIN-412", "title": "Test", "state": "Active",
+        "url": "https://linear.app/x/issue/SIN-412", "description": "d",
         "raw": {},
     }
     with patch("canopy.actions.reads.ln.get_issue", return_value=fake_issue):
-        result = linear_get_issue(ws, "ENG-412")
-    assert result["alias"] == "ENG-412"
-    assert result["issue_id"] == "ENG-412"
+        result = linear_get_issue(ws, "SIN-412")
+    assert result["alias"] == "SIN-412"
+    assert result["issue_id"] == "SIN-412"
     assert result["title"] == "Test"
 
 
 def test_linear_get_issue_via_feature_alias(workspace_with_feature):
     _features_file(workspace_with_feature, {
         "auth-flow": {
-            "repos": ["api", "ui"], "status": "active",
-            "linear_issue": "ENG-412",
+            "repos": ["repo-a", "repo-b"], "status": "active",
+            "linear_issue": "SIN-412",
         },
     })
     ws = _make_workspace(workspace_with_feature)
     fake_issue = {
-        "identifier": "ENG-412", "title": "Auth Flow", "state": "Active",
-        "url": "https://linear.app/x/ENG-412", "description": "",
+        "identifier": "SIN-412", "title": "Auth Flow", "state": "Active",
+        "url": "https://linear.app/x/SIN-412", "description": "",
         "raw": {},
     }
     with patch("canopy.actions.reads.ln.get_issue", return_value=fake_issue) as mock:
         result = linear_get_issue(ws, "auth-flow")
     mock.assert_called_once()
-    assert mock.call_args[0][1] == "ENG-412"  # resolved Linear ID
-    assert result["issue_id"] == "ENG-412"
+    assert mock.call_args[0][1] == "SIN-412"  # resolved Linear ID
+    assert result["issue_id"] == "SIN-412"
 
 
 def test_linear_get_issue_no_linear_link_raises(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
     with pytest.raises(BlockerError) as exc_info:
@@ -95,41 +95,41 @@ def test_linear_get_issue_no_linear_link_raises(workspace_with_feature):
 
 def test_github_get_pr_specific_form(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     fake_pr = {
-        "number": 1287, "title": "Fix X", "url": "https://github.com/owner/api/pull/1287",
+        "number": 1287, "title": "Fix X", "url": "https://github.com/owner/repo-a/pull/1287",
         "state": "open", "head_branch": "auth-flow", "base_branch": "dev",
         "body": "", "review_decision": "CHANGES_REQUESTED",
         "mergeable": "MERGEABLE", "draft": False,
     }
     with patch("canopy.actions.reads.gh.get_pull_request_by_number",
                return_value=fake_pr):
-        result = github_get_pr(ws, "api#1287")
-    assert "api" in result["repos"]
-    assert result["repos"]["api"]["found"] is True
-    assert result["repos"]["api"]["pr_number"] == 1287
-    assert result["repos"]["api"]["review_decision"] == "CHANGES_REQUESTED"
+        result = github_get_pr(ws, "repo-a#1287")
+    assert "repo-a" in result["repos"]
+    assert result["repos"]["repo-a"]["found"] is True
+    assert result["repos"]["repo-a"]["pr_number"] == 1287
+    assert result["repos"]["repo-a"]["review_decision"] == "CHANGES_REQUESTED"
 
 
 def test_github_get_pr_url_form(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     with patch("canopy.actions.reads.gh.get_pull_request_by_number",
                return_value={"number": 99, "title": "x", "url": "u",
                              "state": "open", "head_branch": "b", "base_branch": "dev",
                              "body": "", "review_decision": "", "mergeable": "", "draft": False}):
-        result = github_get_pr(ws, "https://github.com/owner/api/pull/99")
-    assert result["repos"]["api"]["pr_number"] == 99
+        result = github_get_pr(ws, "https://github.com/owner/repo-a/pull/99")
+    assert result["repos"]["repo-a"]["pr_number"] == 99
 
 
 def test_github_get_pr_via_feature_alias_multi_repo(workspace_with_feature):
     """Feature alias returns PRs across all repos in the lane."""
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
-    _set_remote(workspace_with_feature / "ui", "git@github.com:owner/ui.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    _set_remote(workspace_with_feature / "repo-b", "git@github.com:owner/repo-b.git")
 
     fake_pr_for_alias = {
         "number": 100, "title": "x", "url": "u", "state": "open",
@@ -144,17 +144,17 @@ def test_github_get_pr_via_feature_alias_multi_repo(workspace_with_feature):
                return_value=fake_pr_for_alias):
         result = github_get_pr(ws, "auth-flow")
 
-    assert set(result["repos"].keys()) == {"api", "ui"}
+    assert set(result["repos"].keys()) == {"repo-a", "repo-b"}
 
 
 def test_github_get_pr_not_found_marks_found_false(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     with patch("canopy.actions.reads.gh.get_pull_request_by_number",
                return_value=None):
-        result = github_get_pr(ws, "api#999")
-    assert result["repos"]["api"]["found"] is False
-    assert result["repos"]["api"]["pr_number"] == 999
+        result = github_get_pr(ws, "repo-a#999")
+    assert result["repos"]["repo-a"]["found"] is False
+    assert result["repos"]["repo-a"]["pr_number"] == 999
 
 
 # ── github_get_branch ────────────────────────────────────────────────────
@@ -162,48 +162,48 @@ def test_github_get_pr_not_found_marks_found_false(workspace_with_feature):
 def test_github_get_branch_specific_form_existing(workspace_with_feature):
     """workspace_with_feature has 'auth-flow' branch in both repos."""
     ws = _make_workspace(workspace_with_feature)
-    result = github_get_branch(ws, "api:auth-flow")
-    assert "api" in result["repos"]
-    assert result["repos"]["api"]["branch"] == "auth-flow"
-    assert result["repos"]["api"]["exists_locally"] is True
-    assert len(result["repos"]["api"]["head_sha"]) == 40
-    assert result["repos"]["api"]["has_upstream"] is False  # no remote configured
-    assert result["repos"]["api"]["ahead"] == 0
+    result = github_get_branch(ws, "repo-a:auth-flow")
+    assert "repo-a" in result["repos"]
+    assert result["repos"]["repo-a"]["branch"] == "auth-flow"
+    assert result["repos"]["repo-a"]["exists_locally"] is True
+    assert len(result["repos"]["repo-a"]["head_sha"]) == 40
+    assert result["repos"]["repo-a"]["has_upstream"] is False  # no remote configured
+    assert result["repos"]["repo-a"]["ahead"] == 0
 
 
 def test_github_get_branch_nonexistent_branch(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
-    result = github_get_branch(ws, "api:nonexistent-branch")
-    assert result["repos"]["api"]["exists_locally"] is False
-    assert "head_sha" not in result["repos"]["api"]
+    result = github_get_branch(ws, "repo-a:nonexistent-branch")
+    assert result["repos"]["repo-a"]["exists_locally"] is False
+    assert "head_sha" not in result["repos"]["repo-a"]
 
 
 def test_github_get_branch_via_feature_alias(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
     result = github_get_branch(ws, "auth-flow")
-    assert set(result["repos"].keys()) == {"api", "ui"}
-    for r in ("api", "ui"):
+    assert set(result["repos"].keys()) == {"repo-a", "repo-b"}
+    for r in ("repo-a", "repo-b"):
         assert result["repos"][r]["branch"] == "auth-flow"
         assert result["repos"][r]["exists_locally"] is True
 
 
 def test_github_get_branch_filtered_by_repo(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    result = github_get_branch(ws, "auth-flow", repo="ui")
-    assert list(result["repos"].keys()) == ["ui"]
+    result = github_get_branch(ws, "auth-flow", repo="repo-b")
+    assert list(result["repos"].keys()) == ["repo-b"]
 
 
 # ── github_get_pr_comments ───────────────────────────────────────────────
 
 def test_github_get_pr_comments_specific_form(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
-    _set_remote(workspace_with_feature / "api", "git@github.com:owner/api.git")
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
 
     fake_comments = ([
         {"path": "src/app.py", "line": 1, "body": "fix this",
@@ -218,10 +218,10 @@ def test_github_get_pr_comments_specific_form(workspace_with_feature):
                return_value=fake_comments), \
          patch("canopy.actions.reads.gh.get_pull_request_by_number",
                return_value=fake_pr):
-        result = github_get_pr_comments(ws, "api#42")
+        result = github_get_pr_comments(ws, "repo-a#42")
 
-    assert result["alias"] == "api#42"
+    assert result["alias"] == "repo-a#42"
     assert result["actionable_count"] >= 1
-    assert "api" in result["repos"]
-    assert result["repos"]["api"]["pr_number"] == 42
-    assert "actionable_threads" in result["repos"]["api"]
+    assert "repo-a" in result["repos"]
+    assert result["repos"]["repo-a"]["pr_number"] == 42
+    assert "actionable_threads" in result["repos"]["repo-a"]

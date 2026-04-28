@@ -13,7 +13,7 @@ from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
 
-def _make_workspace(workspace_dir, repos=("api", "ui")) -> Workspace:
+def _make_workspace(workspace_dir, repos=("repo-a", "repo-b")) -> Workspace:
     config = WorkspaceConfig(
         name="test",
         repos=[
@@ -46,8 +46,8 @@ def _git(args, cwd):
 # ── parse_message ────────────────────────────────────────────────────────
 
 def test_parse_tagged_message():
-    feature, ts, msg = parse_message("[canopy doc-3029 @ 2026-04-25T12:34:56Z] WIP fix")
-    assert feature == "doc-3029"
+    feature, ts, msg = parse_message("[canopy sin-3029 @ 2026-04-25T12:34:56Z] WIP fix")
+    assert feature == "sin-3029"
     assert ts == "2026-04-25T12:34:56Z"
     assert msg == "WIP fix"
 
@@ -60,8 +60,8 @@ def test_parse_untagged_message():
 
 
 def test_parse_tag_with_no_user_message():
-    feature, ts, msg = parse_message("[canopy doc-3029 @ 2026-04-25T12:34:56Z]")
-    assert feature == "doc-3029"
+    feature, ts, msg = parse_message("[canopy sin-3029 @ 2026-04-25T12:34:56Z]")
+    assert feature == "sin-3029"
     assert msg == ""
 
 
@@ -69,66 +69,66 @@ def test_parse_tag_with_no_user_message():
 
 def test_save_for_feature_writes_tag(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    _make_dirty(workspace_with_feature / "api")
-    _make_dirty(workspace_with_feature / "ui")
+    _make_dirty(workspace_with_feature / "repo-a")
+    _make_dirty(workspace_with_feature / "repo-b")
 
     result = save_for_feature(ws, "auth-flow", "WIP fixes")
     assert result["feature"] == "auth-flow"
     assert "[canopy auth-flow @ " in result["message"]
     assert " WIP fixes" in result["message"]
-    assert result["repos"]["api"] == "stashed"
-    assert result["repos"]["ui"] == "stashed"
+    assert result["repos"]["repo-a"] == "stashed"
+    assert result["repos"]["repo-b"] == "stashed"
 
 
 def test_save_for_feature_skips_clean_repos(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    _make_dirty(workspace_with_feature / "api")
+    _make_dirty(workspace_with_feature / "repo-a")
     # ui stays clean
 
     result = save_for_feature(ws, "auth-flow", "ui-clean test")
-    assert result["repos"]["api"] == "stashed"
-    assert result["repos"]["ui"] == "clean"
+    assert result["repos"]["repo-a"] == "stashed"
+    assert result["repos"]["repo-b"] == "clean"
 
 
 def test_save_for_feature_only_targets_lane_repos(workspace_with_feature):
     """ui-only feature -> stash only ui, not api."""
     _features_file(workspace_with_feature, {
-        "ui-only": {"repos": ["ui"], "status": "active"},
+        "ui-only": {"repos": ["repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    _make_dirty(workspace_with_feature / "api")
-    _make_dirty(workspace_with_feature / "ui")
+    _make_dirty(workspace_with_feature / "repo-a")
+    _make_dirty(workspace_with_feature / "repo-b")
 
     result = save_for_feature(ws, "ui-only", "WIP")
-    assert "ui" in result["repos"]
-    assert "api" not in result["repos"]
-    assert result["repos"]["ui"] == "stashed"
+    assert "repo-b" in result["repos"]
+    assert "repo-a" not in result["repos"]
+    assert result["repos"]["repo-b"] == "stashed"
 
 
 def test_save_with_explicit_repos_override(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    _make_dirty(workspace_with_feature / "api")
+    _make_dirty(workspace_with_feature / "repo-a")
 
-    result = save_for_feature(ws, "auth-flow", "api only", repos=["api"])
-    assert list(result["repos"].keys()) == ["api"]
+    result = save_for_feature(ws, "auth-flow", "api only", repos=["repo-a"])
+    assert list(result["repos"].keys()) == ["repo-a"]
 
 
 def test_save_with_unknown_repo_raises(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
     with pytest.raises(BlockerError) as exc_info:
-        save_for_feature(ws, "auth-flow", "x", repos=["api", "ghost"])
+        save_for_feature(ws, "auth-flow", "x", repos=["repo-a", "ghost"])
     assert exc_info.value.code == "unknown_repo"
 
 
@@ -136,10 +136,10 @@ def test_save_with_unknown_repo_raises(workspace_with_feature):
 
 def test_list_grouped_separates_tagged_and_untagged(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    api_path = workspace_with_feature / "api"
+    api_path = workspace_with_feature / "repo-a"
 
     # Untagged stash via vanilla git: modify a tracked file so vanilla
     # `git stash push` (no -u) actually stashes something.
@@ -148,7 +148,7 @@ def test_list_grouped_separates_tagged_and_untagged(workspace_with_feature):
 
     # Tagged stash via canopy
     _make_dirty(api_path, "y.txt")
-    save_for_feature(ws, "auth-flow", "tagged WIP", repos=["api"])
+    save_for_feature(ws, "auth-flow", "tagged WIP", repos=["repo-a"])
 
     grouped = list_grouped(ws)
     assert "auth-flow" in grouped["by_feature"]
@@ -158,15 +158,15 @@ def test_list_grouped_separates_tagged_and_untagged(workspace_with_feature):
 
 def test_list_grouped_filtered_by_feature(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "feat-a": {"repos": ["api"], "status": "active"},
-        "feat-b": {"repos": ["api"], "status": "active"},
+        "feat-a": {"repos": ["repo-a"], "status": "active"},
+        "feat-b": {"repos": ["repo-a"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    _make_dirty(workspace_with_feature / "api", "a.txt")
-    save_for_feature(ws, "feat-a", "A work", repos=["api"])
-    _make_dirty(workspace_with_feature / "api", "b.txt")
-    save_for_feature(ws, "feat-b", "B work", repos=["api"])
+    _make_dirty(workspace_with_feature / "repo-a", "a.txt")
+    save_for_feature(ws, "feat-a", "A work", repos=["repo-a"])
+    _make_dirty(workspace_with_feature / "repo-a", "b.txt")
+    save_for_feature(ws, "feat-b", "B work", repos=["repo-a"])
 
     grouped = list_grouped(ws, feature="feat-a")
     assert list(grouped["by_feature"].keys()) == ["feat-a"]
@@ -177,52 +177,52 @@ def test_list_grouped_filtered_by_feature(workspace_with_feature):
 
 def test_pop_feature_pops_matching_stash(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    _make_dirty(workspace_with_feature / "api", "stashed.txt", "before-stash")
-    save_for_feature(ws, "auth-flow", "WIP", repos=["api"])
-    assert not (workspace_with_feature / "api" / "stashed.txt").exists()
+    _make_dirty(workspace_with_feature / "repo-a", "stashed.txt", "before-stash")
+    save_for_feature(ws, "auth-flow", "WIP", repos=["repo-a"])
+    assert not (workspace_with_feature / "repo-a" / "stashed.txt").exists()
 
-    result = pop_feature(ws, "auth-flow", repos=["api"])
-    assert result["repos"]["api"]["status"] == "popped"
-    assert (workspace_with_feature / "api" / "stashed.txt").exists()
+    result = pop_feature(ws, "auth-flow", repos=["repo-a"])
+    assert result["repos"]["repo-a"]["status"] == "popped"
+    assert (workspace_with_feature / "repo-a" / "stashed.txt").exists()
 
 
 def test_pop_feature_pops_most_recent_when_multiple(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    _make_dirty(workspace_with_feature / "api", "first.txt", "first")
-    save_for_feature(ws, "auth-flow", "first", repos=["api"])
-    _make_dirty(workspace_with_feature / "api", "second.txt", "second")
-    save_for_feature(ws, "auth-flow", "second", repos=["api"])
+    _make_dirty(workspace_with_feature / "repo-a", "first.txt", "first")
+    save_for_feature(ws, "auth-flow", "first", repos=["repo-a"])
+    _make_dirty(workspace_with_feature / "repo-a", "second.txt", "second")
+    save_for_feature(ws, "auth-flow", "second", repos=["repo-a"])
 
-    result = pop_feature(ws, "auth-flow", repos=["api"])
-    assert result["repos"]["api"]["status"] == "popped"
+    result = pop_feature(ws, "auth-flow", repos=["repo-a"])
+    assert result["repos"]["repo-a"]["status"] == "popped"
     # Most recent stash (lowest index = stash@{0}) is "second"
-    assert result["repos"]["api"]["message"] == "second"
+    assert result["repos"]["repo-a"]["message"] == "second"
 
 
 def test_pop_feature_skips_repos_with_no_match(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
-    _make_dirty(workspace_with_feature / "api", "x.txt")
-    save_for_feature(ws, "auth-flow", "WIP", repos=["api"])
+    _make_dirty(workspace_with_feature / "repo-a", "x.txt")
+    save_for_feature(ws, "auth-flow", "WIP", repos=["repo-a"])
 
     result = pop_feature(ws, "auth-flow")
-    assert result["repos"]["api"]["status"] == "popped"
-    assert result["repos"]["ui"]["status"] == "no_match"
+    assert result["repos"]["repo-a"]["status"] == "popped"
+    assert result["repos"]["repo-b"]["status"] == "no_match"
 
 
 def test_pop_feature_no_match_anywhere_raises(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "auth-flow": {"repos": ["api", "ui"], "status": "active"},
+        "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
     with pytest.raises(BlockerError) as exc_info:
@@ -232,17 +232,17 @@ def test_pop_feature_no_match_anywhere_raises(workspace_with_feature):
 
 def test_pop_feature_other_feature_stash_not_touched(workspace_with_feature):
     _features_file(workspace_with_feature, {
-        "feat-a": {"repos": ["api"], "status": "active"},
-        "feat-b": {"repos": ["api"], "status": "active"},
+        "feat-a": {"repos": ["repo-a"], "status": "active"},
+        "feat-b": {"repos": ["repo-a"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_feature)
 
-    _make_dirty(workspace_with_feature / "api", "a.txt")
-    save_for_feature(ws, "feat-a", "A work", repos=["api"])
-    _make_dirty(workspace_with_feature / "api", "b.txt")
-    save_for_feature(ws, "feat-b", "B work", repos=["api"])
+    _make_dirty(workspace_with_feature / "repo-a", "a.txt")
+    save_for_feature(ws, "feat-a", "A work", repos=["repo-a"])
+    _make_dirty(workspace_with_feature / "repo-a", "b.txt")
+    save_for_feature(ws, "feat-b", "B work", repos=["repo-a"])
 
-    pop_feature(ws, "feat-a", repos=["api"])
+    pop_feature(ws, "feat-a", repos=["repo-a"])
     grouped = list_grouped(ws)
     # feat-b stash should still exist
     remaining = grouped["by_feature"].get("feat-b", [])

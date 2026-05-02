@@ -59,6 +59,11 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 | `feature_link_linear` | Attach a Linear issue to a feature |
 | `feature_state` | **Dashboard backend.** Returns `{state, summary, next_actions, warnings}`. State ∈ `{drifted, needs_work, in_progress, ready_to_commit, ready_to_push, awaiting_bot_resolution, awaiting_review, approved, no_prs}`. The `summary` carries split `actionable_human_count` + `actionable_bot_count` (M3). See [concepts.md](concepts.md#3-the-9-state-machine). |
 | `bot_comments_status` | **M3.** Per-feature rollup of bot review comments — `{feature, repos: {<repo>: {pr_number, total, resolved, unresolved, threads}}, all_resolved, any_bot_comments}`. Resolutions come from the persistent log written by `commit --address`. |
+| `historian_decide` | **M4.** Record one or more decisions in the feature's memory file. Accepts `decisions: [{title, rationale}, ...]`. Deduped per-session by title. |
+| `historian_pause` | **M4.** Record why the agent stopped — what's blocked, what's needed next. |
+| `historian_defer_comment` | **M4.** Mark a review comment as intentionally deferred with a reason. |
+| `feature_memory` | **M4.** Read the rendered memory file as markdown — `{feature, memory: <markdown or "">}`. |
+| `historian_compact` | **M4.** Trim the Sessions section to the most-recent N (default 5). Resolutions log + PR context are always preserved. |
 
 #### Action (Wave 2)
 

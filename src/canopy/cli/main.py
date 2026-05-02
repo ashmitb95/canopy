@@ -2250,6 +2250,65 @@ def cmd_bot_status(args: argparse.Namespace) -> None:
     console.print()
 
 
+def _resolve_historian_feature(workspace, feature: str | None):
+    """Resolve (workspace_root, feature_name) for a historian CLI call."""
+    from ..actions import active_feature as af
+    from ..actions.aliases import resolve_feature
+    from ..actions.errors import BlockerError
+    if feature:
+        return workspace.config.root, resolve_feature(workspace, feature)
+    active = af.read_active(workspace)
+    if active is None:
+        raise BlockerError(
+            code="no_canonical_feature",
+            what="no active feature; pass <feature> or run `canopy switch <name>` first",
+        )
+    return workspace.config.root, active.feature
+
+
+def cmd_historian(args: argparse.Namespace) -> None:
+    """Read or compact a feature's historian memory file (M4)."""
+    from ..actions import historian
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        root, name = _resolve_historian_feature(workspace, args.feature)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action=f"historian {args.subcommand}")
+        sys.exit(1)
+
+    if args.subcommand == "show":
+        memory = historian.format_for_agent(root, name)
+        if args.json:
+            _print_json({"feature": name, "memory": memory})
+            return
+        if not memory:
+            console.print()
+            console.print(f"  [muted]no memory recorded yet for [feature]{name}[/][/]")
+            console.print()
+            return
+        console.print(memory)
+        return
+
+    if args.subcommand == "compact":
+        result = historian.compact(root, name, keep_sessions=args.keep_sessions)
+        if args.json:
+            _print_json({"feature": name, **result})
+            return
+        console.print()
+        console.print(f"  [feature]{name}[/]  {result.get('action')}: "
+                       f"kept {result.get('kept', '?')} entries, "
+                       f"dropped {result.get('dropped', 0)}")
+        console.print()
+        return
+
+
 def cmd_push(args: argparse.Namespace) -> None:
     """Feature-scoped multi-repo push (Wave 2.3)."""
     from ..actions.errors import ActionError
@@ -2807,6 +2866,31 @@ def main() -> None:
                                 help="Only list unresolved threads")
     bot_status_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # historian — cross-session feature memory (M4)
+    historian_p = subparsers.add_parser(
+        "historian",
+        help="Read or compact a feature's persistent memory file (M4)",
+    )
+    historian_sub = historian_p.add_subparsers(dest="subcommand", required=True)
+
+    historian_show = historian_sub.add_parser(
+        "show", help="Print the rendered memory file for the feature",
+    )
+    historian_show.add_argument("feature", nargs="?", default=None,
+                                  help="Feature alias; defaults to canonical feature")
+    historian_show.add_argument("--json", action="store_true", help="Output as JSON")
+
+    historian_compact = historian_sub.add_parser(
+        "compact",
+        help="Trim the Sessions section to the most recent N entries",
+    )
+    historian_compact.add_argument("feature", nargs="?", default=None,
+                                     help="Feature alias; defaults to canonical feature")
+    historian_compact.add_argument("--keep-sessions", type=int, default=5,
+                                     dest="keep_sessions",
+                                     help="Number of most-recent sessions to keep (default 5)")
+    historian_compact.add_argument("--json", action="store_true", help="Output as JSON")
+
     # push (feature-scoped multi-repo push — Wave 2.3)
     push_p = subparsers.add_parser(
         "push",
@@ -3002,6 +3086,7 @@ def main() -> None:
         "switch": cmd_switch,
         "commit": cmd_commit,
         "bot-status": cmd_bot_status,
+        "historian": cmd_historian,
         "push": cmd_push,
         "triage": cmd_triage,
         "state": cmd_state,

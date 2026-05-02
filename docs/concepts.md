@@ -127,6 +127,16 @@ The dashboard's CTA is whichever node you're sitting on. Drift always wins — i
 
 For **worktree-backed** features, the drift detection runs against the worktree path (not main), so a worktree-backed feature is only `drifted` if someone manually `git checkout`'d to a different branch *inside the worktree*. The fix is `switch` (re-establishes the feature context), not `realign` (which would touch main and undo the protection worktrees were supposed to provide).
 
+### Cross-session memory (M4)
+
+`canopy switch` returns a `memory: <markdown>` field rendered from `<workspace>/.canopy/memory/<feature>.md` — a per-feature persistent log of decisions, comment activity, PR context, and session entries. Agents read it on switch instead of re-deriving "where was I, what's resolved, what's blocked." The memory is append-only (concurrent agents on the same feature flock-serialize), with three top-level sections:
+
+- **Resolutions log** — per-comment outcomes (✓ resolved, ⊙ likely-resolved by classifier, ⊘ deferred). Never compacted.
+- **PR context** — one block per PR with rationale + chronological updates. Never compacted.
+- **Sessions** — newest-first per-session entries (decisions, pauses, events). Trimmed by `historian_compact`.
+
+Auto-capture wires existing canopy actions: `commit --address` mirrors the bot resolution into memory; `github_get_pr_comments` records each actionable thread + the temporal classifier's likely-resolved batch (deduped per session). Explicit `historian_decide` / `historian_pause` cover the agent's narrative side. See [docs/plans/historian.md](plans/historian.md) for the full design.
+
 ## 4. The canonical-slot model
 
 Every feature in canopy lives in exactly one of three states:

@@ -309,6 +309,21 @@ def commit(
                 comment_title=addressed_info["title"],
                 comment_url=addressed_info["url"],
             )
+            # Mirror the resolution into historian (M4) so the per-feature
+            # memory file's Resolutions log stays current. Non-fatal if
+            # the historian write fails — the canonical state is still in
+            # bot_resolutions.json.
+            try:
+                from . import historian
+                historian.record_comment_resolved(
+                    workspace.config.root, feature_name,
+                    comment_id=addressed_info["comment_id"],
+                    commit_sha=sha,
+                    gist=addressed_info["title"],
+                    url=addressed_info["url"],
+                )
+            except Exception:
+                pass
             addressed_info["sha"] = sha
             addressed_info["recorded"] = True
         else:

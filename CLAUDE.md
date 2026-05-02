@@ -33,6 +33,7 @@ src/canopy/
 │   ├── bot_resolutions.py   # M3: persistent log of bot comments addressed via `commit --address`
 │   ├── bot_status.py        # M3: per-feature bot-comment rollup
 │   ├── augments.py          # M2: per-workspace augment resolver (preflight_cmd, review_bots, ...)
+│   ├── historian.py         # M4: cross-session feature memory at .canopy/memory/<feature>.md
 │   ├── preflight_state.py   # records preflight result for state machine
 │   ├── reads.py             # 4 alias-aware read primitives
 │   ├── realign.py           # internal helper used by switch (deprecated from CLI/MCP in Wave 2.9)
@@ -53,7 +54,7 @@ src/canopy/
 │   ├── github.py            # GitHub PR + comments (MCP or gh CLI fallback)
 │   └── precommit.py         # detect + run pre-commit hooks
 └── mcp/
-    ├── server.py            # MCP server — 49 tools, stdio transport
+    ├── server.py            # MCP server — 54 tools, stdio transport
     └── client.py            # MCP client — stdio + HTTP+OAuth transports
 ```
 
@@ -98,7 +99,7 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 - **Action contract:** `actions/protocol.py` (planned) will formalize the per-repo `{status, before, after, reason?}` shape. For now, each action returns it ad-hoc.
 - **Skill bundling:** Bundled skills live at `src/canopy/agent_setup/skills/<name>/SKILL.md`. `canopy setup-agent` copies them to `~/.claude/skills/<name>/SKILL.md`. The default `using-canopy` skill always installs; opt-in extras (e.g. `augment-canopy`) install via `--skill <name>` (repeatable). Foreign skills with the same path are not overwritten without `--reinstall`. The `_SKILL_SOURCE` constant remains as a backward-compat alias pointing at `using-canopy`'s source.
 
-## MCP Server (49 tools)
+## MCP Server (54 tools)
 
 Grouped by topic. Run with `canopy-mcp` (entry point) or `python -m canopy.mcp.server`.
 

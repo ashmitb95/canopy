@@ -312,6 +312,117 @@ def bot_comments_status(feature: str | None = None) -> dict:
         return e.to_dict()
 
 
+# ── Historian (M4) ──────────────────────────────────────────────────────
+
+
+def _historian_feature(feature: str | None) -> tuple:
+    """Resolve (workspace_root, feature_name) for a historian call.
+
+    Falls back to the canonical feature when ``feature`` is omitted.
+    """
+    from ..actions import active_feature as af
+    from ..actions.aliases import resolve_feature
+    from ..actions.errors import BlockerError
+    ws = _get_workspace()
+    if feature:
+        return ws.config.root, resolve_feature(ws, feature)
+    active = af.read_active(ws)
+    if active is None:
+        raise BlockerError(
+            code="no_canonical_feature",
+            what="no active feature; pass `feature` or run `canopy switch <name>` first",
+        )
+    return ws.config.root, active.feature
+
+
+@mcp.tool()
+def historian_decide(feature: str | None = None,
+                     decisions: list[dict] | None = None) -> dict:
+    """Record one or more agent decisions in the feature's memory file (M4).
+
+    ``decisions`` is a list of ``{"title": str, "rationale": str}`` dicts.
+    Decisions are deduped per-session by title — calling the tool twice
+    with the same title within a session is a no-op (the hybrid Stop-hook
+    backup mechanism relies on this).
+    """
+    from ..actions import historian
+    from ..actions.errors import ActionError
+    try:
+        root, name = _historian_feature(feature)
+    except ActionError as e:
+        return e.to_dict()
+    out = []
+    for d in (decisions or []):
+        out.append(historian.record_decision(
+            root, name, title=d.get("title", ""), rationale=d.get("rationale", ""),
+        ))
+    return {"feature": name, "results": out}
+
+
+@mcp.tool()
+def historian_pause(feature: str | None = None, reason: str = "") -> dict:
+    """Record a pause / blocker for the feature (M4)."""
+    from ..actions import historian
+    from ..actions.errors import ActionError
+    try:
+        root, name = _historian_feature(feature)
+    except ActionError as e:
+        return e.to_dict()
+    return {"feature": name, **historian.record_pause(root, name, reason=reason)}
+
+
+@mcp.tool()
+def historian_defer_comment(feature: str | None = None,
+                            comment_id: str = "", reason: str = "") -> dict:
+    """Mark a review comment as intentionally deferred (M4)."""
+    from ..actions import historian
+    from ..actions.errors import ActionError
+    try:
+        root, name = _historian_feature(feature)
+    except ActionError as e:
+        return e.to_dict()
+    return {"feature": name, **historian.record_comment_deferred(
+        root, name, comment_id=comment_id, reason=reason,
+    )}
+
+
+@mcp.tool()
+def feature_memory(feature: str | None = None) -> dict:
+    """Read the rendered feature memory as markdown (M4).
+
+    Returns ``{feature, memory: <markdown or "">}`` — empty string when
+    no memory has been recorded yet.
+    """
+    from ..actions import historian
+    from ..actions.errors import ActionError
+    try:
+        root, name = _historian_feature(feature)
+    except ActionError as e:
+        return e.to_dict()
+    return {"feature": name, "memory": historian.format_for_agent(root, name)}
+
+
+@mcp.tool()
+def historian_compact(feature: str | None = None,
+                      keep_sessions: int = 5) -> dict:
+    """Trim the Sessions section to the most-recent ``keep_sessions`` (M4).
+
+    v1 is mechanical — it drops session entries beyond the cutoff while
+    preserving the Resolutions log + PR context entries. A future LLM
+    pass can replace this with summarized recaps; the storage shape is
+    forward-compatible.
+    """
+    from ..actions import historian
+    from ..actions.errors import ActionError
+    try:
+        root, name = _historian_feature(feature)
+    except ActionError as e:
+        return e.to_dict()
+    return {"feature": name, **historian.compact(
+        root, name, keep_sessions=keep_sessions,
+    )}
+
+
 @mcp.tool()
 def push(feature: str | None = None, repos: list[str] | None = None,
          set_upstream: bool = False, force_with_lease: bool = False,

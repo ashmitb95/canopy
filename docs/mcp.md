@@ -33,7 +33,7 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 | Tool | Description |
 |---|---|
 | `version` | `{cli_version, mcp_version, schema_version}` for the doctor handshake. The extension calls this once at startup; the doctor uses it to flag CLI/MCP version drift. |
-| `doctor` | Diagnose state-file integrity + install staleness; optionally repair. 16 categories, single tool. **The recovery entry point** — when any other call returns an unexpected error, agents should call `doctor` first to see whether state is corrupted. Returns `{issues, summary, fixed, skipped, ...}`. |
+| `doctor` | Diagnose state-file integrity + install staleness; optionally repair. 17 categories, single tool. **The recovery entry point** — when any other call returns an unexpected error, agents should call `doctor` first to see whether state is corrupted. Returns `{issues, summary, fixed, skipped, ...}`. |
 
 #### Workspace
 
@@ -148,7 +148,9 @@ For hosted servers like Linear's official MCP — no API key needed:
 }
 ```
 
-First call opens the browser to the OAuth authorize URL; canopy spins up a one-shot HTTP server on `localhost:33418` to capture the redirect. Tokens cache at `~/.canopy/mcp-tokens/<server>.{client,tokens}.json`. Subsequent calls reuse the cached token silently.
+First call opens the browser to the OAuth authorize URL; canopy spins up a one-shot HTTP server on `localhost:33418` to capture the redirect. Tokens cache at `~/.canopy/mcp-tokens/<server>.{client,tokens}.json`. Subsequent calls reuse the cached token silently. Tokens auto-refresh as long as the refresh token is valid.
+
+> **Heads up — OAuth needs a TTY.** The first-call browser flow requires a TTY-attached process (Claude Code, your shell, the canopy CLI). If you invoke an MCP method *headlessly* — e.g. `python -c "from canopy.mcp.server import issue_list_my_issues; issue_list_my_issues()"` from a script — and the cached token is missing or expired, the OAuth handshake will hang waiting for a redirect that can never arrive (test-findings F-4). For tests, exercise providers directly via their classes with `call_tool` mocked at the module boundary, or rely on a pre-authorised session.
 
 For HTTP servers that use header auth instead of OAuth:
 

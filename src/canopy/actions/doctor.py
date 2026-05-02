@@ -28,7 +28,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -640,6 +642,68 @@ def check_skill_stale(workspace: Workspace) -> list[Issue]:
 _VSIX_PREFIX = "singularityinc.canopy-"
 
 
+def check_mcp_orphans(workspace: Workspace) -> list[Issue]:
+    """Detect orphaned ``canopy-mcp`` processes (parent died, reparented to PID 1).
+
+    Stale MCP servers accumulate when an editor / agent disconnects without
+    cleanly closing stdin — the server keeps running waiting for input
+    that never comes. Each orphan is idle but holds a venv-Python process
+    + a few MB of RSS. ``--fix`` reaps them with SIGTERM (then SIGKILL
+    after a short grace) so the process table stays clean.
+
+    See test-findings F-3 (~8 stale processes accumulated over a week of
+    real use of canopy-test before this was added).
+    """
+    pids = _list_orphan_canopy_mcp_pids()
+    if not pids:
+        return []
+    return [Issue(
+        code="mcp_orphans",
+        severity="info",
+        what=f"{len(pids)} orphaned canopy-mcp process(es) found (PPID=1)",
+        expected="0 orphans (each MCP server should exit when its parent disconnects)",
+        actual=str(len(pids)),
+        fix_action="canopy doctor --fix reaps them (SIGTERM, then SIGKILL after 2s)",
+        auto_fixable=True,
+        details={"pids": pids},
+    )]
+
+
+def _list_orphan_canopy_mcp_pids() -> list[int]:
+    """Return PIDs of running ``canopy-mcp`` processes whose parent is PID 1.
+
+    Uses ``ps`` (cross-platform on macOS + Linux) — no extra dependency.
+    Skips the current process and its ancestors so a doctor invocation
+    from inside an MCP context can't report itself.
+    """
+    try:
+        out = subprocess.run(
+            ["ps", "-eo", "pid=,ppid=,command="],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    if out.returncode != 0:
+        return []
+    self_pid = os.getpid()
+    self_ppid = os.getppid()
+    skip = {self_pid, self_ppid}
+    out_pids: list[int] = []
+    for line in out.stdout.splitlines():
+        try:
+            pid_s, ppid_s, command = line.lstrip().split(None, 2)
+            pid, ppid = int(pid_s), int(ppid_s)
+        except (ValueError, IndexError):
+            continue
+        if pid in skip or ppid in skip:
+            continue
+        if "canopy-mcp" not in command:
+            continue
+        if ppid == 1:
+            out_pids.append(pid)
+    return sorted(out_pids)
+
+
 def check_vsix_duplicates(workspace: Workspace) -> list[Issue]:
     """Multiple ``singularityinc.canopy-*`` dirs in ~/.vscode/extensions/."""
     ext_dir = Path.home() / ".vscode" / "extensions"
@@ -683,6 +747,7 @@ _CHECKS: dict[str, tuple[str, Any]] = {
     "mcp_missing_in_workspace": ("mcp", check_mcp_missing_in_workspace),
     "skill_missing": ("skill", check_skill_missing),
     "skill_stale": ("skill", check_skill_stale),
+    "mcp_orphans": ("mcp", check_mcp_orphans),
     "vsix_duplicates": ("vsix", check_vsix_duplicates),
 }
 
@@ -959,6 +1024,53 @@ def repair_skill_stale(workspace: Workspace, issue: Issue) -> RepairResult:
     )
 
 
+def repair_mcp_orphans(workspace: Workspace, issue: Issue) -> RepairResult:
+    """SIGTERM listed orphan PIDs, then SIGKILL after a 2s grace.
+
+    Skips PIDs we don't own (EPERM) silently — there's no graceful
+    recovery for a non-owned orphan and reporting one would just be noise.
+    """
+    pids = list(issue.details.get("pids") or [])
+    if not pids:
+        return RepairResult(code=issue.code, success=True,
+                            action_taken="no orphans to reap")
+    sent: list[int] = []
+    failed: list[str] = []
+    for pid in pids:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+            sent.append(int(pid))
+        except ProcessLookupError:
+            continue   # already gone — fine
+        except PermissionError:
+            failed.append(f"{pid}: permission denied")
+            continue
+        except Exception as e:  # noqa: BLE001
+            failed.append(f"{pid}: {e}")
+            continue
+    # Grace period for clean shutdown, then SIGKILL stragglers.
+    if sent:
+        time.sleep(2.0)
+        for pid in sent:
+            try:
+                os.kill(pid, 0)   # probe — does the pid still exist?
+            except ProcessLookupError:
+                continue   # gone, good
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                continue
+            except Exception as e:  # noqa: BLE001
+                failed.append(f"{pid}: SIGKILL: {e}")
+    action = f"reaped {len(sent)} orphan(s)"
+    if failed:
+        return RepairResult(
+            code=issue.code, success=bool(sent),
+            action_taken=action, error="; ".join(failed),
+        )
+    return RepairResult(code=issue.code, success=True, action_taken=action)
+
+
 def repair_vsix_duplicates(workspace: Workspace, issue: Issue) -> RepairResult:
     """Remove all but the newest matching extension dir."""
     paths = [Path(p) for p in (issue.details.get("paths") or [])]
@@ -997,6 +1109,7 @@ _REPAIRS: dict[str, Any] = {
     "mcp_missing_in_workspace": repair_mcp_missing_in_workspace,
     "skill_missing": repair_skill_missing,
     "skill_stale": repair_skill_stale,
+    "mcp_orphans": repair_mcp_orphans,
     "vsix_duplicates": repair_vsix_duplicates,
     # cli_stale, mcp_stale, features_unknown_repo, branches_missing have
     # no auto-fix — repair returns surfaced advice via the issue's
@@ -1050,7 +1163,7 @@ def doctor(
             issues = [i for i in issues if i.feature in (None, feature) or i.code in {
                 "heads_stale", "hook_missing", "hook_chained_unsafe",
                 "cli_stale", "mcp_stale", "mcp_missing_in_workspace",
-                "skill_missing", "skill_stale", "vsix_duplicates",
+                "mcp_orphans", "skill_missing", "skill_stale", "vsix_duplicates",
             }]
         all_issues.extend(issues)
 

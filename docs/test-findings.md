@@ -47,13 +47,12 @@ Running any workspace-scoped command (e.g. `canopy setup-agent --check`, `canopy
 
 Lesson for future test runs: capture exit codes inline (`canopy ... ; EC=$?`), not after intervening commands.
 
-### F-3: stale `canopy-mcp` processes accumulate
+### F-3: stale `canopy-mcp` processes accumulate ~~(partially misread)~~
 
-`ps aux | grep canopy-mcp` shows 8+ stale processes from earlier in the week. Each one is a hung MCP server from a previous session that didn't get reaped.
+Original observation was 8+ canopy-mcp processes in `ps`. **On closer inspection most are not orphans** — their PPIDs are still alive (live VSCode / Cursor / Claude Desktop windows, each with its own canopy-mcp). One MCP per editor window is normal. The genuine bug is the *true* orphan case: an editor crashes hard, its MCP child gets reparented to PID 1, and nothing reaps it.
 
-- **Severity:** low — they're idle (memory ≤96 KB each); not actively harming.
-- **Cause likely:** when an agent / IDE disconnects from MCP without a clean shutdown handshake, the stdio server hangs waiting for stdin.
-- **Fix candidate:** doctor could add a `mcp_orphans` check that lists processes whose parent died, with `--clean` to reap them. Or the MCP server could exit on EOF rather than blocking.
+- **Fix shipped:** `mcp_orphans` doctor check (severity: info, auto-fixable). Detects PPID=1 canopy-mcp processes, reaps with SIGTERM then SIGKILL after a 2s grace. The check explicitly skips multi-editor-window cases (parent alive → not an orphan, doesn't fire).
+- **Lesson for future test runs:** "lots of processes" ≠ "orphans". Check PPID before claiming a bug.
 
 ### F-4: Linear MCP from a headless Python invocation hangs
 
@@ -148,8 +147,8 @@ This is the recovery scenario M1 was built for. Detection works end-to-end again
 - [ ] **F-6 fix (P1)** — make `cmd_issue` render `Issue.to_dict()` directly so CLI + MCP agree. Drop the legacy raw-state shape. Update docs/commands.md. ~30 min.
 - [ ] **F-1 fix (P1)** — improve the "no canopy.toml" error message to explain canopy's mental model (workspace = non-git directory holding repos + canopy.toml). ~10 min.
 - [ ] **F-5 fix (P2)** — add `cmd_issues` for parity with the MCP `issue_list_my_issues`, OR defer to Phil's PR (which has it).
-- [ ] **F-3 backlog** — doctor `mcp_orphans` check + reaper.
-- [ ] **F-4 backlog** — Linear-headless smoke test using cached tokens; document the OAuth-required-in-tty constraint in docs/mcp.md.
+- [x] **F-3** — doctor `mcp_orphans` check + reaper. Detects PPID=1 canopy-mcp processes; SIGTERM with 2s grace then SIGKILL. Auto-fixable (info severity). Original observation was partially misread — see updated F-3 above.
+- [x] **F-4** — `docs/mcp.md` "Heads up — OAuth needs a TTY" callout under the HTTP+OAuth section. Documents the headless-hang failure mode + workaround.
 - [ ] **`canopy doctor --fix`** — on a follow-up session, intentionally clean canopy-test's real drift (heads.json + missing worktrees + vsix duplicates) to validate the repair side end-to-end.
 
 ## Test-data cleanup

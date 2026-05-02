@@ -99,7 +99,7 @@ Write actions and execution.
 
 | Command | What it does |
 |---|---|
-| `canopy doctor [-v] [--feature <f>]` | Diagnose 16 categories of state-file drift + install staleness. Reports `errors`/`warnings`/`info` with structured `code`, `expected`, `actual`, and per-issue `fix_action`. **Run this first** when any other canopy operation returns an unexpected error — most "something is off" cases trace to one of these categories. `--json` returns the full report shape `{issues, summary, fixed, skipped}`. |
+| `canopy doctor [-v] [--feature <f>]` | Diagnose 17 categories of state-file drift + install staleness (incl. `mcp_orphans` from F-3). Reports `errors`/`warnings`/`info` with structured `code`, `expected`, `actual`, and per-issue `fix_action`. **Run this first** when any other canopy operation returns an unexpected error — most "something is off" cases trace to one of these categories. `--json` returns the full report shape `{issues, summary, fixed, skipped}`. |
 | `canopy doctor --fix` | Repair every `auto_fixable=true` issue. Examples: rewrite `heads.json` from live git, drop orphan worktree dirs via `git worktree remove --force`, reinstall a missing post-checkout hook, re-resolve broken `active_feature.json` paths, write a missing `.mcp.json` entry, reinstall the `using-canopy` skill. |
 | `canopy doctor --fix-category <c>` | Repair just one category (`heads`, `active_feature`, `worktrees`, `hooks`, `preflight`, `features`, `branches`, `cli`, `mcp`, `skill`, `vsix`). Implies `--fix`. |
 | `canopy doctor --clean-vsix` | Required gate for the destructive `vsix_duplicates` repair (removes all but the newest `singularityinc.canopy-*` install dir). Other repairs are unaffected. |

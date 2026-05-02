@@ -80,7 +80,7 @@ When you see a `BlockerError`, the first step is to read `fix_actions[0]` and de
 
 ## Recovery: when canopy itself looks broken
 
-If a canopy call returns an unexpected error — `KeyError` from a state read, a "feature not found" for one you just created, a worktree path that should exist but doesn't — call `mcp__canopy__doctor` first. It reports 16 categories of state-file drift + install-staleness, each with `code`, `severity`, `expected`/`actual`, and an `auto_fixable` flag.
+If a canopy call returns an unexpected error — `KeyError` from a state read, a "feature not found" for one you just created, a worktree path that should exist but doesn't — call `mcp__canopy__doctor` first. It reports 17 categories of state-file drift + install-staleness, each with `code`, `severity`, `expected`/`actual`, and an `auto_fixable` flag.
 
 - `summary.errors == 0` → not a state problem; investigate the original error normally.
 - Errors present, mostly `auto_fixable: true` → call `doctor(fix=True)`; report `fixed`/`skipped` to the user.

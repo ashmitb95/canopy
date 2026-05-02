@@ -160,7 +160,7 @@ When you see a `BlockerError`, read `fix_actions[0]` and decide whether to follo
 
 ### Recovery: when canopy itself looks broken
 
-If a canopy call returns an unexpected error — `KeyError` from a state read, "feature not found" for a feature you just created, a path that should exist but doesn't — call `mcp__canopy__doctor` first. It diagnoses 16 categories of state-file drift and install-staleness, returning each issue with a `code`, `severity`, `expected`, `actual`, and `auto_fixable` flag.
+If a canopy call returns an unexpected error — `KeyError` from a state read, "feature not found" for a feature you just created, a path that should exist but doesn't — call `mcp__canopy__doctor` first. It diagnoses 17 categories of state-file drift and install-staleness, returning each issue with a `code`, `severity`, `expected`, `actual`, and `auto_fixable` flag.
 
 Typical recovery flow:
 

@@ -28,6 +28,7 @@ from canopy.actions.doctor import (
     check_hook_chained_unsafe,
     check_hook_missing,
     check_mcp_missing_in_workspace,
+    check_mcp_orphans,
     check_mcp_stale,
     check_preflight_stale,
     check_skill_missing,
@@ -500,6 +501,130 @@ def test_check_vsix_duplicates_skipped_when_single(workspace_with_feature, tmp_p
     (ext / "singularityinc.canopy-0.1.0").mkdir()
     ws = _make_workspace(workspace_with_feature)
     assert check_vsix_duplicates(ws) == []
+
+
+# ── mcp_orphans (F-3) ───────────────────────────────────────────────────
+
+
+def _ps_stub(rows: list[tuple[int, int, str]]):
+    """Build a subprocess.run-shaped result mimicking ``ps -eo pid=,ppid=,command=``."""
+    from types import SimpleNamespace
+    text = "\n".join(f"{pid:>5} {ppid:>5} {cmd}" for pid, ppid, cmd in rows) + "\n"
+    return SimpleNamespace(returncode=0, stdout=text, stderr="")
+
+
+def test_check_mcp_orphans_detects_ppid_1(workspace_with_feature, monkeypatch):
+    """A canopy-mcp process whose parent died (PPID=1) is an orphan."""
+    rows = [
+        (12345, 1, "/path/to/canopy-mcp"),                            # orphan
+        (23456, 999, "/path/to/canopy-mcp"),                          # parent alive — fine
+        (34567, 1, "/usr/bin/python3 -m something_unrelated"),       # not canopy-mcp
+    ]
+    monkeypatch.setattr(
+        "canopy.actions.doctor.subprocess.run",
+        lambda *a, **kw: _ps_stub(rows),
+    )
+    ws = _make_workspace(workspace_with_feature)
+    issues = check_mcp_orphans(ws)
+    assert len(issues) == 1
+    assert issues[0].code == "mcp_orphans"
+    assert issues[0].severity == "info"
+    assert issues[0].auto_fixable is True
+    assert issues[0].details["pids"] == [12345]
+
+
+def test_check_mcp_orphans_clean_when_no_orphans(workspace_with_feature, monkeypatch):
+    rows = [
+        (12345, 999, "/path/to/canopy-mcp"),     # parent alive
+        (23456, 1, "/usr/bin/something-else"),  # PPID 1 but not canopy-mcp
+    ]
+    monkeypatch.setattr(
+        "canopy.actions.doctor.subprocess.run",
+        lambda *a, **kw: _ps_stub(rows),
+    )
+    ws = _make_workspace(workspace_with_feature)
+    assert check_mcp_orphans(ws) == []
+
+
+def test_check_mcp_orphans_skips_self_and_parent(workspace_with_feature, monkeypatch):
+    """Doctor invoked from inside an MCP context shouldn't flag itself."""
+    import os
+    self_pid = os.getpid()
+    self_ppid = os.getppid()
+    rows = [
+        (self_pid, 1, "/path/to/canopy-mcp"),    # this is us — skip
+        (self_ppid, 1, "/path/to/canopy-mcp"),   # this is our parent — skip
+        (99999, 1, "/path/to/canopy-mcp"),       # different orphan — keep
+    ]
+    monkeypatch.setattr(
+        "canopy.actions.doctor.subprocess.run",
+        lambda *a, **kw: _ps_stub(rows),
+    )
+    ws = _make_workspace(workspace_with_feature)
+    issues = check_mcp_orphans(ws)
+    assert len(issues) == 1
+    assert issues[0].details["pids"] == [99999]
+
+
+def test_check_mcp_orphans_handles_ps_failure(workspace_with_feature, monkeypatch):
+    """If ps fails or isn't installed, the check returns no issues (not crashes).
+
+    Monkeypatch the orphan-listing helper directly (not subprocess.run)
+    so we don't accidentally break git invocations from _make_workspace.
+    """
+    ws = _make_workspace(workspace_with_feature)
+    monkeypatch.setattr(
+        "canopy.actions.doctor._list_orphan_canopy_mcp_pids",
+        lambda: [],   # Helper internalises its own try/except over ps; we stub the result.
+    )
+    assert check_mcp_orphans(ws) == []
+
+
+def test_list_orphan_helper_returns_empty_on_ps_missing(monkeypatch):
+    """Direct unit test of the helper: ps not on PATH → empty list, no exception."""
+    from canopy.actions.doctor import _list_orphan_canopy_mcp_pids
+    def boom(*a, **kw):
+        raise FileNotFoundError("ps")
+    monkeypatch.setattr("canopy.actions.doctor.subprocess.run", boom)
+    assert _list_orphan_canopy_mcp_pids() == []
+
+
+def test_repair_mcp_orphans_sends_sigterm(workspace_with_feature, monkeypatch):
+    """The repair function calls os.kill on each listed PID."""
+    from canopy.actions.doctor import repair_mcp_orphans, Issue
+    killed: list[tuple[int, int]] = []
+    def fake_kill(pid, sig):
+        killed.append((pid, sig))
+        # Pretend the process disappeared after SIGTERM so SIGKILL probe sees ProcessLookupError
+        if sig == 0:
+            raise ProcessLookupError
+    monkeypatch.setattr("canopy.actions.doctor.os.kill", fake_kill)
+    monkeypatch.setattr("canopy.actions.doctor.time.sleep", lambda s: None)
+    ws = _make_workspace(workspace_with_feature)
+    issue = Issue(
+        code="mcp_orphans", severity="info",
+        what="2 orphans", expected="0", actual="2",
+        fix_action="reap", auto_fixable=True,
+        details={"pids": [101, 202]},
+    )
+    result = repair_mcp_orphans(ws, issue)
+    assert result.success is True
+    sent_pids = [p for p, s in killed if s != 0]   # ignore probe-with-sig=0
+    assert sorted(sent_pids) == [101, 202]
+
+
+def test_repair_mcp_orphans_noop_when_empty(workspace_with_feature):
+    from canopy.actions.doctor import repair_mcp_orphans, Issue
+    ws = _make_workspace(workspace_with_feature)
+    issue = Issue(
+        code="mcp_orphans", severity="info",
+        what="0 orphans", expected="0", actual="0",
+        fix_action="reap", auto_fixable=True,
+        details={"pids": []},
+    )
+    result = repair_mcp_orphans(ws, issue)
+    assert result.success is True
+    assert "no orphans" in result.action_taken
 
 
 # ── orchestrator ────────────────────────────────────────────────────────

@@ -105,7 +105,7 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 Grouped by topic. Run with `canopy-mcp` (entry point) or `python -m canopy.mcp.server`.
 
 ```
-Meta:         version, doctor              # version handshake + 16-category recovery primitive
+Meta:         version, doctor              # version handshake + 17-category recovery primitive
 Workspace:    workspace_status, workspace_context, workspace_config, workspace_reinit
 Feature:      feature_create, feature_list, feature_status, feature_diff,
               feature_changes, feature_merge_readiness, feature_paths, feature_done,

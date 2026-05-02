@@ -1,8 +1,9 @@
 ---
-status: in-progress
+status: shipped
 priority: P1
 effort: ~2-3d
 depends_on: ["doctor.md"]
+shipped: 2026-05-02
 ---
 
 # Augment skill — per-workspace customization

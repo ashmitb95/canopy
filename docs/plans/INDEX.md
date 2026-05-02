@@ -2,7 +2,7 @@
 
 Live status of canopy's planned work. Update this file as milestones progress; each plan's frontmatter is the per-plan source of truth, this doc is the rolled-up dashboard.
 
-**Last updated:** 2026-05-02 (M0, M1, M5 shipped; M2 in-progress)
+**Last updated:** 2026-05-02 (M0, M1, M2, M5 shipped)
 **Roadmap:** [roadmap.md](roadmap.md) — full architecture context, cross-cutting decisions, sequencing rationale
 
 ## Status legend
@@ -24,8 +24,8 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Core milestones (in dependency order)
 
-- [ ] 🟨 **M2 — Augment skill** — [augments.md](augments.md) · P1 · ~2-3d · depends on M1
-  Per-workspace customization via `[augments]` block in canopy.toml. New `augment-canopy` skill teaches the agent how to mutate config.
+- [x] ✅ **M2 — Augment skill** — [archive/augments.md](archive/augments.md) · shipped 2026-05-02
+  Per-workspace `[augments]` block in canopy.toml + opt-in `augment-canopy` skill. Wires `preflight_cmd`; reserves `review_bots` (M3) and `test_cmd` (future).
 - [ ] 🟦 **M3 — Bot-comment tracking** — [bot-tracking.md](bot-tracking.md) · P1 · ~3d · depends on M2
   Distinguish bot vs human review comments, `commit --address <id>`, new `awaiting_bot_resolution` state.
 - [ ] 🟦 **M4 — Historian** — [historian.md](historian.md) · P1 · ~5-6d · depends on M3
@@ -45,6 +45,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Shipped
 
+- [x] ✅ **M2 — Augment skill** — [archive/augments.md](archive/augments.md) · shipped 2026-05-02 (PR #10)
 - [x] ✅ **M5 — Issue-provider scaffold** — [archive/issue-providers.md](archive/issue-providers.md) · shipped 2026-04-27
 - [x] ✅ **M1 — `canopy doctor`** — [archive/doctor.md](archive/doctor.md) · shipped 2026-05-02
 - [x] ✅ **M0 — Architecture: provider injection** — [archive/providers-arch.md](archive/providers-arch.md) · delivered as [`docs/architecture/providers.md`](../architecture/providers.md) · shipped 2026-05-02
@@ -56,9 +57,9 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 | Bucket | Milestones | Estimate |
 |---|---|---|
-| Core (M2–M4) | 3 | ~10–12 days |
+| Core (M3–M4) | 2 | ~8–9 days |
 | Quality-of-life (M6–M12) | 7 | ~13–18 days |
-| **Total queued** | **10** | **~23–30 days** |
+| **Total queued** | **9** | **~21–27 days** |
 
 ---
 

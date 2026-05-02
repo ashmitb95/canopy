@@ -137,6 +137,15 @@ def switch(
         workspace, feature_name, new_canonical_paths, previously_canonical,
         out, release_current=release_current, per_repo_results=per_repo_results,
     )
+
+    # M4: include the new feature's persistent memory so the agent picks
+    # up cross-session context immediately. Empty string when no memory
+    # has been recorded yet — caller can ignore.
+    from . import historian
+    out["memory"] = historian.format_for_agent(
+        workspace.config.root, feature_name,
+    )
+
     return out
 
 

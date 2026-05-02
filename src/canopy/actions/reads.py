@@ -161,6 +161,11 @@ def github_get_pr_comments(workspace: Workspace, alias: str) -> dict:
     ``actionable_threads`` / ``likely_resolved_threads`` /
     ``resolved_thread_count`` / ``latest_commit_at``), but accepts the
     full alias surface — feature alias, ``<repo>#<n>``, or PR URL.
+
+    M4 hook: when ``alias`` resolves to a tracked feature, each comment
+    seen here is logged into the feature's historian memory (deduped
+    per-session by id), and the temporal classifier's ``likely_resolved``
+    set is logged once per session.
     """
     from .review_filter import classify_threads
 
@@ -194,6 +199,9 @@ def github_get_pr_comments(workspace: Workspace, alias: str) -> dict:
             **classification,
         }
 
+    # M4: mirror into historian when this alias maps to a tracked feature.
+    _historian_record_comments_read(workspace, alias, repos)
+
     return {
         "alias": alias,
         "actionable_count": actionable_total,
@@ -201,3 +209,49 @@ def github_get_pr_comments(workspace: Workspace, alias: str) -> dict:
         "resolved_thread_count": resolved_total,
         "repos": repos,
     }
+
+
+def _historian_record_comments_read(
+    workspace: Workspace, alias: str, repos: dict[str, dict],
+) -> None:
+    """Best-effort historian capture for `review_comments` reads (M4).
+
+    Fails silently — the canonical comment data is the GitHub response;
+    historian is only a narrative layer. We only write when the alias
+    resolves cleanly to a feature in features.json.
+    """
+    try:
+        from .aliases import resolve_feature
+        from . import historian
+
+        feature_name = resolve_feature(workspace, alias)
+    except Exception:
+        return
+
+    for repo_data in repos.values():
+        for thread in repo_data.get("actionable_threads", []) or []:
+            cid = thread.get("id")
+            if cid is None:
+                continue
+            try:
+                historian.record_comment_read(
+                    workspace.config.root, feature_name,
+                    comment_id=cid,
+                    author=thread.get("author", ""),
+                    path=thread.get("path", ""),
+                    line=thread.get("line", 0),
+                    body_excerpt=(thread.get("body") or "").splitlines()[0][:120]
+                                  if thread.get("body") else "",
+                    url=thread.get("url", ""),
+                )
+            except Exception:
+                continue
+        # Classifier-resolved batch (one entry per session per call).
+        likely = repo_data.get("likely_resolved_threads", []) or []
+        if likely:
+            try:
+                historian.record_classifier_resolved(
+                    workspace.config.root, feature_name, threads=likely,
+                )
+            except Exception:
+                pass

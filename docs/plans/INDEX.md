@@ -2,7 +2,7 @@
 
 Live status of canopy's planned work. Update this file as milestones progress; each plan's frontmatter is the per-plan source of truth, this doc is the rolled-up dashboard.
 
-**Last updated:** 2026-05-02 (M0, M1, M2, M3, M5 shipped)
+**Last updated:** 2026-05-02 (M0, M1, M2, M3, M5 shipped; M4 in-progress)
 **Roadmap:** [roadmap.md](roadmap.md) — full architecture context, cross-cutting decisions, sequencing rationale
 
 ## Status legend
@@ -28,7 +28,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
   Per-workspace `[augments]` block in canopy.toml + opt-in `augment-canopy` skill. Wires `preflight_cmd`; reserves `review_bots` (M3) and `test_cmd` (future).
 - [x] ✅ **M3 — Bot-comment tracking** — [archive/bot-tracking.md](archive/bot-tracking.md) · shipped 2026-05-02
   Bot vs human comment classification, `commit --address <id>`, `awaiting_bot_resolution` state, `bot-status` rollup.
-- [ ] 🟦 **M4 — Historian** — [historian.md](historian.md) · P1 · ~5-6d · depends on M3
+- [ ] 🟨 **M4 — Historian** — [historian.md](historian.md) · P1 · ~5-6d · depends on M3
   Cross-session feature memory at `.canopy/memory/<feature>.md`. Auto-read on `canopy switch`.
 - [x] ✅ **M5 — Issue-provider scaffold** — [archive/issue-providers.md](archive/issue-providers.md) · shipped 2026-04-27
   Linear refactored into the contract; GitHub Issues backend. New `issue_get` / `issue_list_my_issues` MCP tools; old `linear_*` retained as deprecated aliases. Closes [#5](https://github.com/ashmitb95/canopy/issues/5).

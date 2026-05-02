@@ -92,6 +92,27 @@ The `mcp__canopy__version` tool returns `{cli_version, mcp_version, schema_versi
 
 If the user wants canopy to behave differently here — *"use ruff for preflight"*, *"track CodeRabbit and Korbit as bots"*, *"the api repo runs `uv run pytest tests/fast` before commits"* — that's a **canopy.toml augment**. Suggest invoking the `augment-canopy` skill, which knows the schema and how to mutate the file safely. Install it with `canopy setup-agent --skill augment-canopy` if it isn't already.
 
+## Cross-session memory (Historian)
+
+Each feature has a persistent memory file at `<workspace>/.canopy/memory/<feature>.md` that survives session boundaries. When you call `mcp__canopy__switch(feature)`, the response includes a `memory: <markdown>` field — read it first before re-deriving anything.
+
+Three sections in the memory: **Resolutions log** (per-comment outcomes — never compacted), **PR context** (one block per PR), and **Sessions** (newest first; older sessions get trimmed by `historian_compact`).
+
+What to call when:
+
+- `mcp__canopy__historian_decide(feature, decisions=[{title, rationale}, ...])` — after picking an approach, after a pivot, before pausing. Decisions are deduped per-session by title, so it's safe to call repeatedly.
+- `mcp__canopy__historian_pause(feature, reason)` — when stopping work mid-flow. The next session reads it on switch.
+- `mcp__canopy__historian_defer_comment(feature, comment_id, reason)` — when intentionally skipping a review comment for a stated reason.
+- `mcp__canopy__feature_memory(feature)` — re-read the memory at any point in the same session.
+- `mcp__canopy__historian_compact(feature, keep_sessions=5)` — manual trim when the file grows long. Resolutions + PR context are never compacted.
+
+Auto-capture from canopy actions (no extra calls needed):
+
+- `mcp__canopy__commit(address=...)` records the resolution into memory automatically (mirrors `bot_resolutions.json`).
+- `mcp__canopy__github_get_pr_comments(alias)` records `comment_read` for each actionable thread + `classifier_resolved` for the temporal-classifier output, deduped per-session.
+
+If you decided something but forgot to call `historian_decide`, end the turn with a `<historian-decisions>[{"title": "...", "rationale": "..."}, ...]</historian-decisions>` block. A future Stop hook (autopilot) will tail-parse it and persist (deduped against the explicit calls).
+
 ## Bot review comments
 
 When `mcp__canopy__feature_state` returns state `awaiting_bot_resolution`, only bot nits (CodeRabbit, Korbit, Cubic, etc.) are blocking — humans haven't requested changes. The `summary` splits the actionable count into `actionable_bot_count` and `actionable_human_count` so you can tell which side needs attention.

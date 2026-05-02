@@ -1,11 +1,14 @@
 ---
-status: queued
+status: in-progress
 priority: P0
 effort: ~1d
 depends_on: []
+delivered_as: docs/architecture/providers.md
 ---
 
 # Architecture: provider-injection contract (issue providers)
+
+> **Delivered as:** [`docs/architecture/providers.md`](../architecture/providers.md). This file is the plan; the architecture doc is the artifact.
 
 ## Why
 

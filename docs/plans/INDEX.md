@@ -24,7 +24,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Core milestones (in dependency order)
 
-- [ ] 🟦 **M0 — Architecture: provider injection** — [providers-arch.md](providers-arch.md) · P0 · ~1d
+- [ ] 🟨 **M0 — Architecture: provider injection** — [providers-arch.md](providers-arch.md) · P0 · ~1d · *in-progress*
   Provider-injection contract for issue providers (Linear, GitHub Issues, JIRA shape). Design reference; code lands in M5.
 - [ ] 🟦 **M1 — `canopy doctor`** — [doctor.md](doctor.md) · P0 · ~3-4d
   State-file integrity + install-staleness recovery. 15 diagnostic categories, single `canopy doctor` command, `--version` handshake.

@@ -11,5 +11,6 @@ pytest-cache-files-*/
 venv/
 .env
 .canopy/
+.worktrees/
 node_modules/
 .DS_Store

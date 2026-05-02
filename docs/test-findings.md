@@ -31,17 +31,15 @@ First end-to-end pass against [`docs/test-plan.md`](test-plan.md). Workspace: `~
 - **Fix:** [PR #16](https://github.com/ashmitb95/canopy/pull/16) — bumped to `0.5.0`, added `CHANGELOG.md`, added a CLAUDE.md guard.
 - **Lesson:** version bump should happen in the same PR as the milestone it represents. Going forward, the CLAUDE.md note covers it.
 
-### F-1: `canopy setup-agent --check` requires a workspace
+### F-1: "no canopy.toml found" error is unhelpful
 
-Running `canopy setup-agent --check --json` from a directory without `canopy.toml` errors with "No canopy.toml found." But the skill check is global (`~/.claude/skills/`) and doesn't need a workspace; only the MCP-config check does.
+Running any workspace-scoped command (e.g. `canopy setup-agent --check`, `canopy state`, `canopy preflight`) from outside a workspace prints `Error: No canopy.toml found in current directory or any parent.` That's technically true, but doesn't tell a new user *what* a workspace is or *why* canopy can't proceed.
 
-- **Repro:** `cd / && canopy setup-agent --check` → "Error: No canopy.toml found in current directory or any parent."
-- **Expected:** skill section reports normally; MCP section reports "no workspace; skipped" with the same JSON shape.
-- **Severity:** low — workaround is to run from inside a workspace.
-- **Fix:** in `cmd_setup_agent` (cli/main.py), make the workspace lookup tolerant; if it fails, render the skill section anyway and stub MCP.
-
-^For F1, we should just show an error and that canopy needs a workspace that is a non-git directory
-
+- **Repro:** `cd / && canopy setup-agent --check` → terse "No canopy.toml found" error.
+- **Decision (per user):** **don't gracefully degrade** (e.g. partial setup-agent reports without MCP). Fail loud and clear with an error message that explains canopy's mental model:
+  > Canopy needs to be run from a **canopy workspace** — a non-git directory that contains `canopy.toml` plus the participating repos as subdirectories. Run `canopy init` in such a directory to create one.
+- **Severity:** low individually; medium for new-user friction (this is the first error a fresh install hits).
+- **Fix:** centralize the "no canopy.toml" error rendering in one place (`cli/render.py` or a small helper in `cli/main.py`) so every command that depends on a workspace prints the same, helpful message — and exits non-zero (see F-2).
 
 ### F-2: error path returns exit code 0
 
@@ -141,7 +139,7 @@ This is the recovery scenario M1 was built for. Detection works end-to-end again
 
 - [ ] **F-7 fix (P0)** — make alias resolver provider-aware. The CLI for any non-Linear provider is currently dead. ~half-day. Could compose with Phil's `issue_resolver.py` if his PR lands first.
 - [ ] **F-6 fix (P1)** — make `cmd_issue` render `Issue.to_dict()` directly so CLI + MCP agree. Drop the legacy raw-state shape. Update docs/commands.md. ~30 min.
-- [ ] **F-1 / F-2 + F-2-generalized fix (P1)** — `cli/main.py` cleanup: workspace-tolerant `--check`, non-zero exit on every error path. ~30 min.
+- [ ] **F-1 + F-2 + F-2-generalized fix (P1)** — centralize the "no canopy.toml" error in one helper that prints the workspace-explainer message and exits non-zero. Apply to every workspace-scoped command. Plus: every CLI path that emits a BlockerError JSON should `sys.exit(1)`. ~30 min.
 - [ ] **F-5 fix (P2)** — add `cmd_issues` for parity with the MCP `issue_list_my_issues`, OR defer to Phil's PR (which has it).
 - [ ] **F-3 backlog** — doctor `mcp_orphans` check + reaper.
 - [ ] **F-4 backlog** — Linear-headless smoke test using cached tokens; document the OAuth-required-in-tty constraint in docs/mcp.md.

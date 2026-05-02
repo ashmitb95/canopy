@@ -24,8 +24,6 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Core milestones (in dependency order)
 
-- [ ] 🟦 **M0 — Architecture: provider injection** — [providers-arch.md](providers-arch.md) · P0 · ~1d
-  Provider-injection contract for issue providers (Linear, GitHub Issues, JIRA shape). Design reference; code lands in M5.
 - [ ] 🟦 **M1 — `canopy doctor`** — [doctor.md](doctor.md) · P0 · ~3-4d
   State-file integrity + install-staleness recovery. 15 diagnostic categories, single `canopy doctor` command, `--version` handshake.
 - [ ] 🟦 **M2 — Augment skill** — [augments.md](augments.md) · P1 · ~2-3d · depends on M1
@@ -49,6 +47,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Shipped
 
+- [x] ✅ **M0 — Architecture: provider injection** — [archive/providers-arch.md](archive/providers-arch.md) · delivered as [`docs/architecture/providers.md`](../architecture/providers.md) · shipped 2026-05-02
 - [x] ✅ **Wave 2.3 — `commit` + `push`** — [archive/wave-2-3-commit-push.md](archive/wave-2-3-commit-push.md) · shipped 2026-04-26
 
 ---
@@ -57,9 +56,9 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 | Bucket | Milestones | Estimate |
 |---|---|---|
-| Core (M0–M5) | 6 | ~17–20 days |
+| Core (M1–M5) | 5 | ~16–19 days |
 | Quality-of-life (M6–M12) | 7 | ~13–18 days |
-| **Total queued** | **13** | **~30–38 days** |
+| **Total queued** | **12** | **~29–37 days** |
 
 ---
 

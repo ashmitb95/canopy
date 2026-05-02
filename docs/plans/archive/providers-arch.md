@@ -1,11 +1,15 @@
 ---
-status: queued
+status: shipped
+shipped_at: 2026-05-02
 priority: P0
 effort: ~1d
 depends_on: []
+delivered_as: docs/architecture/providers.md
 ---
 
 # Architecture: provider-injection contract (issue providers)
+
+> **Shipped 2026-05-02.** Delivered as [`docs/architecture/providers.md`](../../architecture/providers.md). This file is the historical plan; the architecture doc is the live artifact.
 
 ## Why
 

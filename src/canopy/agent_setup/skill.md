@@ -28,7 +28,7 @@ Canopy also returns **pre-classified state**: review comments are temporally fil
 | Read PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + manual filter |
 | Get PR data (title, decision, draft, ...) | `mcp__canopy__github_get_pr` | `gh pr view --json ...` per repo |
 | Get branch HEAD/divergence/upstream | `mcp__canopy__github_get_branch` | `cd repo && git status -b` |
-| Fetch a Linear issue | `mcp__canopy__linear_get_issue` | direct API |
+| Fetch an issue (Linear / GitHub Issues — provider-agnostic) | `mcp__canopy__issue_get` | direct API |
 | Run a shell command in a specific repo | `mcp__canopy__run` | `cd /path && cmd` (path mistake risk) |
 | Stash dirty changes for a feature | `mcp__canopy__stash_save_feature` | raw `git stash push` |
 | List/restore stashes by feature | `mcp__canopy__stash_list_grouped` / `stash_pop_feature` | `git stash list` + manual filter |

@@ -262,24 +262,37 @@ class TestResolveAlias:
 
 
 class TestLinkLinearIssue:
-    """Tests for coordinator.link_linear_issue — attaches a Linear issue to an existing lane."""
+    """Tests for coordinator.link_linear_issue — attaches an issue from
+    the workspace's configured provider to an existing lane.
+
+    After M5 the method routes through the provider registry; tests mock
+    ``canopy.providers.get_issue_provider`` and pass back canonical
+    ``Issue`` instances rather than raw Linear dicts."""
+
+    def _patch_provider(self, monkeypatch, fake_issue):
+        from unittest.mock import MagicMock
+        provider = MagicMock()
+        provider.get_issue.return_value = fake_issue
+        monkeypatch.setattr(
+            "canopy.features.coordinator.get_issue_provider",
+            lambda _ws: provider,
+        )
+        return provider
 
     def test_happy_path(self, canopy_toml, monkeypatch):
+        from canopy.providers.types import Issue
+
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coord = FeatureCoordinator(ws)
         coord.create("payment-flow")
 
-        fake_issue = {
-            "identifier": "SIN-777",
-            "title": "Add Stripe webhook",
-            "state": "Todo",
-            "url": "https://linear.app/x/SIN-777",
-        }
-        monkeypatch.setattr(
-            "canopy.integrations.linear.get_issue",
-            lambda root, issue_id: fake_issue,
+        fake_issue = Issue(
+            id="SIN-777", identifier="SIN-777",
+            title="Add Stripe webhook", state="todo",
+            url="https://linear.app/x/SIN-777",
         )
+        self._patch_provider(monkeypatch, fake_issue)
 
         lane = coord.link_linear_issue("payment-flow", "SIN-777")
         assert lane.linear_issue == "SIN-777"
@@ -292,48 +305,45 @@ class TestLinkLinearIssue:
         assert persisted["payment-flow"]["linear_title"] == "Add Stripe webhook"
 
     def test_unknown_feature_raises(self, canopy_toml, monkeypatch):
+        from canopy.providers.types import Issue
+
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coord = FeatureCoordinator(ws)
 
-        monkeypatch.setattr(
-            "canopy.integrations.linear.get_issue",
-            lambda root, issue_id: {"identifier": issue_id, "title": "x", "url": ""},
-        )
+        self._patch_provider(monkeypatch, Issue(id="x", identifier="x", title="x"))
 
         with pytest.raises(ValueError, match="not found in features.json"):
             coord.link_linear_issue("nonexistent-feature", "SIN-123")
 
     def test_linear_not_configured_propagates(self, canopy_toml):
-        from canopy.integrations.linear import LinearNotConfiguredError
+        from canopy.providers.types import ProviderNotConfigured
 
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coord = FeatureCoordinator(ws)
         coord.create("needs-linking")
 
-        # No mcps.json → get_issue raises LinearNotConfiguredError, which should
-        # bubble up so the caller can surface a helpful message.
-        with pytest.raises(LinearNotConfiguredError):
+        # No mcps.json → provider raises ProviderNotConfigured, which
+        # should bubble up so the caller can surface a helpful message.
+        with pytest.raises(ProviderNotConfigured):
             coord.link_linear_issue("needs-linking", "SIN-123")
 
     def test_alias_resolution(self, canopy_toml, monkeypatch):
         """Linking with a prefix alias resolves to the full feature name."""
+        from canopy.providers.types import Issue
+
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coord = FeatureCoordinator(ws)
         coord.create("SIN-900-long-name")
 
-        fake_issue = {
-            "identifier": "SIN-900",
-            "title": "Linked later",
-            "state": "In Progress",
-            "url": "https://linear.app/x/SIN-900",
-        }
-        monkeypatch.setattr(
-            "canopy.integrations.linear.get_issue",
-            lambda root, issue_id: fake_issue,
+        fake_issue = Issue(
+            id="SIN-900", identifier="SIN-900",
+            title="Linked later", state="in_progress",
+            url="https://linear.app/x/SIN-900",
         )
+        self._patch_provider(monkeypatch, fake_issue)
 
         lane = coord.link_linear_issue("SIN-900", "SIN-900")
         assert lane.name == "SIN-900-long-name"

@@ -357,11 +357,16 @@ def stash_pop_feature(feature: str, repos: list[str] | None = None) -> dict:
 
 @mcp.tool()
 def linear_get_issue(alias: str) -> dict:
-    """Fetch a Linear issue by alias.
+    """Deprecated. Use ``issue_get`` instead.
+
+    Provider-agnostic alias surviving from the pre-M5 era. Forwards to
+    the configured issue provider via ``actions.reads.linear_get_issue``;
+    same return shape (``{alias, issue_id, title, state, url, description, raw}``).
+    Will be removed in a future release.
 
     Accepts:
-      - Linear issue ID directly (e.g. 'ENG-412', 'DOC-3029')
-      - Feature alias whose lane has a linked linear_issue
+      - Provider-native issue ID (Linear ``"SIN-7"``, GH ``"#142"``)
+      - Feature alias whose lane has a linked issue
     """
     from ..actions.reads import linear_get_issue as _impl
     ws = _get_workspace()
@@ -1110,56 +1115,118 @@ def workspace_reinit(name: str | None = None, dry_run: bool = False) -> dict:
     }
 
 
-# ── Linear ───────────────────────────────────────────────────────────────
+# ── Issue providers ──────────────────────────────────────────────────────
+
 
 @mcp.tool()
-def linear_my_issues(limit: int = 25) -> list[dict] | dict:
-    """List open Linear issues assigned to the current user.
+def issue_get(alias: str) -> dict:
+    """Fetch an issue from the workspace's configured issue provider.
 
-    Returns an empty list when the Linear MCP isn't configured — callers
-    (e.g. the VSCode extension's Create Feature quick pick) treat this
-    as "no autocomplete available."
+    Routes through the provider registry (M5). The workspace's
+    ``[issue_provider]`` block in canopy.toml selects the backend
+    (Linear / GitHub Issues / future). Aliases are provider-native:
+    Linear ``"SIN-7"``, GitHub ``"#142"`` or ``"owner/repo#142"``.
 
-    Returns a structured ``BlockerError``-shaped dict when Linear IS
-    configured but every call attempt failed (schema mismatch, network,
-    auth). The agent reads ``code='linear_call_failed'`` and the
-    ``attempts`` array instead of mistaking the empty list for "you have
-    no issues."
+    Returns the canonical Issue dict (id, identifier, title, description,
+    state, url, assignee, labels, priority, raw).
 
-    Args:
-        limit: Maximum issues to return (default 25).
-
-    Returns:
-        Either ``[{identifier, title, state, url}, ...]`` on success /
-        not-configured, or a ``BlockerError`` dict on call failure.
+    On not-configured / not-found / call-failed: returns a structured
+    BlockerError dict so the agent can react programmatically.
     """
-    from ..integrations.linear import (
-        list_my_issues_strict, is_linear_configured, LinearCallError,
+    from ..providers import (
+        IssueNotFoundError, ProviderNotConfigured, IssueProviderError,
+        get_issue_provider,
     )
     from ..actions.errors import BlockerError, FixAction
     ws = _get_workspace()
-    if not is_linear_configured(ws.config.root):
-        return []
     try:
-        return list_my_issues_strict(ws.config.root, limit=limit)
-    except LinearCallError as e:
+        provider = get_issue_provider(ws)
+        issue = provider.get_issue(alias)
+    except ProviderNotConfigured as e:
         return BlockerError(
-            code="linear_call_failed",
-            what="Every Linear MCP call attempt failed",
-            details={
-                "attempts": [
-                    {"tool": tool, "args": args, "error": err}
-                    for tool, args, err in e.attempts
-                ],
-            },
+            code="issue_provider_not_configured",
+            what=f"Issue provider '{ws.config.issue_provider.name}' is not configured",
+            details={"alias": alias, "error": str(e)},
             fix_actions=[
                 FixAction(
-                    action="configure_mcp", args={"server": "linear"},
+                    action="configure_provider",
+                    args={"provider": ws.config.issue_provider.name},
                     safe=True,
-                    preview="verify the linear entry in .canopy/mcps.json and OAuth tokens",
+                    preview=f"configure {ws.config.issue_provider.name} per docs/architecture/providers.md §4",
                 ),
             ],
         ).to_dict()
+    except IssueNotFoundError as e:
+        return BlockerError(
+            code="issue_not_found",
+            what=f"Issue '{alias}' not found",
+            details={"alias": alias, "error": str(e)},
+        ).to_dict()
+    except IssueProviderError as e:
+        return BlockerError(
+            code="issue_provider_failed",
+            what=f"Issue provider call failed",
+            details={"alias": alias, "error": str(e)},
+        ).to_dict()
+    return issue.to_dict()
+
+
+@mcp.tool()
+def issue_list_my_issues(limit: int = 25) -> list[dict] | dict:
+    """List the current user's open issues from the configured provider.
+
+    Returns ``[]`` when the provider isn't configured (no autocomplete
+    available). Returns a structured BlockerError-shaped dict when the
+    provider IS configured but the call failed.
+
+    Args:
+        limit: Maximum issues to return (default 25).
+    """
+    from ..providers import (
+        IssueProviderError, ProviderNotConfigured, get_issue_provider,
+    )
+    from ..actions.errors import BlockerError, FixAction
+    ws = _get_workspace()
+    try:
+        provider = get_issue_provider(ws)
+    except ProviderNotConfigured:
+        return []
+    try:
+        issues = provider.list_my_issues(limit=limit)
+    except ProviderNotConfigured:
+        return []
+    except IssueProviderError as e:
+        return BlockerError(
+            code="issue_provider_failed",
+            what="Issue provider list call failed",
+            details={"provider": ws.config.issue_provider.name, "error": str(e)},
+            fix_actions=[
+                FixAction(
+                    action="configure_provider",
+                    args={"provider": ws.config.issue_provider.name},
+                    safe=True,
+                    preview=f"verify {ws.config.issue_provider.name} config in canopy.toml + .canopy/mcps.json",
+                ),
+            ],
+        ).to_dict()
+    return [i.to_dict() for i in issues]
+
+
+# ── Linear (deprecated aliases — kept one release cycle for backwards compat) ──
+
+
+@mcp.tool()
+def linear_my_issues(limit: int = 25) -> list[dict] | dict:
+    """Deprecated. Use ``issue_list_my_issues`` instead.
+
+    Provider-agnostic alias surviving from the pre-M5 era. Forwards to
+    ``issue_list_my_issues``; same return shape. Will be removed in a
+    future release.
+
+    Args:
+        limit: Maximum issues to return (default 25).
+    """
+    return issue_list_my_issues(limit=limit)
 
 
 @mcp.tool()

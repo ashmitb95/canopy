@@ -34,8 +34,8 @@ Live status of canopy's planned work. Update this file as milestones progress; e
   Distinguish bot vs human review comments, `commit --address <id>`, new `awaiting_bot_resolution` state.
 - [ ] 🟦 **M4 — Historian** — [historian.md](historian.md) · P1 · ~5-6d · depends on M3
   Cross-session feature memory at `.canopy/memory/<feature>.md`. Auto-read on `canopy switch`.
-- [ ] 🟦 **M5 — Issue-provider scaffold** — see [providers-arch.md §7](providers-arch.md) · P1 · ~3-4d · depends on M0
-  Linear refactored into the contract; GitHub Issues backend. Closes [#5](https://github.com/ashmitb95/canopy/issues/5).
+- [x] ✅ **M5 — Issue-provider scaffold** — [archive/issue-providers.md](archive/issue-providers.md) · shipped 2026-04-27
+  Linear refactored into the contract; GitHub Issues backend. New `issue_get` / `issue_list_my_issues` MCP tools; old `linear_*` retained as deprecated aliases. Closes [#5](https://github.com/ashmitb95/canopy/issues/5).
 
 ### Quality-of-life additions (slot in alongside or after the core)
 
@@ -49,6 +49,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Shipped
 
+- [x] ✅ **M5 — Issue-provider scaffold** — [archive/issue-providers.md](archive/issue-providers.md) · shipped 2026-04-27
 - [x] ✅ **M0 — Architecture: provider injection** — [archive/providers-arch.md](archive/providers-arch.md) · delivered as [`docs/architecture/providers.md`](../architecture/providers.md) · shipped 2026-05-02
 - [x] ✅ **Wave 2.3 — `commit` + `push`** — [archive/wave-2-3-commit-push.md](archive/wave-2-3-commit-push.md) · shipped 2026-04-26
 
@@ -58,9 +59,9 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 | Bucket | Milestones | Estimate |
 |---|---|---|
-| Core (M1–M5) | 5 | ~16–19 days |
+| Core (M1–M4) | 4 | ~13–15 days |
 | Quality-of-life (M6–M12) | 7 | ~13–18 days |
-| **Total queued** | **12** | **~29–37 days** |
+| **Total queued** | **11** | **~26–33 days** |
 
 ---
 

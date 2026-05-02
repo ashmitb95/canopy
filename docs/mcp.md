@@ -71,11 +71,13 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 
 | Tool | Description |
 |---|---|
-| `linear_get_issue` | Fetch a Linear issue. Accepts ID (`SIN-412`) or feature alias (resolves via lane's `linear_issue`). |
+| `issue_get` | Fetch an issue from the workspace's configured provider (Linear or GitHub Issues). Accepts a provider-native ID (`SIN-412`, `#142`) or feature alias. M5+. |
+| `issue_list_my_issues` | List the current user's open issues from the configured provider. M5+. |
+| `linear_get_issue` | **Deprecated alias for `issue_get`** — kept for backward compat; will be removed in a future release. |
+| `linear_my_issues` | **Deprecated alias for `issue_list_my_issues`.** |
 | `github_get_pr` | PR data per repo. Accepts feature alias, `<repo>#<n>`, or PR URL. |
 | `github_get_branch` | Branch HEAD/divergence/upstream per repo. Accepts feature or `<repo>:<branch>`. |
 | `github_get_pr_comments` | Temporally classified review comments. Same alias forms as `github_get_pr`. |
-| `linear_my_issues` | List user's open Linear issues. |
 
 #### Run / preflight
 

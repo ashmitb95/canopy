@@ -249,3 +249,33 @@ def test_get_issue_without_root_raises_provider_error():
     p = LinearProvider({})
     with pytest.raises(IssueProviderError):
         p.get_issue("SIN-1")
+
+
+# ── parse_alias (M5+ Provider Protocol method — F-7) ────────────────────
+
+
+def test_parse_alias_recognises_linear_id(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("SIN-412") == "SIN-412"
+    assert p.parse_alias("ENG-1") == "ENG-1"
+    assert p.parse_alias("DOC-12345") == "DOC-12345"
+
+
+def test_parse_alias_case_insensitive(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("sin-7") == "sin-7"
+
+
+def test_parse_alias_handles_whitespace(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("  SIN-7  ") == "SIN-7"
+
+
+def test_parse_alias_returns_none_for_non_linear(tmp_path):
+    p = _provider(tmp_path)
+    # Bare numbers, GH-shaped, feature names — all None for Linear.
+    assert p.parse_alias("142") is None
+    assert p.parse_alias("#142") is None
+    assert p.parse_alias("owner/repo#142") is None
+    assert p.parse_alias("auth-flow") is None
+    assert p.parse_alias("https://github.com/o/r/issues/5") is None

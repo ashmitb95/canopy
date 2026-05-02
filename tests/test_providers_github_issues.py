@@ -131,8 +131,11 @@ def test_get_issue_empty_response_raises_not_found(tmp_path):
 # ── list_my_issues ───────────────────────────────────────────────────────
 
 
-def test_list_my_issues_builds_query(tmp_path):
-    p = _provider(tmp_path, labels_filter=["bug"])
+def test_list_my_issues_uses_gh_issue_list_with_flags(tmp_path):
+    """F-10: must use ``gh issue list`` with --repo/--state/--assignee/--label
+    flags. ``gh search issues`` treats positional arg as search text and
+    chokes on qualifiers like ``repo:owner/repo``."""
+    p = _provider(tmp_path, labels_filter=["bug", "p0"])
     captured: dict = {}
 
     def fake_gh(args):
@@ -146,13 +149,16 @@ def test_list_my_issues_builds_query(tmp_path):
         issues = p.list_my_issues()
     assert len(issues) == 2
     args = captured["args"]
-    # query is the third positional arg after "search", "issues"
-    query = args[2]
-    assert "repo:owner/repo" in query
-    assert "is:open" in query
-    assert "is:issue" in query
-    assert "assignee:@me" in query
-    assert 'label:"bug"' in query
+    # First two args are the subcommand. NOT "search issues".
+    assert args[:2] == ["issue", "list"]
+    # Qualifiers are CLI flags, not embedded in a search query.
+    assert "--repo" in args and args[args.index("--repo") + 1] == "owner/repo"
+    assert "--state" in args and args[args.index("--state") + 1] == "open"
+    assert "--assignee" in args and args[args.index("--assignee") + 1] == "@me"
+    # Both labels passed as separate --label flags
+    label_indices = [i for i, a in enumerate(args) if a == "--label"]
+    assert len(label_indices) == 2
+    assert {args[i + 1] for i in label_indices} == {"bug", "p0"}
 
 
 def test_list_my_issues_returns_empty_when_no_results(tmp_path):
@@ -225,3 +231,44 @@ def test_to_issue_falls_back_to_default_repo_for_url():
     raw = {"number": 7, "title": "x", "state": "open"}
     issue = _to_issue(raw, default_repo="default/repo")
     assert issue.url == "https://github.com/default/repo/issues/7"
+
+
+# ── parse_alias (M5+ Provider Protocol method — F-7) ────────────────────
+
+
+def test_parse_alias_bare_number(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("142") == "142"
+
+
+def test_parse_alias_hash_number(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("#142") == "142"
+
+
+def test_parse_alias_owner_repo_form(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("owner/repo#142") == "owner/repo#142"
+
+
+def test_parse_alias_full_url(tmp_path):
+    p = _provider(tmp_path)
+    out = p.parse_alias("https://github.com/owner/repo/issues/142")
+    assert out == "owner/repo#142"
+
+
+def test_parse_alias_url_with_trailing_slash(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("https://github.com/o/r/issues/9/") == "o/r#9"
+
+
+def test_parse_alias_returns_none_for_unrecognized(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("auth-flow") is None
+    assert p.parse_alias("SIN-412") is None
+    assert p.parse_alias("not an issue") is None
+
+
+def test_parse_alias_handles_whitespace(tmp_path):
+    p = _provider(tmp_path)
+    assert p.parse_alias("  142  ") == "142"

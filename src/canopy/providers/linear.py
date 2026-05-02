@@ -238,6 +238,19 @@ class LinearProvider:
             "Track via a future plan if you need write-back.",
         )
 
+    def parse_alias(self, alias: str) -> str | None:
+        """Recognize Linear-shaped IDs like ``ENG-412`` (``[A-Z]+-\\d+``).
+
+        Returns the alias unchanged when it matches; ``None`` otherwise
+        so the resolver falls back to feature-lane lookup.
+        """
+        if _LINEAR_ID_PATTERN.match(alias.strip()):
+            return alias.strip()
+        return None
+
+
+_LINEAR_ID_PATTERN = re.compile(r"^[A-Z]+-\d+$", re.IGNORECASE)
+
 
 # ── Module-level parsers (kept module-level so tests can mock easily) ──
 

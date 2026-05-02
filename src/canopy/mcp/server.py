@@ -1286,11 +1286,19 @@ def issue_get(alias: str) -> dict:
         IssueNotFoundError, ProviderNotConfigured, IssueProviderError,
         get_issue_provider,
     )
-    from ..actions.errors import BlockerError, FixAction
+    from ..actions.aliases import resolve_issue_id
+    from ..actions.errors import ActionError, BlockerError, FixAction
     ws = _get_workspace()
     try:
+        # Resolve through the M5 alias layer so feature names + provider-
+        # native ids both work: SIN-412 / 5 / #5 / owner/repo#5 / URL /
+        # auth-flow (looks up linked issue id from features.json).
+        try:
+            resolved = resolve_issue_id(ws, alias)
+        except ActionError as err:
+            return err.to_dict()
         provider = get_issue_provider(ws)
-        issue = provider.get_issue(alias)
+        issue = provider.get_issue(resolved)
     except ProviderNotConfigured as e:
         return BlockerError(
             code="issue_provider_not_configured",

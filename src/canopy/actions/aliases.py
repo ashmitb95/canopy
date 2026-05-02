@@ -144,19 +144,64 @@ def repos_for_feature(
     return out
 
 
-def resolve_linear_id(workspace: Workspace, alias: str) -> str:
-    """Resolve an alias to a Linear issue ID.
+def resolve_issue_id(workspace: Workspace, alias: str) -> str:
+    """Resolve an alias to the active issue provider's canonical id (M5+).
 
-    Accepts:
-      - Linear ID directly (e.g. ``ENG-412``) — returned as-is.
-      - Feature alias — looks up ``linear_issue`` from features.json.
+    Resolution order:
+      1. **Provider parse** — ask the configured provider whether it
+         recognises the alias shape (e.g. ``SIN-412`` for Linear,
+         ``5`` / ``#5`` / ``owner/repo#5`` / GitHub URL for GitHub Issues).
+         If yes, use the provider-canonicalised form.
+      2. **Feature-lane lookup** — treat the alias as a feature name
+         (e.g. ``auth-flow``) and read ``linear_issue`` from
+         features.json. (The field is still named ``linear_issue`` for
+         back-compat; treat it as "linked issue id".)
+      3. **Fail loud** — ``BlockerError(code='no_linked_issue')`` with
+         helpful fix actions.
 
-    Raises ``BlockerError`` if no Linear ID can be derived.
+    Replaces the pre-M5 ``resolve_linear_id`` (kept as a deprecated
+    alias below), which only knew about Linear-shaped IDs and broke the
+    CLI for any other provider — see test-findings F-7.
     """
-    if _LINEAR_ID.match(alias):
-        return alias
+    from ..providers import get_issue_provider, ProviderNotConfigured
 
-    feature_name = resolve_feature(workspace, alias)
+    # Step 1 — provider parse.
+    try:
+        provider = get_issue_provider(workspace)
+    except ProviderNotConfigured:
+        provider = None
+    if provider is not None:
+        try:
+            parsed = provider.parse_alias(alias)
+        except AttributeError:
+            # Older provider that hasn't implemented parse_alias yet —
+            # fall through to feature-lane lookup.
+            parsed = None
+        if parsed:
+            return parsed
+
+    # Step 2 — feature-lane lookup.
+    try:
+        feature_name = resolve_feature(workspace, alias)
+    except BlockerError:
+        # Not a recognised provider shape AND not a feature name.
+        # Re-raise with provider-aware fix-actions.
+        provider_name = (
+            workspace.config.issue_provider.name
+            if hasattr(workspace.config, "issue_provider")
+            else "issue provider"
+        )
+        raise BlockerError(
+            code="unknown_alias",
+            what=f"alias '{alias}' isn't a {provider_name} id, an issue URL, or a feature name",
+            details={"alias": alias, "provider": provider_name},
+            fix_actions=[
+                FixAction(
+                    action="list", args={}, safe=True,
+                    preview="canopy list shows all feature lanes",
+                ),
+            ],
+        )
 
     from ..features.coordinator import FeatureCoordinator
     features = FeatureCoordinator(workspace)._load_features()
@@ -164,19 +209,45 @@ def resolve_linear_id(workspace: Workspace, alias: str) -> str:
     linear_id = feature.get("linear_issue")
     if not linear_id:
         raise BlockerError(
-            code="no_linear_id",
-            what=f"feature '{feature_name}' has no linked Linear issue",
+            code="no_linked_issue",
+            what=f"feature '{feature_name}' has no linked issue",
             details={"alias": alias, "feature": feature_name},
             fix_actions=[
                 FixAction(
                     action="feature_link_linear",
                     args={"feature": feature_name, "issue": "<ID>"},
                     safe=True,
-                    preview="link a Linear issue ID to this feature lane",
+                    preview="link an issue id to this feature lane",
                 ),
             ],
         )
     return linear_id
+
+
+# Deprecated alias kept for back-compat with existing imports
+# (linear_get_issue, the legacy MCP tool, tests). New code calls
+# ``resolve_issue_id``.
+def resolve_linear_id(workspace: Workspace, alias: str) -> str:
+    """**Deprecated.** Renamed to ``resolve_issue_id`` (M5+).
+
+    Functionally equivalent — provider-aware when the workspace has an
+    ``[issue_provider]`` configured. The old name leaks Linear-ness;
+    new call sites should use ``resolve_issue_id``. The legacy error
+    code ``no_linear_id`` is also reissued as ``no_linked_issue``.
+    """
+    try:
+        return resolve_issue_id(workspace, alias)
+    except BlockerError as err:
+        # Surface the legacy code so existing assertions on
+        # ``no_linear_id`` keep working until callers migrate.
+        if err.code == "no_linked_issue":
+            raise BlockerError(
+                code="no_linear_id",
+                what=err.what,
+                details=err.details,
+                fix_actions=err.fix_actions,
+            ) from None
+        raise
 
 
 def resolve_pr_targets(workspace: Workspace, alias: str) -> list[PRTarget]:

@@ -100,19 +100,27 @@ class GitHubIssuesProvider:
 
     def list_my_issues(self, limit: int = 50) -> list[Issue]:
         """Return open GitHub issues assigned to the current user, scoped
-        to the configured repo. Honors ``labels_filter`` when set."""
-        query_parts = [f"repo:{self.repo}", "is:open", "is:issue", "assignee:@me"]
+        to the configured repo. Honors ``labels_filter`` when set.
+
+        Uses ``gh issue list`` (not ``gh search issues``) — the search form
+        treats positional args as search *text*, so passing qualifiers like
+        ``repo:...`` and ``is:open`` quotes them as a single text token and
+        the API returns "Invalid search query." See test-findings F-10.
+        """
+        args = [
+            "issue", "list",
+            "--repo", self.repo,
+            "--state", "open",
+            "--assignee", "@me",
+            "--limit", str(limit),
+            "--json", "number,title,state,body,url,assignees,labels",
+        ]
         if self.labels_filter:
             for label in self.labels_filter:
-                query_parts.append(f'label:"{label}"')
-        query = " ".join(query_parts)
+                args.extend(["--label", label])
 
         try:
-            raw_list = _gh_json([
-                "search", "issues", query,
-                "--limit", str(limit),
-                "--json", "number,title,state,body,url,assignees,labels,repository",
-            ])
+            raw_list = _gh_json(args)
         except GitHubNotConfiguredError as e:
             raise ProviderNotConfigured(str(e)) from e
 
@@ -146,6 +154,28 @@ class GitHubIssuesProvider:
         raise NotImplementedError(
             "GitHubIssuesProvider.update_issue_state is not implemented in v1.",
         )
+
+    def parse_alias(self, alias: str) -> str | None:
+        """Recognize GitHub-shaped aliases. See ``_GH_ALIAS`` shapes.
+
+        Returns the canonical alias string (which ``get_issue`` can
+        consume) when recognized, ``None`` otherwise.
+        """
+        s = alias.strip()
+        # Full issue URL — return the issue id (provider knows its repo).
+        url_match = re.match(
+            r"^https?://github\.com/([\w\-.]+)/([\w\-.]+)/issues/(\d+)/?$", s,
+        )
+        if url_match:
+            owner, repo, num = url_match.group(1), url_match.group(2), url_match.group(3)
+            return f"{owner}/{repo}#{num}"
+        # owner/repo#N
+        if re.match(r"^[\w\-.]+/[\w\-.]+#\d+$", s):
+            return s
+        # #N or bare N
+        if re.match(r"^#?\d+$", s):
+            return s.lstrip("#")
+        return None
 
     # ── Internal ────────────────────────────────────────────────────────
 

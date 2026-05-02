@@ -1762,6 +1762,63 @@ def cmd_issue(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_issues(args: argparse.Namespace) -> None:
+    """List the current user's open issues from the configured provider (F-5).
+
+    Mirrors ``mcp__canopy__issue_list_my_issues``. Empty list when the
+    provider isn't configured (no autocomplete signal). Each entry is
+    the canonical ``Issue.to_dict()`` shape.
+    """
+    from ..providers import (
+        IssueProviderError, ProviderNotConfigured, get_issue_provider,
+    )
+    from ..actions.errors import BlockerError, FixAction
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        provider = get_issue_provider(workspace)
+        issues = provider.list_my_issues(limit=args.limit)
+    except ProviderNotConfigured:
+        if args.json:
+            _print_json([])
+        else:
+            console.print("  [muted]no issue provider configured[/]")
+        return
+    except IssueProviderError as e:
+        err = BlockerError(
+            code="issue_provider_failed",
+            what="issue provider call failed",
+            details={"error": str(e)},
+            fix_actions=[
+                FixAction(action="doctor", args={}, safe=True,
+                            preview="canopy doctor surfaces provider config drift"),
+            ],
+        )
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="issues")
+        sys.exit(1)
+
+    items = [i.to_dict() for i in issues]
+    if args.json:
+        _print_json(items)
+        return
+    console.print()
+    if not items:
+        console.print("  [muted]no open issues[/]")
+        console.print()
+        return
+    for it in items:
+        identifier = it.get("identifier") or it.get("id") or ""
+        state = it.get("state") or ""
+        title = it.get("title") or ""
+        console.print(f"  [feature]{identifier}[/]  [muted]{state}[/]  {title}")
+    console.print()
+
+
 def cmd_pr(args: argparse.Namespace) -> None:
     """Fetch PR data per repo for an alias."""
     from ..actions.reads import github_get_pr
@@ -3010,13 +3067,23 @@ def main() -> None:
                          help="Limit to a specific feature lane")
     drift_p.add_argument("--json", action="store_true", help="Output as JSON")
 
-    # issue (Linear)
+    # issue — fetch one issue from the configured provider (M5+)
     issue_p = subparsers.add_parser(
         "issue",
-        help="Fetch a Linear issue (alias = ID like ENG-412 or feature alias)",
+        help="Fetch an issue from the workspace provider (Linear / GitHub Issues)",
     )
-    issue_p.add_argument("alias", help="Linear ID or feature alias")
+    issue_p.add_argument("alias",
+                          help="Provider-native id (SIN-412 / 5 / #5 / owner/repo#5 / URL) or feature alias")
     issue_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # issues — list current user's open issues from the configured provider (F-5)
+    issues_p = subparsers.add_parser(
+        "issues",
+        help="List the current user's open issues from the workspace provider",
+    )
+    issues_p.add_argument("--limit", type=int, default=25,
+                            help="Max issues to return (default 25)")
+    issues_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # pr (GitHub)
     pr_p = subparsers.add_parser(
@@ -3122,6 +3189,7 @@ def main() -> None:
         "drift": cmd_drift,
         "run": cmd_run,
         "issue": cmd_issue,
+        "issues": cmd_issues,
         "pr": cmd_pr,
         "comments": cmd_comments,
         "switch": cmd_switch,

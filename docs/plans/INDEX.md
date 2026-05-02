@@ -2,7 +2,7 @@
 
 Live status of canopy's planned work. Update this file as milestones progress; each plan's frontmatter is the per-plan source of truth, this doc is the rolled-up dashboard.
 
-**Last updated:** 2026-05-02 (M0, M1, M2, M3, M5 shipped; M4 in-progress)
+**Last updated:** 2026-05-02 (M0, M1, M2, M3, M4, M5 shipped — entire core chain done)
 **Roadmap:** [roadmap.md](roadmap.md) — full architecture context, cross-cutting decisions, sequencing rationale
 
 ## Status legend
@@ -28,8 +28,8 @@ Live status of canopy's planned work. Update this file as milestones progress; e
   Per-workspace `[augments]` block in canopy.toml + opt-in `augment-canopy` skill. Wires `preflight_cmd`; reserves `review_bots` (M3) and `test_cmd` (future).
 - [x] ✅ **M3 — Bot-comment tracking** — [archive/bot-tracking.md](archive/bot-tracking.md) · shipped 2026-05-02
   Bot vs human comment classification, `commit --address <id>`, `awaiting_bot_resolution` state, `bot-status` rollup.
-- [ ] 🟨 **M4 — Historian** — [historian.md](historian.md) · P1 · ~5-6d · depends on M3
-  Cross-session feature memory at `.canopy/memory/<feature>.md`. Auto-read on `canopy switch`.
+- [x] ✅ **M4 — Historian** — [archive/historian.md](archive/historian.md) · shipped 2026-05-02
+  `.canopy/memory/<feature>.md` per-feature memory; auto-read on `canopy switch`; in-canopy auto-capture from `commit --address` + `github_get_pr_comments`. Autopilot Stop/PostToolUse hooks (categories 2/7/8) deferred.
 - [x] ✅ **M5 — Issue-provider scaffold** — [archive/issue-providers.md](archive/issue-providers.md) · shipped 2026-04-27
   Linear refactored into the contract; GitHub Issues backend. New `issue_get` / `issue_list_my_issues` MCP tools; old `linear_*` retained as deprecated aliases. Closes [#5](https://github.com/ashmitb95/canopy/issues/5).
 
@@ -45,6 +45,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Shipped
 
+- [x] ✅ **M4 — Historian** — [archive/historian.md](archive/historian.md) · shipped 2026-05-02 (PR #14)
 - [x] ✅ **M3 — Bot-comment tracking** — [archive/bot-tracking.md](archive/bot-tracking.md) · shipped 2026-05-02 (PR #12)
 - [x] ✅ **M2 — Augment skill** — [archive/augments.md](archive/augments.md) · shipped 2026-05-02 (PR #10)
 - [x] ✅ **M5 — Issue-provider scaffold** — [archive/issue-providers.md](archive/issue-providers.md) · shipped 2026-04-27
@@ -58,9 +59,9 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 | Bucket | Milestones | Estimate |
 |---|---|---|
-| Core (M4) | 1 | ~5–6 days |
+| Core | 0 | shipped (M0/M1/M2/M3/M4/M5) |
 | Quality-of-life (M6–M12) | 7 | ~13–18 days |
-| **Total queued** | **8** | **~18–24 days** |
+| **Total queued** | **7** | **~13–18 days** |
 
 ---
 

@@ -18,7 +18,7 @@ from ..providers import (
 from ..workspace.workspace import Workspace
 from .aliases import (
     BranchTarget, PRTarget,
-    resolve_branch_targets, resolve_linear_id, resolve_pr_targets,
+    resolve_branch_targets, resolve_issue_id, resolve_linear_id, resolve_pr_targets,
 )
 from .errors import BlockerError, FixAction
 
@@ -35,7 +35,7 @@ def issue_get(workspace: Workspace, alias: str) -> dict:
     is the legacy wrapper that exposes the raw provider state for
     pre-M5 callers — kept until they migrate.
     """
-    issue_id = resolve_linear_id(workspace, alias)
+    issue_id = resolve_issue_id(workspace, alias)
     provider = get_issue_provider(workspace)
     try:
         issue = provider.get_issue(issue_id)

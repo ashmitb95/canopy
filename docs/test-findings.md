@@ -99,6 +99,16 @@ This is a **major M5 integration gap**: M5 added the Provider Protocol + registr
 
 Retracted along with F-2. Verified `canopy issue 999 --json` exits 1 on BlockerError output.
 
+### F-10: `gh search issues` query construction is malformed
+
+`GitHubIssuesProvider.list_my_issues` builds a query string with qualifiers (`repo:foo`, `is:open`, `assignee:@me`, `label:"bug"`) and passes it positionally to `gh search issues`. But `gh search issues` treats positional args as search *text*, so the whole string gets quoted and the GitHub API responds with `Invalid search query`.
+
+The unit tests for `list_my_issues` mock `_gh_json` and assert on the constructed args — so they happily passed even though the args were nonsense to the real CLI.
+
+- **Severity:** medium — the entire `canopy issues` / `mcp__canopy__issue_list_my_issues` flow was broken for the GitHub Issues backend on real `gh` invocations.
+- **Fix (this PR):** switch to `gh issue list --repo ... --state open --assignee @me --label ...` (the right verb form). Phil's branch already had this pattern.
+- **Lesson:** mocking at `_gh_json` proves the call wiring but not the CLI grammar. A small live-call smoke test (skipped if `gh` isn't authenticated) would have caught this.
+
 ### F-9: `setup-agent --check` only reports the default skill
 
 `canopy setup-agent --check --json` returns `{skill: {...}, mcp: {...}}` — but `skill` is hardcoded to `using-canopy`. After installing `augment-canopy` via `--skill augment-canopy`, the `--check` output still only reports `using-canopy`'s state.
@@ -132,7 +142,9 @@ This is the recovery scenario M1 was built for. Detection works end-to-end again
 
 ## Action items from this run
 
-- [ ] **F-7 fix (P0)** — make alias resolver provider-aware. The CLI for any non-Linear provider is currently dead. ~half-day. Could compose with Phil's `issue_resolver.py` if his PR lands first.
+- [x] **F-7 fix (P0)** — provider-aware alias resolver via `IssueProvider.parse_alias()`. CLI now works for any provider with bare/hash/owner-repo/URL alias forms. Shipped in fix/issue-alias-resolver PR.
+- [x] **F-10 fix (incidental)** — `GitHubIssuesProvider.list_my_issues` was using malformed `gh search issues` query (qualifiers got quoted as text → `Invalid search query`). Switched to `gh issue list --repo ... --assignee @me`. Found while smoke-testing F-5; unit tests had mocked the boundary so they didn't catch it. Shipped in same PR.
+- [x] **F-5 fix (P2)** — added `cmd_issues` for parity with MCP `issue_list_my_issues`. Shipped in same PR.
 - [ ] **F-6 fix (P1)** — make `cmd_issue` render `Issue.to_dict()` directly so CLI + MCP agree. Drop the legacy raw-state shape. Update docs/commands.md. ~30 min.
 - [ ] **F-1 fix (P1)** — improve the "no canopy.toml" error message to explain canopy's mental model (workspace = non-git directory holding repos + canopy.toml). ~10 min.
 - [ ] **F-5 fix (P2)** — add `cmd_issues` for parity with the MCP `issue_list_my_issues`, OR defer to Phil's PR (which has it).

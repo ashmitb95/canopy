@@ -109,6 +109,28 @@ class IssueProvider(Protocol):
         """
         ...
 
+    def parse_alias(self, alias: str) -> str | None:
+        """Recognize a provider-native alias and return its canonical form.
+
+        Returns ``None`` when the alias doesn't look like one this
+        provider can handle — the caller (``actions/aliases.py``) then
+        falls through to feature-lane lookup.
+
+        Examples:
+          - ``LinearProvider.parse_alias("SIN-412")`` → ``"SIN-412"``
+          - ``LinearProvider.parse_alias("5")`` → ``None`` (Linear IDs need a team prefix)
+          - ``GitHubIssuesProvider.parse_alias("5")`` → ``"5"``
+          - ``GitHubIssuesProvider.parse_alias("#5")`` → ``"5"``
+          - ``GitHubIssuesProvider.parse_alias("owner/repo#5")`` → ``"owner/repo#5"``
+          - ``GitHubIssuesProvider.parse_alias("https://github.com/o/r/issues/5")`` → ``"5"``
+
+        Implementations should be cheap (regex / string ops) — no
+        network. The resolver may call this on every CLI input. Existing
+        v1 providers can default to a regex check; future providers
+        plug in their own native shapes.
+        """
+        ...
+
 
 # Provider exceptions. These are the only exceptions providers should
 # raise; the action layer catches them and converts to ``BlockerError``

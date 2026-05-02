@@ -49,7 +49,7 @@ def test_exception_hierarchy():
 
 
 def test_protocol_runtime_check_minimal_impl():
-    """Anything with the four methods passes isinstance(obj, IssueProvider)."""
+    """Anything with the five methods passes isinstance(obj, IssueProvider)."""
 
     class Stub:
         def get_issue(self, alias):  # noqa: ARG002
@@ -63,6 +63,9 @@ def test_protocol_runtime_check_minimal_impl():
 
         def update_issue_state(self, alias, new_state):  # noqa: ARG002
             return None
+
+        def parse_alias(self, alias):  # noqa: ARG002 — F-7
+            return alias
 
     assert isinstance(Stub(), IssueProvider)
 

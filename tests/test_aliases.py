@@ -7,7 +7,8 @@ import pytest
 
 from canopy.actions.aliases import (
     BranchTarget, PRTarget,
-    resolve_branch_targets, resolve_feature, resolve_linear_id, resolve_pr_targets,
+    resolve_branch_targets, resolve_feature, resolve_issue_id,
+    resolve_linear_id, resolve_pr_targets,
 )
 from canopy.actions.errors import BlockerError
 from canopy.workspace.config import RepoConfig, WorkspaceConfig
@@ -136,6 +137,75 @@ def test_resolve_linear_id_no_link_raises(workspace_with_feature):
     with pytest.raises(BlockerError) as exc_info:
         resolve_linear_id(ws, "auth-flow")
     assert exc_info.value.code == "no_linear_id"
+
+
+# ── resolve_issue_id (M5+ provider-aware — F-7) ─────────────────────────
+
+
+def test_resolve_issue_id_linear_id_via_provider(workspace_with_feature):
+    """Linear-shaped ids are recognised by LinearProvider.parse_alias."""
+    ws = _make_workspace(workspace_with_feature)
+    assert resolve_issue_id(ws, "SIN-412") == "SIN-412"
+
+
+def test_resolve_issue_id_github_id_when_provider_swapped(workspace_with_feature):
+    """When the workspace selects github_issues, bare/hash/owner-repo forms work."""
+    from unittest.mock import patch
+    from canopy.providers.github_issues import GitHubIssuesProvider
+    ws = _make_workspace(workspace_with_feature)
+    provider = GitHubIssuesProvider({"repo": "owner/repo"}, workspace_root=workspace_with_feature)
+    # `aliases.py` imports get_issue_provider lazily inside the function — patch at the source module.
+    with patch("canopy.providers.get_issue_provider", return_value=provider):
+        assert resolve_issue_id(ws, "5") == "5"
+        assert resolve_issue_id(ws, "#5") == "5"
+        assert resolve_issue_id(ws, "owner/repo#5") == "owner/repo#5"
+        assert resolve_issue_id(ws, "https://github.com/owner/repo/issues/5") == "owner/repo#5"
+
+
+def test_resolve_issue_id_falls_back_to_feature_lookup(workspace_with_feature):
+    """When the alias isn't a provider-native id, walk features.json."""
+    _features_file(workspace_with_feature, {
+        "auth-flow": {
+            "repos": ["repo-a", "repo-b"], "status": "active",
+            "linear_issue": "SIN-99",
+        },
+    })
+    ws = _make_workspace(workspace_with_feature)
+    assert resolve_issue_id(ws, "auth-flow") == "SIN-99"
+
+
+def test_resolve_issue_id_unknown_alias_blocks(workspace_with_feature):
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    ws = _make_workspace(workspace_with_feature)
+    with pytest.raises(BlockerError) as exc_info:
+        resolve_issue_id(ws, "neither-id-nor-feature")
+    assert exc_info.value.code == "unknown_alias"
+    # Provider name surfaced in the error so the user knows what shapes are expected
+    assert "provider" in (exc_info.value.details or {})
+
+
+def test_resolve_issue_id_feature_without_linked_issue_blocks(workspace_with_feature):
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},  # no linear_issue
+    })
+    ws = _make_workspace(workspace_with_feature)
+    with pytest.raises(BlockerError) as exc_info:
+        resolve_issue_id(ws, "auth-flow")
+    assert exc_info.value.code == "no_linked_issue"
+
+
+def test_resolve_linear_id_back_compat_reissues_legacy_code(workspace_with_feature):
+    """The deprecated wrapper preserves the old ``no_linear_id`` code so
+    existing assertions on it continue to work until callers migrate."""
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    ws = _make_workspace(workspace_with_feature)
+    with pytest.raises(BlockerError) as exc_info:
+        resolve_linear_id(ws, "auth-flow")
+    assert exc_info.value.code == "no_linear_id"   # legacy code preserved
 
 
 # ── resolve_branch_targets ───────────────────────────────────────────────

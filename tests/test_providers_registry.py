@@ -112,6 +112,9 @@ class _NoopProvider:
     def update_issue_state(self, alias, new_state):
         raise NotImplementedError
 
+    def parse_alias(self, alias):  # F-7
+        return alias
+
 
 class _CapturingProvider(_NoopProvider):
     def __init__(self, options=None, *, workspace_root=None):

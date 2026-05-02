@@ -80,6 +80,47 @@ export class CanopyClient {
       this.transport = null;
       throw err;
     }
+    void this.versionHandshake();
+  }
+
+  /**
+   * One-shot version check after connect. The MCP `version` tool returns
+   * `{cli_version, mcp_version, schema_version}`. We log to the output
+   * channel always; surface a toast only on a major-version mismatch so
+   * the user can run `canopy doctor --fix` to converge.
+   *
+   * Best-effort: if the tool isn't registered yet (older canopy-mcp), we
+   * note it once and move on. Doesn't block activation.
+   */
+  private async versionHandshake(): Promise<void> {
+    try {
+      const v = await this.call<{
+        cli_version: string;
+        mcp_version: string;
+        schema_version: string;
+      }>("version");
+      const expected = "0.1.0";   // tracks src/canopy/__init__.py
+      this.outputChannel.appendLine(
+        `[canopy] version: cli=${v.cli_version || "?"} mcp=${v.mcp_version || "?"} schema=${v.schema_version || "?"} (extension expects ${expected})`,
+      );
+      if (v.mcp_version && v.mcp_version !== expected) {
+        const major = (s: string) => (s.split(".")[0] || "");
+        if (major(v.mcp_version) !== major(expected)) {
+          void vscode.window.showWarningMessage(
+            `canopy-mcp ${v.mcp_version} differs from extension expected ${expected}. Run \`canopy doctor --fix\` to resolve.`,
+            "Run doctor",
+          ).then((choice) => {
+            if (choice === "Run doctor") {
+              void vscode.commands.executeCommand("canopy.runDoctor");
+            }
+          });
+        }
+      }
+    } catch (err) {
+      this.outputChannel.appendLine(
+        `[canopy] version handshake skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   async dispose(): Promise<void> {
@@ -351,6 +392,34 @@ export class CanopyClient {
     return this.call<DriftResult>("drift", feature ? { feature } : {});
   }
 
+  /** Version handshake — `{cli_version, mcp_version, schema_version}`. */
+  version() {
+    return this.call<{
+      cli_version: string;
+      mcp_version: string;
+      schema_version: string;
+    }>("version");
+  }
+
+  /**
+   * Workspace + install integrity diagnostic. With `fix: true`, runs
+   * auto-fixable repairs. Returns the structured report including
+   * `issues`, `summary`, `fixed`, `skipped`.
+   */
+  doctor(opts: {
+    fix?: boolean;
+    fix_categories?: string[];
+    feature?: string;
+    clean_vsix?: boolean;
+  } = {}) {
+    return this.call<DoctorResult>("doctor", {
+      fix: opts.fix ?? false,
+      fix_categories: opts.fix_categories ?? null,
+      feature: opts.feature ?? null,
+      clean_vsix: opts.clean_vsix ?? false,
+    });
+  }
+
   /** Temporally-classified PR review threads per repo. */
   githubGetPrComments(alias: string) {
     return this.call<GhCommentsResult>("github_get_pr_comments", { alias });
@@ -485,6 +554,39 @@ export type DriftResult = {
   }>;
   source: "heads.json" | "live";
   generated_at: string;
+};
+
+export type DoctorIssue = {
+  code: string;
+  severity: "error" | "warn" | "info";
+  what: string;
+  expected?: unknown;
+  actual?: unknown;
+  repo?: string;
+  feature?: string;
+  fix_action?: string;
+  auto_fixable: boolean;
+  details?: Record<string, unknown>;
+};
+
+export type DoctorRepair = {
+  code: string;
+  success: boolean;
+  action_taken: string;
+  error?: string;
+  reload_required?: boolean;
+  repo?: string;
+  feature?: string;
+};
+
+export type DoctorResult = {
+  workspace: string;
+  workspace_root: string;
+  checked_at: string;
+  issues: DoctorIssue[];
+  summary: { errors: number; warnings: number; info: number };
+  fixed: DoctorRepair[];
+  skipped: Array<DoctorIssue & { skip_reason?: string }>;
 };
 
 export type GhCommentsResult = {

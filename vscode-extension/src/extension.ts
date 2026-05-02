@@ -433,6 +433,43 @@ function registerDiagnosticCommands(
         await vscode.commands.executeCommand("canopy.retryConnect");
       }
     }),
+    vscode.commands.registerCommand("canopy.runDoctor", async () => {
+      output.show();
+      try {
+        const report = await client.doctor();
+        output.appendLine(
+          `[canopy] doctor: errors=${report.summary.errors} ` +
+            `warnings=${report.summary.warnings} info=${report.summary.info}`,
+        );
+        for (const issue of report.issues) {
+          output.appendLine(
+            `  ${issue.severity} ${issue.code}: ${issue.what}` +
+              (issue.fix_action ? ` — fix: ${issue.fix_action}` : ""),
+          );
+        }
+        if (report.summary.errors === 0 && report.summary.warnings === 0) {
+          void vscode.window.showInformationMessage("Canopy: workspace + install look clean.");
+          return;
+        }
+        const choice = await vscode.window.showWarningMessage(
+          `Canopy doctor: ${report.summary.errors} errors, ` +
+            `${report.summary.warnings} warnings. Auto-fix repairs?`,
+          "Fix",
+          "Show log",
+        );
+        if (choice === "Fix") {
+          const fixed = await client.doctor({ fix: true });
+          output.appendLine(`[canopy] doctor --fix: repaired ${fixed.fixed.length}`);
+          for (const f of fixed.fixed) {
+            output.appendLine(`  ${f.success ? "✓" : "✗"} ${f.code}: ${f.action_taken}`);
+          }
+        }
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Canopy doctor failed: ${(err as Error).message}`,
+        );
+      }
+    }),
   );
 }
 

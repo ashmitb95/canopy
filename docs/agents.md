@@ -150,6 +150,18 @@ Canopy errors come back as structured `BlockerError` / `FailedError`:
 
 When you see a `BlockerError`, read `fix_actions[0]` and decide whether to follow it. Don't ignore + retry the original call.
 
+### Recovery: when canopy itself looks broken
+
+If a canopy call returns an unexpected error — `KeyError` from a state read, "feature not found" for a feature you just created, a path that should exist but doesn't — call `mcp__canopy__doctor` first. It diagnoses 16 categories of state-file drift and install-staleness, returning each issue with a `code`, `severity`, `expected`, `actual`, and `auto_fixable` flag.
+
+Typical recovery flow:
+
+1. `doctor()` → read the issues. If `summary.errors == 0`, it's not a state problem; investigate the original error normally.
+2. If errors are present and most are `auto_fixable: true`: `doctor(fix=True)`. Report `fixed`/`skipped` to the user.
+3. For `auto_fixable: false` (e.g., `features_unknown_repo`, `branches_missing`, `cli_stale`): surface the `fix_action` text to the human — these need a decision (delete the feature? restore the repo? reinstall the binary?), not an auto-repair.
+
+The `version` tool reports `{cli_version, mcp_version, schema_version}` for the same handshake — useful when an agent suspects the CLI binary on PATH is older than the MCP it's talking to.
+
 ## External MCP servers
 
 Canopy also acts as an MCP **client** — it spawns external MCP servers (Linear, GitHub) on demand. Two transports supported:

@@ -2359,6 +2359,93 @@ def cmd_drift(args: argparse.Namespace) -> None:
         console.print()
 
 
+def cmd_doctor(args: argparse.Namespace) -> None:
+    """Diagnose workspace + install integrity; optionally repair."""
+    from ..actions.doctor import doctor
+    from .ui import console
+
+    workspace = _load_workspace()
+
+    fix_categories = None
+    if getattr(args, "fix_category", None):
+        fix_categories = [args.fix_category]
+    fix = bool(getattr(args, "fix", False) or fix_categories)
+    feature = getattr(args, "feature", None)
+    clean_vsix = bool(getattr(args, "clean_vsix", False))
+
+    report = doctor(
+        workspace,
+        fix=fix,
+        fix_categories=fix_categories,
+        feature=feature,
+        clean_vsix=clean_vsix,
+    )
+
+    if args.json:
+        _print_json(report)
+        return
+
+    issues = report["issues"]
+    summary = report["summary"]
+    fixed = report.get("fixed") or []
+    skipped = report.get("skipped") or []
+
+    console.print()
+    if not issues:
+        console.print("  [success]✓[/] doctor: workspace + install look clean")
+        console.print()
+        return
+
+    # Group by severity, errors first.
+    glyphs = {"error": ("[error]✗[/]", "errors"),
+              "warn":  ("[warning]![/]", "warnings"),
+              "info":  ("[muted]·[/]", "info")}
+    for sev, (glyph, label) in glyphs.items():
+        sev_issues = [i for i in issues if i["severity"] == sev]
+        if not sev_issues:
+            continue
+        console.print(f"  {glyph} [header]{label}:[/] {len(sev_issues)}")
+        for issue in sev_issues:
+            scope = ""
+            if issue.get("repo") and issue.get("feature"):
+                scope = f"  [muted]({issue['feature']}/{issue['repo']})[/]"
+            elif issue.get("repo"):
+                scope = f"  [muted]({issue['repo']})[/]"
+            elif issue.get("feature"):
+                scope = f"  [muted]({issue['feature']})[/]"
+            console.print(
+                f"      {glyph} {issue['what']}{scope}  [muted]({issue['code']})[/]"
+            )
+            if getattr(args, "verbose", False):
+                if issue.get("expected") is not None:
+                    console.print(f"          [muted]expected:[/] {issue['expected']}")
+                if issue.get("actual") is not None:
+                    console.print(f"          [muted]actual:  [/] {issue['actual']}")
+            if issue.get("fix_action"):
+                tag = "[muted](safe)[/]" if issue.get("auto_fixable") else "[warning](manual)[/]"
+                console.print(f"          [muted]fix:[/] {issue['fix_action']}  {tag}")
+        console.print()
+
+    if fix:
+        console.print(f"  [info]repaired:[/] {len(fixed)}; [muted]skipped:[/] {len(skipped)}")
+        for f in fixed:
+            ok = "[success]✓[/]" if f.get("success") else "[error]✗[/]"
+            console.print(f"      {ok} {f['action_taken']}  [muted]({f['code']})[/]")
+            if f.get("error"):
+                console.print(f"          [error]error:[/] {f['error']}")
+        for s in skipped:
+            console.print(
+                f"      [muted]· skipped {s['code']}: {s.get('skip_reason', '')}[/]"
+            )
+        console.print()
+
+    console.print(
+        f"  [muted]summary:[/] errors={summary['errors']} "
+        f"warnings={summary['warnings']} info={summary['info']}"
+    )
+    console.print()
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     """Show detected canopy context for current directory (debug)."""
     from ..workspace.context import detect_context
@@ -2387,11 +2474,16 @@ def cmd_context(args: argparse.Namespace) -> None:
 # ── Entry point ───────────────────────────────────────────────────────────
 
 def main() -> None:
+    from .. import __version__
+
     parser = argparse.ArgumentParser(
         prog="canopy",
         description="Workspace-first development orchestrator.",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument(
+        "--version", action="version", version=f"canopy {__version__}",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     # init
@@ -2744,6 +2836,37 @@ def main() -> None:
     hooks_status_p.add_argument("--json", action="store_true", help="Output as JSON")
     hooks_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # doctor
+    doctor_p = subparsers.add_parser(
+        "doctor",
+        help="Diagnose workspace + install integrity; --fix to repair",
+    )
+    doctor_p.add_argument(
+        "--fix", action="store_true",
+        help="Repair every auto-fixable issue",
+    )
+    doctor_p.add_argument(
+        "--fix-category",
+        choices=sorted(["heads", "active_feature", "worktrees", "hooks",
+                        "preflight", "features", "branches",
+                        "cli", "mcp", "skill", "vsix"]),
+        default=None,
+        help="Repair only one category (implies --fix)",
+    )
+    doctor_p.add_argument(
+        "--feature", default=None,
+        help="Scope feature-bearing checks to one feature",
+    )
+    doctor_p.add_argument(
+        "--clean-vsix", action="store_true",
+        help="Remove duplicate vsix install dirs (gates the vsix repair)",
+    )
+    doctor_p.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Show expected/actual values per issue",
+    )
+    doctor_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -2778,6 +2901,7 @@ def main() -> None:
         "triage": cmd_triage,
         "state": cmd_state,
         "setup-agent": cmd_setup_agent,
+        "doctor": cmd_doctor,
     }
 
     if args.command == "feature":

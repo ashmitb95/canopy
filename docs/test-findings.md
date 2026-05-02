@@ -41,13 +41,11 @@ Running any workspace-scoped command (e.g. `canopy setup-agent --check`, `canopy
 - **Severity:** low individually; medium for new-user friction (this is the first error a fresh install hits).
 - **Fix:** centralize the "no canopy.toml" error rendering in one place (`cli/render.py` or a small helper in `cli/main.py`) so every command that depends on a workspace prints the same, helpful message — and exits non-zero (see F-2).
 
-### F-2: error path returns exit code 0
+### F-2: error path returns exit code 0 ~~(INVALID — measurement error)~~
 
-When `setup-agent --check` fails because no canopy.toml exists, `echo $?` is `0`. Should be non-zero so shell scripts catch it.
+**Retracted.** Re-verified after the test run: `canopy setup-agent --check` exits 1, and `canopy issue <unresolvable> --json` (BlockerError JSON output) also exits 1. My original `echo $?` was capturing a later step in the bash chain, not the canopy command. Exit codes are already correct.
 
-- **Repro:** `canopy setup-agent --check; echo $?` outside a workspace → `Error:` printed, `0` exit.
-- **Severity:** medium — breaks shell-script integration; CI scripts that wrap canopy will silently miss errors.
-- **Fix:** all error-print branches in `cli/main.py` should `sys.exit(1)` after printing.
+Lesson for future test runs: capture exit codes inline (`canopy ... ; EC=$?`), not after intervening commands.
 
 ### F-3: stale `canopy-mcp` processes accumulate
 
@@ -97,12 +95,9 @@ This is a **major M5 integration gap**: M5 added the Provider Protocol + registr
 - **Fix:** rewrite `resolve_linear_id` (rename to `resolve_issue_id`) to consult the active provider for what shapes it accepts. GitHub Issues: bare number, `#N`, `owner/repo#N`, full URL. Linear: `<TEAM>-<N>`, feature names. Provider can expose a `parse_alias(s) -> str | None` method (returns canonical id if accepted, else None); resolver tries provider first, falls back to feature-name lookup.
 - **Adjacent:** Phil's branch has `actions/issue_resolver.py` with auto-detect logic (`SIN-N` → Linear, `owner/repo#N` → GitHub, etc.) — could be ported when his PR rebases onto M5.
 
-### F-2 generalized: BlockerError JSON output → exit 0
+### F-2 generalized ~~(INVALID — same measurement error as F-2)~~
 
-Same root cause as F-2 but worth re-stating: when `canopy issue 5` returns a BlockerError as JSON, the exit code is still 0. Any shell script wrapping `canopy issue` and checking `$?` will silently miss the failure. This applies to all CLI commands that emit BlockerError JSON.
-
-- **Severity:** medium — script integration footgun.
-- **Fix:** in `cli/main.py`, every code path that prints BlockerError JSON should `sys.exit(1)` after.
+Retracted along with F-2. Verified `canopy issue 999 --json` exits 1 on BlockerError output.
 
 ### F-9: `setup-agent --check` only reports the default skill
 
@@ -139,7 +134,7 @@ This is the recovery scenario M1 was built for. Detection works end-to-end again
 
 - [ ] **F-7 fix (P0)** — make alias resolver provider-aware. The CLI for any non-Linear provider is currently dead. ~half-day. Could compose with Phil's `issue_resolver.py` if his PR lands first.
 - [ ] **F-6 fix (P1)** — make `cmd_issue` render `Issue.to_dict()` directly so CLI + MCP agree. Drop the legacy raw-state shape. Update docs/commands.md. ~30 min.
-- [ ] **F-1 + F-2 + F-2-generalized fix (P1)** — centralize the "no canopy.toml" error in one helper that prints the workspace-explainer message and exits non-zero. Apply to every workspace-scoped command. Plus: every CLI path that emits a BlockerError JSON should `sys.exit(1)`. ~30 min.
+- [ ] **F-1 fix (P1)** — improve the "no canopy.toml" error message to explain canopy's mental model (workspace = non-git directory holding repos + canopy.toml). ~10 min.
 - [ ] **F-5 fix (P2)** — add `cmd_issues` for parity with the MCP `issue_list_my_issues`, OR defer to Phil's PR (which has it).
 - [ ] **F-3 backlog** — doctor `mcp_orphans` check + reaper.
 - [ ] **F-4 backlog** — Linear-headless smoke test using cached tokens; document the OAuth-required-in-tty constraint in docs/mcp.md.

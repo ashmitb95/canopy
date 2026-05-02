@@ -164,11 +164,17 @@ def install_mcp(workspace_root: Path, *, reinstall: bool = False) -> McpResult:
 def check_status(workspace_root: Path) -> dict:
     """Report what's installed without changing anything.
 
-    The skill-state report covers the default ``using-canopy`` skill for
-    backward compatibility. Use ``check_skill_status(name)`` for any
-    bundled skill.
+    Returns ``{skill, skills, mcp}``:
+
+    - ``skill`` — the default ``using-canopy`` entry (kept for
+      backward-compat with existing callers / dashboard).
+    - ``skills`` — every bundled skill's install state, including
+      opt-ins like ``augment-canopy`` once they're installed (M4
+      revealed that ``--check`` only reported the default; F-9).
+    - ``mcp`` — the workspace's ``.mcp.json`` canopy entry state.
     """
     skill_state = check_skill_status(DEFAULT_SKILL)
+    skills_state = [check_skill_status(name) for name in available_skills()]
 
     mcp_target = mcp_config_path(workspace_root)
     mcp_state = {"path": str(mcp_target), "configured": False}
@@ -184,7 +190,7 @@ def check_status(workspace_root: Path) -> dict:
         except json.JSONDecodeError:
             mcp_state["error"] = "invalid JSON"
 
-    return {"skill": skill_state, "mcp": mcp_state}
+    return {"skill": skill_state, "skills": skills_state, "mcp": mcp_state}
 
 
 def check_skill_status(name: str) -> dict:

@@ -15,6 +15,7 @@ from pathlib import Path
 from ..workspace.workspace import Workspace
 from ..git import repo as git
 from ..git.multi import create_branch_all, cross_repo_diff, find_type_overlaps
+from ..providers import get_issue_provider
 
 # Default directory for worktrees, relative to workspace root
 _WORKTREE_DIR = ".canopy/worktrees"
@@ -319,11 +320,12 @@ class FeatureCoordinator:
 
         Raises:
             ValueError: Feature not found in features.json.
-            LinearNotConfiguredError: Linear MCP isn't set up.
-            LinearIssueNotFoundError: Issue can't be resolved.
+            ProviderNotConfigured: Issue provider isn't set up.
+            IssueNotFoundError: Issue can't be resolved.
         """
-        from ..integrations.linear import get_issue
-
+        # M5: route through the provider registry. Method name kept as
+        # link_linear_issue for backward compat (callers + the MCP tool
+        # name); the linked issue can be from any configured provider.
         name = self._resolve_name(feature)
         features = self._load_features()
         if name not in features:
@@ -332,10 +334,11 @@ class FeatureCoordinator:
                 f"link_linear_issue only works on explicitly created lanes."
             )
 
-        issue_data = get_issue(self.workspace.config.root, issue)
-        features[name]["linear_issue"] = issue_data.get("identifier") or issue
-        features[name]["linear_title"] = issue_data.get("title", "")
-        features[name]["linear_url"] = issue_data.get("url", "")
+        provider = get_issue_provider(self.workspace)
+        issue_data = provider.get_issue(issue)
+        features[name]["linear_issue"] = issue_data.identifier or issue
+        features[name]["linear_title"] = issue_data.title or ""
+        features[name]["linear_url"] = issue_data.url or ""
         self._save_features(features)
 
         return self.status(name)

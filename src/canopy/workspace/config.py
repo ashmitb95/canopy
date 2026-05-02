@@ -34,12 +34,33 @@ class RepoConfig:
 
 
 @dataclass
+class IssueProviderConfig:
+    """Per-workspace issue provider selection (M5).
+
+    Parsed from the ``[issue_provider]`` block in canopy.toml. The
+    ``options`` dict carries provider-specific settings from the
+    ``[issue_provider.<name>]`` sub-table.
+
+    When the block is missing entirely, defaults to Linear with a
+    deprecation warning logged once per session — explicit config will
+    be required in a future release.
+    """
+    name: str = "linear"
+    options: dict[str, Any] = field(default_factory=dict)
+    # Set to True when the parser fell back to the Linear default because
+    # no [issue_provider] block was present. The action layer logs a
+    # one-time deprecation notice.
+    is_default_fallback: bool = False
+
+
+@dataclass
 class WorkspaceConfig:
     """Parsed workspace configuration."""
     name: str
     repos: list[RepoConfig]
     root: Path              # absolute path to workspace root
     max_worktrees: int = 0  # 0 = unlimited
+    issue_provider: IssueProviderConfig = field(default_factory=IssueProviderConfig)
 
 
 def load_config(path: Path | None = None) -> WorkspaceConfig:
@@ -113,8 +134,46 @@ def _parse_config(data: dict[str, Any], root: Path) -> WorkspaceConfig:
         ))
 
     max_worktrees = workspace.get("max_worktrees", 0)
+    issue_provider = _parse_issue_provider(data)
 
-    return WorkspaceConfig(name=name, repos=repos, root=root, max_worktrees=max_worktrees)
+    return WorkspaceConfig(
+        name=name,
+        repos=repos,
+        root=root,
+        max_worktrees=max_worktrees,
+        issue_provider=issue_provider,
+    )
+
+
+def _parse_issue_provider(data: dict[str, Any]) -> IssueProviderConfig:
+    """Parse the ``[issue_provider]`` block from canopy.toml.
+
+    Schema::
+
+        [issue_provider]
+        name = "linear"   # or "github_issues"
+
+        [issue_provider.linear]      # optional sub-table
+        api_key_env = "LINEAR_API_KEY"
+
+        [issue_provider.github_issues]
+        repo = "owner/repo"
+
+    Returns ``IssueProviderConfig(name="linear", is_default_fallback=True)``
+    when the block is missing — preserves backward compatibility with
+    pre-M5 canopy.toml files.
+    """
+    block = data.get("issue_provider")
+    if not isinstance(block, dict):
+        return IssueProviderConfig(name="linear", is_default_fallback=True)
+    name = block.get("name", "linear")
+    if not isinstance(name, str) or not name:
+        raise ConfigError(
+            f"[issue_provider] name must be a non-empty string, got: {name!r}",
+        )
+    sub_table = block.get(name)
+    options: dict[str, Any] = sub_table if isinstance(sub_table, dict) else {}
+    return IssueProviderConfig(name=name, options=options)
 
 
 # ── Workspace settings (keys under [workspace]) ────────────────────────

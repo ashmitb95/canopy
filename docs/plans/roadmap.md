@@ -1,5 +1,21 @@
 # Canopy — Execution Roadmap (2026-05-02)
 
+> **Live tracker:** [INDEX.md](INDEX.md). This document is the design/sequencing rationale; INDEX.md is the rolled-up status dashboard. Each plan's frontmatter is the per-plan source of truth.
+
+## Status snapshot (2026-05-02)
+
+Shipped from this roadmap so far:
+
+- ✅ **M0 — Architecture: provider injection** — [archive/providers-arch.md](archive/providers-arch.md), delivered as [`docs/architecture/providers.md`](../architecture/providers.md)
+- ✅ **M1 — `canopy doctor`** — [archive/doctor.md](archive/doctor.md) — 16 diagnostic categories, version handshake (PR #8)
+- ✅ **M5 — Issue-provider scaffold** — [archive/issue-providers.md](archive/issue-providers.md) — Linear refactored into the contract; GitHub Issues backend; `issue_get` / `issue_list_my_issues` MCP tools (PR #9)
+
+Sequencing took a divergence from §4: M5 (issue-provider scaffold) shipped in parallel with M1 (doctor) once both could be worked independently. The original "doctor → augments → bot-tracking → historian → first scaffold" chain still holds for M2–M4; M5 just landed early because it had no real dependency on M2–M4.
+
+Active queue (M2 → M4 → M6–M12) is the same as before; INDEX.md has the full board.
+
+---
+
 ## Context
 
 This document is the canonical source-of-truth for canopy's pending work. It supersedes the prior tracker at `~/.claude/plans/2026-04-26-canopy-skipped-phases.md`, consolidating:
@@ -29,7 +45,7 @@ Every plan currently in `~/.claude/plans/`:
 | 4 | `2026-04-26-canopy-wave-4-draft-replies.md` | `draft_replies` MCP tool | pending | medium | review classifier (shipped) |
 | 5 | `2026-04-26-canopy-sidebar-single-tree.md` | Extension sidebar collapse to single tree | pending | low (UI only, independent) | none |
 | 6 | `2026-04-26-canopy-action-drawer.md` | Extension dashboard right-rail rebuild, ~16 wired actions | pending | low (depends on backends) | wave-2-4 + wave-4 |
-| 7 | `2026-04-28-canopy-doctor.md` | State-file integrity check + repair | pending | **HIGH** | none — earliest foundation |
+| 7 | `2026-04-28-canopy-doctor.md` | State-file integrity check + repair | ✅ shipped (M1) | **HIGH** | none — earliest foundation |
 | 8 | `2026-04-28-canopy-ci-status.md` | CI status in `feature_state` + `awaiting_ci` state + `pr_checks` MCP tool | pending | medium | none |
 | 9 | `2026-04-28-canopy-cross-feature-conflicts.md` | `canopy conflicts` cross-feature file-overlap | pending | LOW (nice-to-have) | none |
 | 10 | `2026-04-28-canopy-worktree-bootstrap.md` | Env-file copy + dep install + IDE workspace gen on worktree create | pending | medium | none |
@@ -37,10 +53,12 @@ Every plan currently in `~/.claude/plans/`:
 
 The four new artifacts embedded in this file (no separate plan files written for them — they live here so the roadmap stays consolidated):
 
-- **Architecture doc — provider injection (issue providers scoped)** → produces `docs/architecture/providers.md` as a deliverable
-- **Augment skill (N3)** → per-workspace customization (preflight_cmd, test_cmd, review_bots) + new `augment-canopy` skill
-- **Bot-comment tracking (N2)** → distinguish bot vs human review threads, `commit --address`, `awaiting_bot_resolution` state
-- **Historian (cross-session feature memory)** → `.canopy/memory/<feature>.md` persistent log of decisions, events, comment activity, PR context. Auto-read on `canopy switch`. Eliminates the agent's "re-derive everything every session" tax.
+- ✅ **Architecture doc — provider injection (issue providers scoped)** → shipped as [`docs/architecture/providers.md`](../architecture/providers.md) (M0)
+- **Augment skill (M2)** → per-workspace customization (preflight_cmd, test_cmd, review_bots) + new `augment-canopy` skill
+- **Bot-comment tracking (M3)** → distinguish bot vs human review threads, `commit --address`, `awaiting_bot_resolution` state
+- **Historian (cross-session feature memory) (M4)** → `.canopy/memory/<feature>.md` persistent log of decisions, events, comment activity, PR context. Auto-read on `canopy switch`. Eliminates the agent's "re-derive everything every session" tax.
+
+A fifth implementation plan was extracted later for **M5 — issue-provider scaffold** ([archive/issue-providers.md](archive/issue-providers.md), shipped) — implements the M0 contract.
 
 ---
 
@@ -147,19 +165,17 @@ Doctor reads each binary's `--version` output to determine staleness.
 ### 1.7 — Sequencing rationale
 
 ```
-arch doc (issue providers)         ← design reference; doesn't ship code
+arch doc (issue providers) ✅      ← design reference; doesn't ship code        [M0]
    ↓
-doctor (extended w/ install-staleness categories + version handshake)
+doctor (extended w/ install-staleness categories + version handshake) ✅       [M1]
+   ↓                              ↘
+M2 augment skill                    First issue-provider scaffold ✅            [M5 — landed in parallel with M1]
+   ↓                                  ← references the arch doc; refactors Linear into the contract; adds GitHub Issues
+M3 bot-comment tracking            ← uses review_bots from M2, awaiting_bot_resolution state
    ↓
-N3 augment skill                    ← independent, small, seeds review_bots for N2
+M4 Historian                       ← consumes M3's bot_resolutions + classifier output; cross-session memory
    ↓
-N2 bot-comment tracking             ← uses review_bots from N3, awaiting_bot_resolution state
-   ↓
-Historian                           ← consumes N2's bot_resolutions + classifier output; cross-session memory
-   ↓
-First issue-provider scaffold       ← references the arch doc; refactors Linear into the contract; adds GitHub Issues backend
-   ↓
-[existing plans pick up: worktree-bootstrap, ci-status, ship, draft_replies, etc.]
+[existing plans pick up: M6 worktree-bootstrap, M10 ci-status, M8 ship, M9 draft_replies, etc.]
 ```
 
 Reasoning:
@@ -498,23 +514,23 @@ Extension UI: rebuild dashboard right rail with ~16 wired actions. **Depends on 
 
 ## Section 4 — Recommended execution order
 
-Concrete sequence with rough effort estimates:
+Concrete sequence with rough effort estimates. Strikethrough = shipped.
 
-1. **Architecture doc** (`docs/architecture/providers.md`) — design only, ~1 day
-2. **Doctor** (existing plan + 6 new categories from §2.2 + version handshake) — ~3-4 days
-3. **N3 augment skill** (§2.3) — ~2-3 days
-4. **N2 bot-comment tracking** (§2.4) — ~3 days
-5. **Historian** (§2.5) — ~5-6 days
-6. **First issue-provider scaffold** — Linear refactored into the contract, GitHub Issues backend — ~3-4 days
-7. **Worktree bootstrap** ([3.3](~/.claude/plans/2026-04-28-canopy-worktree-bootstrap.md)) — ~2 days
-8. **Sidebar single-tree** ([3.5](~/.claude/plans/2026-04-26-canopy-sidebar-single-tree.md)) — ~1 day
-9. **Wave 2.4 `ship`** ([3.1](~/.claude/plans/2026-04-26-canopy-wave-2-4-ship.md)) — ~2-3 days
-10. **Wave 4 `draft_replies`** ([3.2](~/.claude/plans/2026-04-26-canopy-wave-4-draft-replies.md)) — ~2 days
-11. **CI status** ([3.4](~/.claude/plans/2026-04-28-canopy-ci-status.md)) — ~2 days
-12. **Action drawer** ([3.6](~/.claude/plans/2026-04-26-canopy-action-drawer.md)) — ~3-4 days
-13. **Cross-feature conflicts** ([3.7](~/.claude/plans/2026-04-28-canopy-cross-feature-conflicts.md)) — ~1-2 days
+1. ✅ ~~**Architecture doc** (`docs/architecture/providers.md`) — design only, ~1 day~~ (M0, PR #7)
+2. ✅ ~~**Doctor** (existing plan + 6 new categories from §2.2 + version handshake) — ~3-4 days~~ (M1, PR #8)
+3. **M2 augment skill** (§2.3) — ~2-3 days
+4. **M3 bot-comment tracking** (§2.4) — ~3 days
+5. **M4 Historian** (§2.5) — ~5-6 days
+6. ✅ ~~**First issue-provider scaffold** — Linear refactored into the contract, GitHub Issues backend — ~3-4 days~~ (M5, PR #9 — landed early in parallel with M1, since it had no real dep on M2–M4)
+7. **M6 Worktree bootstrap** ([3.3](worktree-bootstrap.md)) — ~2 days
+8. **M7 Sidebar single-tree** ([3.5](sidebar-single-tree.md)) — ~1 day
+9. **M8 Wave 2.4 `ship`** ([3.1](wave-2-4-ship.md)) — ~2-3 days
+10. **M9 Wave 4 `draft_replies`** ([3.2](wave-4-draft-replies.md)) — ~2 days
+11. **M10 CI status** ([3.4](ci-status.md)) — ~2 days
+12. **M11 Action drawer** ([3.6](action-drawer.md)) — ~3-4 days
+13. **M12 Cross-feature conflicts** ([3.7](cross-feature-conflicts.md)) — ~1-2 days
 
-Estimated total: ~30-36 days of focused engineering. The first 6 items (~17-20 days) deliver the dogfood-failure recoveries, the new agent-facing customization surface, cross-session feature memory, and the issue-provider scaffold.
+Estimated total: ~30-36 days when planned. ~7-8 days shipped (items 1, 2, 6); remaining ~22-28 days across M2–M4 + M6–M12.
 
 ---
 
@@ -633,11 +649,6 @@ Tracking lives in [INDEX.md](INDEX.md), not GitHub issues. Each plan file's YAML
 3. Plan amendments happen via PR on the plan file itself.
 4. If multi-contributor coordination becomes needed later, revisit issue tracking — the in-tree approach is the floor, not the ceiling.
 
-## What changes in `~/.claude/plans/` after this is approved
+## Migration history
 
-- This file (`lets-plaan-all-3-melodic-cloud.md`) becomes the canonical execution roadmap and migrates to `docs/plans/roadmap.md` per §9.1.
-- The existing `2026-04-26-canopy-skipped-phases.md` is **superseded** — its tracker function moves here. Keep the file as historical reference; don't migrate.
-- The existing `2026-04-28-canopy-doctor.md` plan is **extended** with §2.2 contents (six new categories + version handshake) before being moved to `docs/plans/doctor.md`.
-- `2026-04-26-canopy-wave-2-3-commit-push.md` is shipped — archive at `docs/plans/archive/`.
-- All other existing plan files migrate to `docs/plans/` per §9.1.
-- After migration, `~/.claude/plans/` no longer hosts the canonical plan; the in-repo `docs/plans/` is canonical. Local copies can be kept as scratch but should not be edited (drift risk).
+The `~/.claude/plans/` → `docs/plans/` migration is complete (PR #6). All plan files live in-tree now; `~/.claude/plans/` is deprecated as a canonical location. INDEX.md tracks status; this roadmap captures rationale.

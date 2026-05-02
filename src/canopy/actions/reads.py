@@ -9,7 +9,12 @@ from __future__ import annotations
 from typing import Any
 
 from ..git import repo as git
-from ..integrations import github as gh, linear as ln
+from ..integrations import github as gh
+from ..providers import (
+    IssueNotFoundError,
+    ProviderNotConfigured,
+    get_issue_provider,
+)
 from ..workspace.workspace import Workspace
 from .aliases import (
     BranchTarget, PRTarget,
@@ -19,46 +24,63 @@ from .errors import BlockerError, FixAction
 
 
 def linear_get_issue(workspace: Workspace, alias: str) -> dict:
-    """Fetch a Linear issue.
+    """Fetch an issue from the workspace's configured issue provider.
+
+    Despite the historical name, after M5 this resolves through the
+    provider registry — the workspace's ``[issue_provider]`` block picks
+    Linear / GitHub Issues / a future backend. The output dict shape is
+    preserved for backward compatibility (existing callers).
 
     Accepts:
-      - Linear ID directly (e.g. ``ENG-412``)
-      - Feature alias whose lane has a linked ``linear_issue``
+      - Provider-native ID (e.g. ``"SIN-7"`` for Linear, ``"#142"`` for GH)
+      - Feature alias whose lane has a linked issue
 
-    Raises ``BlockerError`` if the Linear MCP is not configured or the
-    issue can't be fetched. Linear-side exceptions are wrapped so callers
-    only have to handle ``ActionError``.
+    Raises ``BlockerError`` if the provider isn't configured or the
+    issue can't be fetched.
     """
     issue_id = resolve_linear_id(workspace, alias)
+    provider = get_issue_provider(workspace)
     try:
-        issue = ln.get_issue(workspace.config.root, issue_id)
-    except ln.LinearNotConfiguredError as e:
+        issue = provider.get_issue(issue_id)
+    except ProviderNotConfigured as e:
         raise BlockerError(
-            code="linear_not_configured",
-            what="Linear MCP is not configured",
+            code="issue_provider_not_configured",
+            what=f"Issue provider '{workspace.config.issue_provider.name}' is not configured",
             details={"alias": alias, "issue_id": issue_id, "error": str(e)},
             fix_actions=[
                 FixAction(
-                    action="configure_mcp", args={"server": "linear"},
+                    action="configure_provider",
+                    args={"provider": workspace.config.issue_provider.name},
                     safe=True,
-                    preview="add a 'linear' entry to .canopy/mcps.json",
+                    preview=f"configure {workspace.config.issue_provider.name} per docs/architecture/providers.md §4",
                 ),
             ],
         )
-    except ln.LinearIssueNotFoundError as e:
+    except IssueNotFoundError as e:
         raise BlockerError(
-            code="linear_issue_not_found",
-            what=f"Linear issue '{issue_id}' not found",
+            code="issue_not_found",
+            what=f"Issue '{issue_id}' not found",
             details={"alias": alias, "issue_id": issue_id, "error": str(e)},
         )
+
+    # Preserve the historical output shape. ``state`` carries the raw
+    # provider-native state name (Linear: "In Progress"; GH: "open") via
+    # ``Issue.raw`` so existing callers asserting on raw values keep
+    # working. Falls back to canonical when raw isn't a recognized shape.
+    raw = issue.raw or {}
+    raw_state = (
+        raw.get("state", {}).get("name")
+        if isinstance(raw.get("state"), dict)
+        else raw.get("state") or raw.get("status") or issue.state
+    )
     return {
         "alias": alias,
         "issue_id": issue_id,
-        "title": issue.get("title", ""),
-        "state": issue.get("state", ""),
-        "url": issue.get("url", ""),
-        "description": issue.get("description", ""),
-        "raw": issue.get("raw"),
+        "title": issue.title,
+        "state": raw_state,
+        "url": issue.url,
+        "description": issue.description or "",
+        "raw": raw,
     }
 
 

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: shipped
 priority: P0
 effort: ~3-4d
 depends_on: []

@@ -47,21 +47,34 @@ def _set_remote(repo_path, url):
 
 # ── linear_get_issue ─────────────────────────────────────────────────────
 
+def _fake_provider(fake_issue):
+    """Build a Mock provider whose get_issue returns the given Issue."""
+    from unittest.mock import MagicMock
+    provider = MagicMock()
+    provider.get_issue.return_value = fake_issue
+    return provider
+
+
 def test_linear_get_issue_by_id_directly(workspace_with_feature):
+    """Provider returns Issue; reads adapter shapes it for backward compat."""
+    from canopy.providers.types import Issue
     ws = _make_workspace(workspace_with_feature)
-    fake_issue = {
-        "identifier": "SIN-412", "title": "Test", "state": "Active",
-        "url": "https://linear.app/x/issue/SIN-412", "description": "d",
-        "raw": {},
-    }
-    with patch("canopy.actions.reads.ln.get_issue", return_value=fake_issue):
+    fake = Issue(
+        id="SIN-412", identifier="SIN-412", title="Test",
+        description="d", state="in_progress",
+        url="https://linear.app/x/issue/SIN-412",
+        raw={"state": {"name": "Active"}},
+    )
+    with patch("canopy.actions.reads.get_issue_provider", return_value=_fake_provider(fake)):
         result = linear_get_issue(ws, "SIN-412")
     assert result["alias"] == "SIN-412"
     assert result["issue_id"] == "SIN-412"
     assert result["title"] == "Test"
+    assert result["state"] == "Active"  # raw state preserved for backward compat
 
 
 def test_linear_get_issue_via_feature_alias(workspace_with_feature):
+    from canopy.providers.types import Issue
     _features_file(workspace_with_feature, {
         "auth-flow": {
             "repos": ["repo-a", "repo-b"], "status": "active",
@@ -69,15 +82,16 @@ def test_linear_get_issue_via_feature_alias(workspace_with_feature):
         },
     })
     ws = _make_workspace(workspace_with_feature)
-    fake_issue = {
-        "identifier": "SIN-412", "title": "Auth Flow", "state": "Active",
-        "url": "https://linear.app/x/SIN-412", "description": "",
-        "raw": {},
-    }
-    with patch("canopy.actions.reads.ln.get_issue", return_value=fake_issue) as mock:
+    fake = Issue(
+        id="SIN-412", identifier="SIN-412", title="Auth Flow",
+        description="", state="in_progress",
+        url="https://linear.app/x/SIN-412",
+        raw={"state": {"name": "Active"}},
+    )
+    provider = _fake_provider(fake)
+    with patch("canopy.actions.reads.get_issue_provider", return_value=provider):
         result = linear_get_issue(ws, "auth-flow")
-    mock.assert_called_once()
-    assert mock.call_args[0][1] == "SIN-412"  # resolved Linear ID
+    provider.get_issue.assert_called_once_with("SIN-412")  # resolved alias
     assert result["issue_id"] == "SIN-412"
 
 

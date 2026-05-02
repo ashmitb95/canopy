@@ -2,7 +2,7 @@
 
 Live status of canopy's planned work. Update this file as milestones progress; each plan's frontmatter is the per-plan source of truth, this doc is the rolled-up dashboard.
 
-**Last updated:** 2026-05-02 (M0, M1, M2, M5 shipped)
+**Last updated:** 2026-05-02 (M0, M1, M2, M5 shipped; M3 in-progress)
 **Roadmap:** [roadmap.md](roadmap.md) — full architecture context, cross-cutting decisions, sequencing rationale
 
 ## Status legend
@@ -26,7 +26,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 - [x] ✅ **M2 — Augment skill** — [archive/augments.md](archive/augments.md) · shipped 2026-05-02
   Per-workspace `[augments]` block in canopy.toml + opt-in `augment-canopy` skill. Wires `preflight_cmd`; reserves `review_bots` (M3) and `test_cmd` (future).
-- [ ] 🟦 **M3 — Bot-comment tracking** — [bot-tracking.md](bot-tracking.md) · P1 · ~3d · depends on M2
+- [ ] 🟨 **M3 — Bot-comment tracking** — [bot-tracking.md](bot-tracking.md) · P1 · ~3d · depends on M2
   Distinguish bot vs human review comments, `commit --address <id>`, new `awaiting_bot_resolution` state.
 - [ ] 🟦 **M4 — Historian** — [historian.md](historian.md) · P1 · ~5-6d · depends on M3
   Cross-session feature memory at `.canopy/memory/<feature>.md`. Auto-read on `canopy switch`.

@@ -2145,12 +2145,13 @@ def cmd_commit(args: argparse.Namespace) -> None:
         with spinner(spin_msg):
             result = commit_impl(
                 workspace,
-                args.message,
+                args.message or "",
                 feature=args.feature,
                 repos=_split_csv(args.repos),
                 paths=args.paths or None,
                 no_hooks=args.no_hooks,
                 amend=args.amend,
+                address=getattr(args, "address", None),
             )
     except ActionError as err:
         if args.json:
@@ -2180,6 +2181,72 @@ def cmd_commit(args: argparse.Namespace) -> None:
                 console.print(f"        [muted]{line}[/]")
         else:  # failed
             console.print(f"    [error]✗[/] [repo]{repo}[/]  {r.get('reason', 'failed')}")
+    addressed = result.get("addressed")
+    if addressed:
+        cid = addressed["comment_id"]
+        if addressed.get("recorded"):
+            sha = (addressed.get("sha") or "")[:8]
+            console.print(
+                f"    [success]✓[/] addressed bot comment [muted]{cid}[/] "
+                f"(recorded against [repo]{addressed['repo']}[/] {sha})",
+            )
+        else:
+            console.print(
+                f"    [warning]·[/] bot comment [muted]{cid}[/] not recorded "
+                f"({addressed.get('reason', 'no successful commit in owning repo')})",
+            )
+    console.print()
+
+
+def cmd_bot_status(args: argparse.Namespace) -> None:
+    """Per-feature bot-comment rollup (M3)."""
+    from ..actions.bot_status import bot_comments_status
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        result = bot_comments_status(workspace, feature=args.feature)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="bot-status")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    console.print(f"  [feature]{result['feature']}[/]")
+    if not result["any_bot_comments"]:
+        console.print("    [muted]no bot comments tracked[/]")
+        console.print()
+        return
+
+    for repo, info in result["repos"].items():
+        if info["total"] == 0:
+            continue
+        glyph = "[success]✓[/]" if info["unresolved"] == 0 else "[warning]●[/]"
+        pr = f"PR #{info['pr_number']}" if info.get("pr_number") else "no PR"
+        console.print(
+            f"    {glyph} [repo]{repo}[/]  {pr}  "
+            f"resolved {info['resolved']}/{info['total']}",
+        )
+        threads = (
+            [t for t in info["threads"] if not t["resolved"]]
+            if args.unresolved_only
+            else info["threads"]
+        )
+        for t in threads:
+            mark = "[success]✓[/]" if t["resolved"] else "[warning]●[/]"
+            label = f"{t.get('author', '')}".strip() or "(unknown)"
+            preview = t.get("body_preview", "")
+            console.print(f"        {mark} [muted]{t.get('id', '')}[/] {label}: {preview}")
+    overall = "[success]all resolved[/]" if result["all_resolved"] else "[warning]unresolved[/]"
+    console.print(f"    [muted]→ {overall}[/]")
     console.print()
 
 
@@ -2711,7 +2778,7 @@ def main() -> None:
         "commit",
         help="Commit across every repo in the canonical (or named) feature",
     )
-    commit_p.add_argument("-m", "--message", required=True,
+    commit_p.add_argument("-m", "--message", required=False, default="",
                             help="Commit message (single message across all repos)")
     commit_p.add_argument("--feature", default=None,
                             help="Feature alias; defaults to canonical feature")
@@ -2723,7 +2790,22 @@ def main() -> None:
                             help="Pass --no-verify to skip pre-commit / commit-msg hooks")
     commit_p.add_argument("--amend", action="store_true",
                             help="Amend HEAD in each repo instead of creating new commits")
+    commit_p.add_argument("--address", default=None, metavar="COMMENT-ID",
+                            help="Address a bot review comment (numeric id or GitHub URL); "
+                                 "auto-suffixes the message with the comment title + URL "
+                                 "and records the resolution in .canopy/state/bot_resolutions.json")
     commit_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # bot-status — per-feature bot-comment rollup (M3)
+    bot_status_p = subparsers.add_parser(
+        "bot-status",
+        help="Show bot review comments for the canonical (or named) feature",
+    )
+    bot_status_p.add_argument("--feature", default=None,
+                                help="Feature alias; defaults to canonical feature")
+    bot_status_p.add_argument("--unresolved-only", action="store_true",
+                                help="Only list unresolved threads")
+    bot_status_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # push (feature-scoped multi-repo push — Wave 2.3)
     push_p = subparsers.add_parser(
@@ -2919,6 +3001,7 @@ def main() -> None:
         "comments": cmd_comments,
         "switch": cmd_switch,
         "commit": cmd_commit,
+        "bot-status": cmd_bot_status,
         "push": cmd_push,
         "triage": cmd_triage,
         "state": cmd_state,

@@ -18,7 +18,7 @@ Organized by **workflow stage** — top to bottom matches a typical day.
 | Command | What it does |
 |---|---|
 | `canopy triage [--author @me]` | Prioritized list of features needing attention. Groups open PRs across repos by feature, sorts by review state (`changes_requested` > `review_required_with_bot_comments` > `review_required` > `approved`). Use this every morning. |
-| `canopy state <feature>` | The 8-state machine for one feature, plus the suggested `next_actions`. Same JSON the dashboard renders. |
+| `canopy state <feature>` | The 9-state machine for one feature, plus the suggested `next_actions`. Same JSON the dashboard renders. |
 | `canopy drift [<feature>]` | Per-feature alignment from `.canopy/state/heads.json` (the post-checkout hook's data). Fast, hook-driven. Doesn't touch git directly. |
 | `canopy list` | Compact feature overview — names, Linear links, per-repo branch/dirty/ahead-behind. |
 | `canopy status` | Per-repo branch + dirty + divergence from default branch. |
@@ -52,7 +52,8 @@ Write actions and execution.
 | `canopy run <repo> <command> [--feature]` | Run a shell command in a canopy-managed repo with cwd resolved internally. The "agent never `cd`s" tool — also useful from a CLI in a deeply nested directory. |
 | `canopy code\|cursor\|fork <feature\|.>` | Open the feature in VS Code / Cursor / Fork.app (alias-aware; generates `.code-workspace` for the IDE ones). |
 | `canopy sync` | Pull default branch + rebase feature branches across repos. |
-| `canopy commit -m <msg> [--feature <f>] [--repo <r,...>] [--paths <p ...>] [--no-hooks] [--amend]` | **Wave 2.3.** Commit across every repo in the canonical (or named) feature with a single message. Defaults to canonical feature. Pre-flight refuses with `BlockerError(code='wrong_branch')` if any in-scope repo has drifted; per-repo hook failures don't cancel the others (status: `hooks_failed` for the failing repo). |
+| `canopy commit -m <msg> [--feature <f>] [--repo <r,...>] [--paths <p ...>] [--no-hooks] [--amend] [--address <id>]` | **Wave 2.3 + M3.** Commit across every repo in the canonical (or named) feature with a single message. Pre-flight refuses with `BlockerError(code='wrong_branch')` if any in-scope repo has drifted; per-repo hook failures don't cancel the others (status: `hooks_failed`). `--address <comment-id>` (numeric id or GitHub URL) auto-suffixes the message with the bot comment's title + URL and records the resolution in `.canopy/state/bot_resolutions.json`. Non-bot comments raise `BlockerError(code='not_a_bot_comment')`. |
+| `canopy bot-status [--feature <f>] [--unresolved-only]` | **M3.** Per-feature rollup of bot review comments — total / resolved / unresolved per repo + an `all_resolved` flag. Bot vs human classification respects `[augments] review_bots` in canopy.toml. |
 | `canopy push [--feature <f>] [--repo <r,...>] [--set-upstream] [--force-with-lease] [--dry-run]` | **Wave 2.3.** Push the feature branch in every in-scope repo. Pre-flight raises `BlockerError(code='no_upstream')` if any repo lacks an upstream and `--set-upstream` was not passed; the fix-action carries the same args + `--set-upstream` so an agent retries mechanically. Per-repo statuses: `ok`, `up_to_date`, `rejected`, `failed`. |
 
 ## Verify

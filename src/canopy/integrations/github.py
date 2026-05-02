@@ -535,6 +535,7 @@ def _normalize_comments(data: Any) -> tuple[list[dict], int]:
             author_type = ""
 
         normalized.append({
+            "id": c.get("id"),                          # M3: stable id for `commit --address`
             "path": c.get("path") or c.get("file") or "",
             "line": c.get("line") or c.get("original_line") or c.get("position") or 0,
             "body": c.get("body") or "",

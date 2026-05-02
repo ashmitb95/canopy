@@ -250,9 +250,10 @@ def switch(feature: str, release_current: bool = False,
 
 
 @mcp.tool()
-def commit(message: str, feature: str | None = None,
+def commit(message: str = "", feature: str | None = None,
            repos: list[str] | None = None, paths: list[str] | None = None,
-           no_hooks: bool = False, amend: bool = False) -> dict:
+           no_hooks: bool = False, amend: bool = False,
+           address: str | None = None) -> dict:
     """Commit across every repo in a feature lane with a single message (Wave 2.3).
 
     Defaults to the canonical feature when ``feature`` is omitted (reads
@@ -263,6 +264,12 @@ def commit(message: str, feature: str | None = None,
     branch. Mismatches raise ``BlockerError(code='wrong_branch')`` with
     a per-repo expected/actual map; no commits fire.
 
+    ``address`` (M3): a bot review comment id (numeric or GitHub URL).
+    When set, the message is auto-suffixed with the comment title + URL
+    and a resolution is recorded in ``.canopy/state/bot_resolutions.json``
+    against the matching repo's commit SHA. Non-bot comments raise
+    ``BlockerError(code='not_a_bot_comment')``.
+
     Per-repo result statuses:
       - ``ok``           — committed; carries ``sha``, ``files_changed``.
       - ``nothing``      — no changes staged.
@@ -270,8 +277,8 @@ def commit(message: str, feature: str | None = None,
                             tail of ``hook_output``. Other repos continue.
       - ``failed``       — git error (gpg, locked index, etc.).
 
-    Returns ``{feature, results: {<repo>: {...}}}`` on success, or a
-    structured ``BlockerError``-shaped dict on pre-flight rejection.
+    Returns ``{feature, results: {<repo>: {...}}, addressed?}`` on success,
+    or a structured ``BlockerError``-shaped dict on pre-flight rejection.
     """
     from ..actions.commit import commit as _impl
     from ..actions.errors import ActionError
@@ -280,8 +287,27 @@ def commit(message: str, feature: str | None = None,
         return _impl(
             ws, message,
             feature=feature, repos=repos, paths=paths,
-            no_hooks=no_hooks, amend=amend,
+            no_hooks=no_hooks, amend=amend, address=address,
         )
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
+def bot_comments_status(feature: str | None = None) -> dict:
+    """Per-feature rollup of bot review comments (M3).
+
+    Returns ``{feature, repos: {<repo>: {pr_number, total, resolved,
+    unresolved, threads}}, all_resolved, any_bot_comments}``. Bot threads
+    are read live from open PRs; resolutions come from the persistent
+    ``.canopy/state/bot_resolutions.json`` log written by
+    ``commit --address``.
+    """
+    from ..actions.bot_status import bot_comments_status as _impl
+    from ..actions.errors import ActionError
+    ws = _get_workspace()
+    try:
+        return _impl(ws, feature=feature)
     except ActionError as e:
         return e.to_dict()
 

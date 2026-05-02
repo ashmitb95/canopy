@@ -6,7 +6,7 @@ This document is the canonical source-of-truth for canopy's pending work. It sup
 
 1. **Existing plans** I wrote in earlier sessions (eight plan files in `~/.claude/plans/canopy-*.md`).
 2. **New asks** from a real-world dogfood transcript (`~/projects/canopy/canopy-improvement-research.md`) that surfaced setup-propagation failures, bot-comment-tracking gaps, and per-workspace customization needs.
-3. **A scope refinement** for the provider-injection scaffolding pattern: scoped to issue providers (Phil's ask in [issue #5](https://github.com/ashmitb95/canopy/issues/5)), not a sweeping refactor.
+3. **A scope refinement** for the provider-injection scaffolding pattern: scoped to issue providers (per [issue #5](https://github.com/ashmitb95/canopy/issues/5)), not a sweeping refactor.
 
 What changed in this session:
 
@@ -163,7 +163,7 @@ First issue-provider scaffold       ← references the arch doc; refactors Linea
 ```
 
 Reasoning:
-- **Arch doc first.** Phil's ask is real and concrete; design before code prevents Linear-shaped APIs leaking into the contract.
+- **Arch doc first.** The provider-injection requirement is real and concrete; design before code prevents Linear-shaped APIs leaking into the contract.
 - **Doctor second.** Foundation for portability across machines (the dogfood transcript's load-bearing failure). The version handshake bits are preconditions for later upgrade detection.
 - **N3 before N2.** N2's bot classifier reads the `review_bots` list from N3's augments. Without N3, N2 falls back to hardcoded `author_type == "Bot"` — workable but less powerful.
 - **Historian after N2.** Historian's "comments resolved" log consumes N2's `bot_resolutions.json` + the temporal classifier's `likely_resolved` output. Without N2, historian would have to reimplement structured comment-resolution state. With N2 first, historian is a thin narrative layer on top.
@@ -189,11 +189,11 @@ Each of the three new items below is specced in this file (no separate plan file
 
 **Goal:** define the provider-injection pattern for issue providers, document the contract/discovery/config/wiring, and name (without specifying) the future candidate use cases.
 
-**Why first:** Phil's GitHub-issues ask in [issue #5](https://github.com/ashmitb95/canopy/issues/5) is concrete. We need the design pinned before any code lands so Linear-shaped assumptions don't bleed into the contract.
+**Why first:** the GitHub-issues requirement ([issue #5](https://github.com/ashmitb95/canopy/issues/5)) is concrete. We need the design pinned before any code lands so Linear-shaped assumptions don't bleed into the contract.
 
 **Doc structure:**
 
-1. **Motivation** — why provider injection (Phil's ask, future-proofing, multi-provider workspaces).
+1. **Motivation** — why provider injection (issue #5, future-proofing, multi-provider workspaces).
 2. **The contract** — Python protocol / abstract base for an issue provider:
    - `get_issue(alias: str) -> Issue` — returns canonical `Issue` shape (id, identifier, title, description, state, url, assignee, labels, priority)
    - `list_my_issues(limit: int = 50) -> list[Issue]`
@@ -505,7 +505,7 @@ Concrete sequence with rough effort estimates:
 3. **N3 augment skill** (§2.3) — ~2-3 days
 4. **N2 bot-comment tracking** (§2.4) — ~3 days
 5. **Historian** (§2.5) — ~5-6 days
-6. **First issue-provider scaffold** — Linear refactored into the contract, GitHub Issues backend per Phil — ~3-4 days
+6. **First issue-provider scaffold** — Linear refactored into the contract, GitHub Issues backend — ~3-4 days
 7. **Worktree bootstrap** ([3.3](~/.claude/plans/2026-04-28-canopy-worktree-bootstrap.md)) — ~2 days
 8. **Sidebar single-tree** ([3.5](~/.claude/plans/2026-04-26-canopy-sidebar-single-tree.md)) — ~1 day
 9. **Wave 2.4 `ship`** ([3.1](~/.claude/plans/2026-04-26-canopy-wave-2-4-ship.md)) — ~2-3 days
@@ -514,7 +514,7 @@ Concrete sequence with rough effort estimates:
 12. **Action drawer** ([3.6](~/.claude/plans/2026-04-26-canopy-action-drawer.md)) — ~3-4 days
 13. **Cross-feature conflicts** ([3.7](~/.claude/plans/2026-04-28-canopy-cross-feature-conflicts.md)) — ~1-2 days
 
-Estimated total: ~30-36 days of focused engineering. The first 6 items (~17-20 days) deliver the dogfood-failure recoveries, the new agent-facing customization surface, cross-session feature memory, and the issue-provider scaffold Phil asked for.
+Estimated total: ~30-36 days of focused engineering. The first 6 items (~17-20 days) deliver the dogfood-failure recoveries, the new agent-facing customization surface, cross-session feature memory, and the issue-provider scaffold.
 
 ---
 
@@ -624,14 +624,14 @@ Tracking lives in [INDEX.md](INDEX.md), not GitHub issues. Each plan file's YAML
 
 - The plans are already detailed and reviewable as files. Duplicating into issue bodies adds maintenance overhead.
 - The user is mostly solo on canopy today; full GitHub Issues machinery (labels, templates, multi-issue dependency graph) is overkill.
-- Contributors who want to comment on the design can do it via PR review on the plan file. INDEX.md aggregates status; the file is the spec.
+- The plan file is the spec; INDEX.md aggregates status. Future contributors (when they appear) can comment on the design via PR review on the plan file.
 
 **Workflow:**
 
 1. When a milestone starts: update its checkbox/glyph in INDEX.md (🟦 → 🟨); update its plan's frontmatter (`status: queued` → `in-progress`).
 2. When it ships: ✅ in INDEX.md, `status: shipped` in frontmatter, move the plan to `archive/` with a date.
 3. Plan amendments happen via PR on the plan file itself.
-4. If multi-contributor coordination becomes needed later (more than just Phil's PR), revisit issue tracking — the in-tree approach is the floor, not the ceiling.
+4. If multi-contributor coordination becomes needed later, revisit issue tracking — the in-tree approach is the floor, not the ceiling.
 
 ## What changes in `~/.claude/plans/` after this is approved
 

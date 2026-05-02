@@ -184,7 +184,7 @@ Add the `bootstrap` parameter through the three call sites. Default false (prese
 
 ## After this lands
 
-- A new contributor running `canopy worktree create <feature> --bootstrap` gets a ready-to-run dev environment in one command — env files in place, deps installed, IDE workspace open-able.
+- Running `canopy worktree create <feature> --bootstrap` produces a ready-to-run dev environment in one command — env files in place, deps installed, IDE workspace open-able.
 - The README failure-mode #5 (raw `git worktree add` mess) gets a stronger fix: not just predictable layout, but predictable readiness.
 - Canopy absorbs the workflow that was forcing teams to write per-monorepo bash wrappers (like the docsum `manage-worktrees` skill) and reframes it as configurable canopy infrastructure.
 - The `using-canopy` skill becomes more recommendation-able to monorepo teams who would otherwise reach for one-off scripts.

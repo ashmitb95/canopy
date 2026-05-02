@@ -42,7 +42,7 @@ A persistent markdown file per feature (`<workspace>/.canopy/memory/<feature>.md
 |---|---|---|---|
 | 1 | Decisions | "chose `jwt.decode` over `pyjwt`; reason: stdlib only" | **Hybrid** (see Capture mechanism below): primary `mcp__canopy__historian_decide` + Stop-hook tail-parse backup |
 | 2 | Events | "edited `src/auth/oauth.py`", "ran preflight (passed)" | PostToolUse hook on Bash + Edit (in active worktree only); summarized to one line |
-| 3 | Pauses | "blocked on design-system copy; need confirmation from Phil" | Stop hook (end of agent session) or explicit `historian_pause` |
+| 3 | Pauses | "blocked on design-system copy; need product confirmation" | Stop hook (end of agent session) or explicit `historian_pause` |
 | 4 | Comments read | "read coderabbit comment on `src/api/cache.py:42` — suggested rename `hit_rate → cache_hit_rate`" | PostToolUse on `review_comments` MCP call; logs each unique comment URL once per session |
 | 5 | Comments resolved | "addressed comment 123456 in `abc123de`: renamed `hit_rate → cache_hit_rate` per suggestion" | PostToolUse on `commit --address` (consumes N2's bot-resolutions flow); pulls comment title + commit sha + diff snippet |
 | 6 | Classifier-resolved | "temporal classifier marked these 3 threads likely-resolved (file already touched in commits since)" | PostToolUse on `review_comments` when classifier output includes `likely_resolved` entries; logged once per session |

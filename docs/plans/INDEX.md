@@ -20,7 +20,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 **Goal:** ship the typed multi-repo agent surface canopy was always meant to be — recovery from setup failures, per-workspace customization, bot-comment tracking, cross-session memory, and a provider-injection pattern that makes Linear-vs-GitHub-Issues a configuration choice instead of a fork.
 
-**Why now:** the dogfood transcript at `~/projects/canopy/canopy-improvement-research.md` exposed three load-bearing gaps (setup didn't propagate across machines, bot comments aren't first-class, no per-workspace customization). Phil's [issue #5](https://github.com/ashmitb95/canopy/issues/5) added a fourth (Linear-vs-GitHub-Issues forking pressure). This epic closes all four.
+**Why now:** the dogfood transcript at `~/projects/canopy/canopy-improvement-research.md` exposed three load-bearing gaps (setup didn't propagate across machines, bot comments aren't first-class, no per-workspace customization). [Issue #5](https://github.com/ashmitb95/canopy/issues/5) added a fourth (Linear-vs-GitHub-Issues forking pressure). This epic closes all four.
 
 ### Core milestones (in dependency order)
 
@@ -35,7 +35,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 - [ ] 🟦 **M4 — Historian** — [historian.md](historian.md) · P1 · ~5-6d · depends on M3
   Cross-session feature memory at `.canopy/memory/<feature>.md`. Auto-read on `canopy switch`.
 - [ ] 🟦 **M5 — Issue-provider scaffold** — see [providers-arch.md §7](providers-arch.md) · P1 · ~3-4d · depends on M0
-  Linear refactored into the contract; GitHub Issues backend. Closes Phil's ask in [#5](https://github.com/ashmitb95/canopy/issues/5).
+  Linear refactored into the contract; GitHub Issues backend. Closes [#5](https://github.com/ashmitb95/canopy/issues/5).
 
 ### Quality-of-life additions (slot in alongside or after the core)
 

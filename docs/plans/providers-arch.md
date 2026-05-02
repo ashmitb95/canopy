@@ -9,7 +9,7 @@ depends_on: []
 
 ## Why
 
-Canopy's read tools today are tightly coupled to specific external services — `linear_get_issue`, `linear_my_issues`, `github_get_pr`, etc. That works while you're using exactly those services, but the moment a new user (e.g., Phil in [issue #5](https://github.com/ashmitb95/canopy/issues/5)) wants GitHub Issues instead of Linear, every action that touches issue context has to branch on which integration to call. That branching is exactly the kind of code that ages badly and bleeds Linear-shaped assumptions into the contract.
+Canopy's read tools today are tightly coupled to specific external services — `linear_get_issue`, `linear_my_issues`, `github_get_pr`, etc. That works while we're using exactly those services, but the moment we (or anyone) wants GitHub Issues instead of Linear, every action that touches issue context has to branch on which integration to call. That branching is exactly the kind of code that ages badly and bleeds Linear-shaped assumptions into the contract.
 
 This document defines the provider-injection pattern, scoped to **issue providers** specifically. The pattern is general enough that other concerns (CI providers, code-review platforms, IDE workspace formats, pre-commit frameworks, bot-author detection) could adopt it later, but those use cases are explicitly *named, not specified* in v1 — they only adopt the pattern if it drops in seamlessly during implementation.
 
@@ -20,7 +20,7 @@ A provider-agnostic interface for issue providers, defined as a Python protocol,
 - A discovery mechanism for finding installed providers
 - A configuration mechanism in `canopy.toml` for picking which provider a workspace uses
 - A dependency-injection point in the action layer so providers are swappable without touching call sites
-- Two reference implementations: Linear (refactored from `integrations/linear.py`) and GitHub Issues (new for Phil)
+- Two reference implementations: Linear (refactored from `integrations/linear.py`) and GitHub Issues (new)
 
 ## Doc structure
 
@@ -29,7 +29,7 @@ This is the v1 architecture doc. Code lands in subsequent plans (`docs/plans/iss
 ### 1. Motivation
 
 Why provider injection:
-- **Phil's ask** in issue #5: GitHub Issues as a first-class alternative to Linear.
+- **External signal** ([issue #5](https://github.com/ashmitb95/canopy/issues/5)): GitHub Issues as a first-class alternative to Linear.
 - **Future-proofing**: every team has different issue trackers. Hardcoding Linear (or any single one) limits canopy's reach.
 - **Multi-provider workspaces**: rare but real — a monorepo with one repo on Linear and another on JIRA. v1 is workspace-level only; per-repo override is reserved for a future plan.
 
@@ -89,7 +89,7 @@ How canopy finds providers:
 
 **v1: bundled.** Canopy ships built-in modules:
 - `canopy.providers.linear` (refactored from `integrations/linear.py`)
-- `canopy.providers.github_issues` (new for Phil)
+- `canopy.providers.github_issues` (new)
 
 A small registry in `canopy.providers.__init__.py`:
 

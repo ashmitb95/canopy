@@ -98,6 +98,7 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 - **Worktree limits:** `max_worktrees` in canopy.toml caps explicit `worktree_create` calls (`WorktreeLimitError` includes stale candidates). For `switch`'s canonical-slot logic, the same field is interpreted as the warm-slot cap; if unset (0), the new default is **2** (1 canonical + 2 warm = 3 live trees max). See `actions/switch_preflight.py:warm_slot_cap`.
 - **Action contract:** `actions/protocol.py` (planned) will formalize the per-repo `{status, before, after, reason?}` shape. For now, each action returns it ad-hoc.
 - **Skill bundling:** Bundled skills live at `src/canopy/agent_setup/skills/<name>/SKILL.md`. `canopy setup-agent` copies them to `~/.claude/skills/<name>/SKILL.md`. The default `using-canopy` skill always installs; opt-in extras (e.g. `augment-canopy`) install via `--skill <name>` (repeatable). Foreign skills with the same path are not overwritten without `--reinstall`. The `_SKILL_SOURCE` constant remains as a backward-compat alias pointing at `using-canopy`'s source.
+- **Version bumps:** When shipping a milestone, bump `__version__` in [`src/canopy/__init__.py`](src/canopy/__init__.py) and add a section to [`CHANGELOG.md`](CHANGELOG.md). The version handshake (`canopy --version`, `mcp__canopy__version`, doctor's `cli_stale` / `mcp_stale` checks) is only useful when this number actually moves — drift was the bug 0.5.0 caught.
 
 ## MCP Server (54 tools)
 

@@ -31,6 +31,7 @@ class RepoConfig:
     default_branch: str = "main"
     is_worktree: bool = False       # True if this is a linked worktree
     worktree_main: str | None = None  # path to main working tree (if worktree)
+    augments: dict[str, Any] = field(default_factory=dict)  # per-repo augment overrides (M2)
 
 
 @dataclass
@@ -61,6 +62,7 @@ class WorkspaceConfig:
     root: Path              # absolute path to workspace root
     max_worktrees: int = 0  # 0 = unlimited
     issue_provider: IssueProviderConfig = field(default_factory=IssueProviderConfig)
+    augments: dict[str, Any] = field(default_factory=dict)  # workspace-level augment defaults (M2)
 
 
 def load_config(path: Path | None = None) -> WorkspaceConfig:
@@ -125,16 +127,23 @@ def _parse_config(data: dict[str, Any], root: Path) -> WorkspaceConfig:
             raise ConfigError(f"Duplicate repo name: '{repo_name}'")
         seen_names.add(repo_name)
 
+        repo_augments = entry.get("augments")
+        if repo_augments is not None and not isinstance(repo_augments, dict):
+            raise ConfigError(
+                f"[[repos]] entry '{repo_name}' augments must be a table, got: {type(repo_augments).__name__}",
+            )
         repos.append(RepoConfig(
             name=repo_name,
             path=entry["path"],
             role=entry.get("role", ""),
             lang=entry.get("lang", ""),
             default_branch=entry.get("default_branch", "main"),
+            augments=dict(repo_augments) if repo_augments else {},
         ))
 
     max_worktrees = workspace.get("max_worktrees", 0)
     issue_provider = _parse_issue_provider(data)
+    augments = _parse_augments(data)
 
     return WorkspaceConfig(
         name=name,
@@ -142,7 +151,32 @@ def _parse_config(data: dict[str, Any], root: Path) -> WorkspaceConfig:
         root=root,
         max_worktrees=max_worktrees,
         issue_provider=issue_provider,
+        augments=augments,
     )
+
+
+def _parse_augments(data: dict[str, Any]) -> dict[str, Any]:
+    """Parse the ``[augments]`` block from canopy.toml (M2).
+
+    Schema::
+
+        [augments]
+        preflight_cmd = "make check"
+        test_cmd = "pytest"
+        review_bots = ["coderabbit", "korbit"]
+
+    Lenient: missing block returns empty dict; unknown keys preserved
+    so future augments don't require parser changes. Validation that
+    catches typos is deferred to ``canopy doctor`` (see plan §non-goals).
+    """
+    block = data.get("augments")
+    if block is None:
+        return {}
+    if not isinstance(block, dict):
+        raise ConfigError(
+            f"[augments] must be a table, got: {type(block).__name__}",
+        )
+    return dict(block)
 
 
 def _parse_issue_provider(data: dict[str, Any]) -> IssueProviderConfig:

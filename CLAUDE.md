@@ -40,9 +40,11 @@ src/canopy/
 │   └── triage.py            # cross-repo PR enumeration + priority tiers (canonical-slot enriched)
 ├── agent/
 │   └── runner.py            # canopy_run — directory-safe shell exec
-├── agent_setup/             # ships using-canopy skill + setup_agent installer
+├── agent_setup/             # ships bundled skills + setup_agent installer
 │   ├── __init__.py          # install_skill / install_mcp / check_status
-│   └── skill.md             # canonical skill content
+│   └── skills/              # one SKILL.md per skill name
+│       ├── using-canopy/SKILL.md     # default, always installed
+│       └── augment-canopy/SKILL.md   # opt-in via --skill augment-canopy (M2)
 ├── integrations/
 │   ├── linear.py            # Linear issue fetching (via mcp/client.py)
 │   ├── github.py            # GitHub PR + comments (MCP or gh CLI fallback)
@@ -91,7 +93,7 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 - **`--no-track` on branch creation:** `git/repo.py:create_branch` and `worktree_add` always pass `--no-track` so a `branch.autoSetupMerge=inherit` gitconfig doesn't accidentally set the new branch's upstream to `dev`.
 - **Worktree limits:** `max_worktrees` in canopy.toml caps explicit `worktree_create` calls (`WorktreeLimitError` includes stale candidates). For `switch`'s canonical-slot logic, the same field is interpreted as the warm-slot cap; if unset (0), the new default is **2** (1 canonical + 2 warm = 3 live trees max). See `actions/switch_preflight.py:warm_slot_cap`.
 - **Action contract:** `actions/protocol.py` (planned) will formalize the per-repo `{status, before, after, reason?}` shape. For now, each action returns it ad-hoc.
-- **Skill bundling:** `src/canopy/agent_setup/skill.md` ships in the wheel; `canopy setup-agent` (or `canopy init`) copies it to `~/.claude/skills/using-canopy/SKILL.md`. Foreign skills with the same path are not overwritten without `--reinstall`.
+- **Skill bundling:** Bundled skills live at `src/canopy/agent_setup/skills/<name>/SKILL.md`. `canopy setup-agent` copies them to `~/.claude/skills/<name>/SKILL.md`. The default `using-canopy` skill always installs; opt-in extras (e.g. `augment-canopy`) install via `--skill <name>` (repeatable). Foreign skills with the same path are not overwritten without `--reinstall`. The `_SKILL_SOURCE` constant remains as a backward-compat alias pointing at `using-canopy`'s source.
 
 ## MCP Server (43 tools)
 
@@ -138,4 +140,4 @@ Token cache at `~/.canopy/mcp-tokens/<server>.{client,tokens}.json`. First call 
 - New actions: stub in `src/canopy/actions/`, raise `BlockerError` for preconditions, expose via CLI in `cli/main.py` + MCP in `mcp/server.py`. Add tests in `tests/test_<action>.py` using the existing `workspace_with_feature` fixture.
 - New MCP tools: register an existing `actions/*.py` function under `@mcp.tool()` in `mcp/server.py`. Update `docs/mcp.md` and `docs/agents.md`.
 - New CLI commands: define a handler `cmd_<name>(args)`, add a subparser in `main()`, dispatch in the `commands` dict. Update `docs/commands.md`.
-- Adding a new ⨯ tool to canopy → also update `~/.claude/skills/using-canopy/SKILL.md` and `src/canopy/agent_setup/skill.md` so the agent learns when to prefer it.
+- Adding a new ⨯ tool to canopy → also update `~/.claude/skills/using-canopy/SKILL.md` and `src/canopy/agent_setup/skills/using-canopy/SKILL.md` so the agent learns when to prefer it.

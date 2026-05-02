@@ -109,3 +109,116 @@ default_branch = "master"
 """)
     config = load_config(tmp_path)
     assert config.repos[0].default_branch == "master"
+
+
+# ── [augments] block (M2) ────────────────────────────────────────────────
+
+
+def test_augments_block_parsed(tmp_path):
+    (tmp_path / "canopy.toml").write_text("""
+[workspace]
+name = "test"
+
+[augments]
+preflight_cmd = "make check"
+test_cmd = "pytest"
+review_bots = ["coderabbit", "korbit"]
+
+[[repos]]
+name = "api"
+path = "./api"
+""")
+    config = load_config(tmp_path)
+    assert config.augments == {
+        "preflight_cmd": "make check",
+        "test_cmd": "pytest",
+        "review_bots": ["coderabbit", "korbit"],
+    }
+
+
+def test_augments_missing_block_defaults_to_empty(tmp_path):
+    (tmp_path / "canopy.toml").write_text("""
+[workspace]
+name = "test"
+
+[[repos]]
+name = "api"
+path = "./api"
+""")
+    config = load_config(tmp_path)
+    assert config.augments == {}
+    assert config.repos[0].augments == {}
+
+
+def test_augments_per_repo_override(tmp_path):
+    (tmp_path / "canopy.toml").write_text("""
+[workspace]
+name = "test"
+
+[augments]
+preflight_cmd = "make check"
+
+[[repos]]
+name = "api"
+path = "./api"
+augments = { preflight_cmd = "uv run pytest tests/fast" }
+
+[[repos]]
+name = "ui"
+path = "./ui"
+""")
+    config = load_config(tmp_path)
+    api = next(r for r in config.repos if r.name == "api")
+    ui = next(r for r in config.repos if r.name == "ui")
+    assert api.augments == {"preflight_cmd": "uv run pytest tests/fast"}
+    assert ui.augments == {}
+
+
+def test_augments_block_must_be_table(tmp_path):
+    # `augments = "..."` must be at top level, not under [workspace], for it
+    # to land at data["augments"]. Quoted-string value triggers the type check.
+    (tmp_path / "canopy.toml").write_text("""
+augments = "not a table"
+
+[workspace]
+name = "test"
+
+[[repos]]
+name = "api"
+path = "./api"
+""")
+    with pytest.raises(ConfigError, match="augments.*must be a table"):
+        load_config(tmp_path)
+
+
+def test_per_repo_augments_must_be_table(tmp_path):
+    (tmp_path / "canopy.toml").write_text("""
+[workspace]
+name = "test"
+
+[[repos]]
+name = "api"
+path = "./api"
+augments = "not a table"
+""")
+    with pytest.raises(ConfigError, match="augments must be a table"):
+        load_config(tmp_path)
+
+
+def test_augments_preserves_unknown_keys(tmp_path):
+    """Lenient parser — future augments don't require schema migration."""
+    (tmp_path / "canopy.toml").write_text("""
+[workspace]
+name = "test"
+
+[augments]
+future_key = "value"
+another = 42
+
+[[repos]]
+name = "api"
+path = "./api"
+""")
+    config = load_config(tmp_path)
+    assert config.augments["future_key"] == "value"
+    assert config.augments["another"] == 42

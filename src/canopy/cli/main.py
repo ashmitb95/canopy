@@ -1090,8 +1090,10 @@ def _cmd_preflight_context(args: argparse.Namespace) -> None:
     When run from inside a single repo worktree, checks just that repo.
     """
     from ..workspace.context import detect_context
+    from ..workspace.config import load_config, ConfigNotFoundError, ConfigError
     from ..git import repo as git_repo
     from ..integrations.precommit import run_precommit
+    from ..actions.augments import repo_augments
 
     ctx = detect_context()
 
@@ -1103,6 +1105,13 @@ def _cmd_preflight_context(args: argparse.Namespace) -> None:
     if not ctx.repo_paths:
         print("Error: no repos found in current context.", file=sys.stderr)
         sys.exit(1)
+
+    workspace_config = None
+    if ctx.workspace_root:
+        try:
+            workspace_config = load_config(ctx.workspace_root)
+        except (ConfigNotFoundError, ConfigError):
+            workspace_config = None
 
     results: dict[str, dict] = {}
     all_passed = True
@@ -1122,8 +1131,11 @@ def _cmd_preflight_context(args: argparse.Namespace) -> None:
             all_passed = False
             continue
 
-        # Run pre-commit hooks
-        hook_result = run_precommit(repo_path)
+        # Run pre-commit hooks (honoring per-repo augments.preflight_cmd)
+        augments = (
+            repo_augments(workspace_config, repo_name) if workspace_config else None
+        )
+        hook_result = run_precommit(repo_path, augments=augments)
         passed = hook_result["passed"]
         if not passed:
             all_passed = False
@@ -1841,6 +1853,13 @@ def cmd_setup_agent(args: argparse.Namespace) -> None:
     do_skill = not args.mcp_only
     do_mcp = not args.skill_only
 
+    from ..agent_setup import DEFAULT_SKILL
+    extra = list(dict.fromkeys(args.skill or []))   # dedupe, preserve order
+    skills: tuple[str, ...] = (
+        tuple([DEFAULT_SKILL] + [s for s in extra if s != DEFAULT_SKILL])
+        if do_skill else ()
+    )
+
     workspace_root: Path | None = None
     if do_mcp:
         try:
@@ -1850,21 +1869,21 @@ def cmd_setup_agent(args: argparse.Namespace) -> None:
             workspace_root = None
 
     result = setup_agent(
-        workspace_root, do_skill=do_skill, do_mcp=do_mcp, reinstall=args.reinstall,
+        workspace_root, skills=skills, do_mcp=do_mcp, reinstall=args.reinstall,
     )
     if args.json:
         _print_json(result)
         return
 
     console.print()
-    if "skill" in result:
-        s = result["skill"]
+    for s in result.get("skills") or ([result["skill"]] if "skill" in result else []):
         glyph = {
             "installed": "[success]✓ installed[/]",
             "reinstalled": "[success]✓ reinstalled[/]",
             "skipped": "[muted]· skipped[/]",
         }.get(s["action"], s["action"])
-        console.print(f"  skill   {glyph}  [muted]{s['path']}[/]")
+        label = f"skill[{s.get('name', DEFAULT_SKILL)}]"
+        console.print(f"  {label:<22} {glyph}  [muted]{s['path']}[/]")
         if s.get("reason"):
             console.print(f"          [muted]{s['reason']}[/]")
     if "mcp" in result:
@@ -2743,9 +2762,12 @@ def main() -> None:
         help="Install the using-canopy skill + add canopy MCP to .mcp.json",
     )
     setup_p.add_argument("--skill-only", action="store_true",
-                          help="Install only the skill (skip MCP config)")
+                          help="Install only the skill(s) (skip MCP config)")
     setup_p.add_argument("--mcp-only", action="store_true",
-                          help="Install only the MCP config (skip skill)")
+                          help="Install only the MCP config (skip skills)")
+    setup_p.add_argument("--skill", action="append", default=None, metavar="NAME",
+                          help="Install an extra bundled skill by name (e.g. 'augment-canopy'). "
+                               "Repeatable. The default 'using-canopy' skill is always installed.")
     setup_p.add_argument("--reinstall", action="store_true",
                           help="Overwrite existing files even if foreign or current")
     setup_p.add_argument("--check", action="store_true",

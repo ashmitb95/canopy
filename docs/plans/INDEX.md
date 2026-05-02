@@ -2,7 +2,7 @@
 
 Live status of canopy's planned work. Update this file as milestones progress; each plan's frontmatter is the per-plan source of truth, this doc is the rolled-up dashboard.
 
-**Last updated:** 2026-05-02 (M0, M1, M5 shipped)
+**Last updated:** 2026-05-02 (M0, M1, M5 shipped; M2 in-progress)
 **Roadmap:** [roadmap.md](roadmap.md) — full architecture context, cross-cutting decisions, sequencing rationale
 
 ## Status legend
@@ -24,7 +24,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Core milestones (in dependency order)
 
-- [ ] 🟦 **M2 — Augment skill** — [augments.md](augments.md) · P1 · ~2-3d · depends on M1
+- [ ] 🟨 **M2 — Augment skill** — [augments.md](augments.md) · P1 · ~2-3d · depends on M1
   Per-workspace customization via `[augments]` block in canopy.toml. New `augment-canopy` skill teaches the agent how to mutate config.
 - [ ] 🟦 **M3 — Bot-comment tracking** — [bot-tracking.md](bot-tracking.md) · P1 · ~3d · depends on M2
   Distinguish bot vs human review comments, `commit --address <id>`, new `awaiting_bot_resolution` state.

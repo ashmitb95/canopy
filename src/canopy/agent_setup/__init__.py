@@ -1,27 +1,55 @@
-"""Agent setup — install the using-canopy skill and wire canopy MCP into the workspace.
+"""Agent setup — install bundled skills and wire canopy MCP into a workspace.
 
-The skill (``skill.md`` in this package) goes into ``~/.claude/skills/using-canopy/SKILL.md``
-so any Claude Code session knows to prefer canopy MCP tools over raw git/gh/bash.
-The MCP config (``.mcp.json`` at the workspace root) registers canopy-mcp as an
-MCP server with ``CANOPY_ROOT`` pointing at the workspace.
+Skills live at ``skills/<name>/SKILL.md`` inside this package and are copied
+into ``~/.claude/skills/<name>/SKILL.md`` so any Claude Code session knows
+to use them. The MCP config (``.mcp.json`` at the workspace root) registers
+canopy-mcp as an MCP server with ``CANOPY_ROOT`` pointing at the workspace.
 
-Both pieces are independent — install one, both, or neither. ``setup_agent``
-returns a structured report describing what was done so callers can render it.
+Both pieces are independent — install skills, MCP, both, or neither.
+``setup_agent`` returns a structured report describing what was done so
+callers can render it.
+
+The bundled skill set today: ``using-canopy`` (always installed by default)
+and ``augment-canopy`` (opt-in via ``--skill augment-canopy``).
 """
 from __future__ import annotations
 
 import json
-import shutil
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-_SKILL_NAME = "using-canopy"
-_SKILL_SOURCE = Path(__file__).parent / "skill.md"
+_SKILLS_DIR = Path(__file__).parent / "skills"
+
+DEFAULT_SKILL = "using-canopy"
 
 
-def skill_install_target() -> Path:
-    """Default location for the user's skill install."""
-    return Path.home() / ".claude" / "skills" / _SKILL_NAME / "SKILL.md"
+def _user_skills_dir() -> Path:
+    """Resolved at call time so tests that monkeypatch ``HOME`` work."""
+    return Path.home() / ".claude" / "skills"
+
+# Backward-compat alias — doctor.py imports this directly. Points at the
+# bundled source for the default skill.
+_SKILL_SOURCE = _SKILLS_DIR / DEFAULT_SKILL / "SKILL.md"
+
+
+def available_skills() -> tuple[str, ...]:
+    """Return the names of all bundled skills (directories under ``skills/``)."""
+    if not _SKILLS_DIR.exists():
+        return ()
+    return tuple(sorted(
+        d.name for d in _SKILLS_DIR.iterdir()
+        if d.is_dir() and (d / "SKILL.md").exists()
+    ))
+
+
+def skill_source(name: str = DEFAULT_SKILL) -> Path:
+    """Path to the bundled SKILL.md for the named skill."""
+    return _SKILLS_DIR / name / "SKILL.md"
+
+
+def skill_install_target(name: str = DEFAULT_SKILL) -> Path:
+    """Default install location for the named skill."""
+    return _user_skills_dir() / name / "SKILL.md"
 
 
 def mcp_config_path(workspace_root: Path) -> Path:
@@ -34,6 +62,7 @@ class SkillResult:
     action: str        # "installed", "reinstalled", "skipped"
     path: str
     reason: str | None = None
+    name: str = DEFAULT_SKILL
 
 
 @dataclass
@@ -43,31 +72,42 @@ class McpResult:
     reason: str | None = None
 
 
-def install_skill(*, reinstall: bool = False) -> SkillResult:
-    """Install the using-canopy skill into ~/.claude/skills/.
+def install_skill(name: str = DEFAULT_SKILL, *, reinstall: bool = False) -> SkillResult:
+    """Install the named skill into ~/.claude/skills/<name>/SKILL.md.
 
     If a skill file already exists and isn't ours, leaves it alone unless
     ``reinstall=True``. Detection: the source skill file's full body is
     written verbatim, so we can byte-compare to know if it's ours.
+
+    Raises ``FileNotFoundError`` if the named skill isn't bundled.
     """
-    target = skill_install_target()
-    source_text = _SKILL_SOURCE.read_text()
+    source = skill_source(name)
+    if not source.exists():
+        raise FileNotFoundError(
+            f"No bundled skill named '{name}'. Available: {', '.join(available_skills()) or '(none)'}",
+        )
+    target = skill_install_target(name)
+    source_text = source.read_text()
 
     if target.exists():
         existing = target.read_text()
         if existing == source_text:
-            return SkillResult(action="skipped", path=str(target),
-                                reason="already up to date")
-        if not reinstall and "name: using-canopy" not in existing:
-            return SkillResult(action="skipped", path=str(target),
-                                reason="foreign skill present; use --reinstall to overwrite")
+            return SkillResult(
+                action="skipped", path=str(target), name=name,
+                reason="already up to date",
+            )
+        if not reinstall and f"name: {name}" not in existing:
+            return SkillResult(
+                action="skipped", path=str(target), name=name,
+                reason="foreign skill present; use --reinstall to overwrite",
+            )
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(source_text)
-        return SkillResult(action="reinstalled", path=str(target))
+        return SkillResult(action="reinstalled", path=str(target), name=name)
 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(source_text)
-    return SkillResult(action="installed", path=str(target))
+    return SkillResult(action="installed", path=str(target), name=name)
 
 
 def install_mcp(workspace_root: Path, *, reinstall: bool = False) -> McpResult:
@@ -122,18 +162,13 @@ def install_mcp(workspace_root: Path, *, reinstall: bool = False) -> McpResult:
 
 
 def check_status(workspace_root: Path) -> dict:
-    """Report what's installed without changing anything."""
-    target = skill_install_target()
-    skill_state = {
-        "path": str(target),
-        "installed": target.exists(),
-        "is_canopy_skill": False,
-        "up_to_date": False,
-    }
-    if target.exists():
-        existing = target.read_text()
-        skill_state["is_canopy_skill"] = "name: using-canopy" in existing
-        skill_state["up_to_date"] = existing == _SKILL_SOURCE.read_text()
+    """Report what's installed without changing anything.
+
+    The skill-state report covers the default ``using-canopy`` skill for
+    backward compatibility. Use ``check_skill_status(name)`` for any
+    bundled skill.
+    """
+    skill_state = check_skill_status(DEFAULT_SKILL)
 
     mcp_target = mcp_config_path(workspace_root)
     mcp_state = {"path": str(mcp_target), "configured": False}
@@ -152,17 +187,66 @@ def check_status(workspace_root: Path) -> dict:
     return {"skill": skill_state, "mcp": mcp_state}
 
 
+def check_skill_status(name: str) -> dict:
+    """Report install state for a single named skill."""
+    source = skill_source(name)
+    target = skill_install_target(name)
+    state = {
+        "name": name,
+        "path": str(target),
+        "installed": target.exists(),
+        "is_canopy_skill": False,
+        "up_to_date": False,
+    }
+    if target.exists() and source.exists():
+        existing = target.read_text()
+        state["is_canopy_skill"] = f"name: {name}" in existing
+        state["up_to_date"] = existing == source.read_text()
+    return state
+
+
 def setup_agent(
     workspace_root: Path | None,
     *,
-    do_skill: bool = True,
+    skills: tuple[str, ...] = (DEFAULT_SKILL,),
     do_mcp: bool = True,
     reinstall: bool = False,
+    do_skill: bool | None = None,
 ) -> dict:
-    """Install both pieces by default. Returns ``{skill, mcp}`` results."""
+    """Install one or more skills + (optionally) wire MCP.
+
+    ``skills`` is the tuple of bundled skill names to install. Defaults to
+    just ``using-canopy``. Pass ``()`` to skip all skill installs.
+
+    ``do_skill`` is a backward-compat alias — when ``do_skill=False`` is
+    passed, no skills are installed regardless of the ``skills`` arg.
+    """
+    if do_skill is False:
+        skills = ()
+
     out: dict = {}
-    if do_skill:
-        out["skill"] = asdict(install_skill(reinstall=reinstall))
+    if skills:
+        results = []
+        for name in skills:
+            try:
+                results.append(asdict(install_skill(name, reinstall=reinstall)))
+            except FileNotFoundError as e:
+                results.append({
+                    "action": "skipped",
+                    "path": str(skill_install_target(name)),
+                    "name": name,
+                    "reason": str(e),
+                })
+        # Preserve legacy single-skill report at "skill" for callers that
+        # only know about the default skill.
+        default = next(
+            (r for r in results if r.get("name") == DEFAULT_SKILL),
+            results[0] if results else None,
+        )
+        if default is not None:
+            out["skill"] = default
+        out["skills"] = results
+
     if do_mcp:
         if workspace_root is None:
             out["mcp"] = {

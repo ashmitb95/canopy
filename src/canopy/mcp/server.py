@@ -633,6 +633,8 @@ def preflight(cwd: str | None = None) -> dict:
         cwd: Directory to detect context from. Defaults to CANOPY_ROOT.
     """
     from ..integrations.precommit import run_precommit
+    from ..actions.augments import repo_augments
+    from ..workspace.config import load_config, ConfigNotFoundError, ConfigError
 
     path = Path(cwd) if cwd else None
     if path is None:
@@ -642,6 +644,13 @@ def preflight(cwd: str | None = None) -> dict:
 
     if not ctx.repo_paths:
         return {"error": "No repos found in context", "context": ctx.to_dict()}
+
+    workspace_config = None
+    if ctx.workspace_root:
+        try:
+            workspace_config = load_config(ctx.workspace_root)
+        except (ConfigNotFoundError, ConfigError):
+            workspace_config = None
 
     results = {}
     all_passed = True
@@ -658,7 +667,10 @@ def preflight(cwd: str | None = None) -> dict:
             all_passed = False
             continue
 
-        hook_result = run_precommit(repo_path)
+        augments = (
+            repo_augments(workspace_config, repo_name) if workspace_config else None
+        )
+        hook_result = run_precommit(repo_path, augments=augments)
         passed = hook_result["passed"]
         if not passed:
             all_passed = False

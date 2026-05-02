@@ -61,16 +61,25 @@ def _is_executable(path: Path) -> bool:
     return os.access(path, os.X_OK)
 
 
-def run_precommit(repo_path: Path) -> dict:
+def run_precommit(repo_path: Path, augments: dict | None = None) -> dict:
     """Run pre-commit hooks for a repo.
 
-    Detects the hook system and runs it. Returns a result dict with:
-        type: "framework" | "git_hook" | "none"
+    If ``augments`` contains ``preflight_cmd``, runs that command instead
+    of the auto-detected hook system. Otherwise detects the hook system
+    (pre-commit framework / git hook / none) and runs it.
+
+    Returns a result dict with:
+        type: "custom" | "framework" | "git_hook" | "none"
         passed: bool
         output: str (combined stdout + stderr)
+        applied_augment: bool (True iff preflight_cmd from augments ran)
 
     Does not raise on hook failure — the caller decides what to do.
     """
+    custom_cmd = (augments or {}).get("preflight_cmd")
+    if custom_cmd:
+        return _run_custom_preflight(repo_path, str(custom_cmd))
+
     hook_type = detect_precommit(repo_path)
 
     if hook_type == "none":
@@ -78,12 +87,40 @@ def run_precommit(repo_path: Path) -> dict:
             "type": "none",
             "passed": True,
             "output": "No pre-commit hooks detected.",
+            "applied_augment": False,
         }
 
     if hook_type == "framework":
-        return _run_framework(repo_path)
+        result = _run_framework(repo_path)
+    else:
+        result = _run_git_hook(repo_path)
+    result["applied_augment"] = False
+    return result
 
-    return _run_git_hook(repo_path)
+
+def _run_custom_preflight(repo_path: Path, command: str) -> dict:
+    """Run a user-configured preflight command via the shell.
+
+    Honors the augment's ``preflight_cmd`` literal — supports pipes /
+    chaining (e.g. ``ruff check . && pyright``) by passing through ``sh -c``.
+    """
+    result = subprocess.run(
+        ["sh", "-c", command],
+        capture_output=True,
+        text=True,
+        cwd=repo_path,
+        timeout=120,
+    )
+    output = result.stdout
+    if result.stderr:
+        output += "\n" + result.stderr
+    return {
+        "type": "custom",
+        "passed": result.returncode == 0,
+        "output": output.strip(),
+        "applied_augment": True,
+        "command": command,
+    }
 
 
 def _run_framework(repo_path: Path) -> dict:

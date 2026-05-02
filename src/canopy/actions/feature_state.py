@@ -487,11 +487,12 @@ def _drifted_result(
     drifted = drift_info["drifted_repos"]
     missing = drift_info["missing_repos"]
 
-    # For worktree-backed features, "drifted" usually means the worktree
-    # was manually checked out off-branch — `realign` would touch main and
-    # is the wrong fix. Suggest `switch` (which warms / re-checks out) or
-    # `done` (clean up the broken worktree). For main-tree features the
-    # original realign suggestion is correct.
+    # F-12: post-Wave 2.9, the canonical-slot model handles both worktree
+    # and main-tree recovery via ``switch``. The deprecated ``realign``
+    # action is no longer surfaced as the primary CTA for either case;
+    # ``switch`` re-establishes the feature context regardless of where
+    # the feature lives. ``done`` stays as a secondary CTA on the
+    # worktree path so users can intentionally drop a broken worktree.
     if has_worktrees:
         next_actions = [
             {"action": "switch", "args": {"feature": feature_name},
@@ -506,8 +507,8 @@ def _drifted_result(
         ]
     else:
         next_actions = [
-            {"action": "realign", "args": {"feature": feature_name},
-             "primary": True, "label": "Realign",
+            {"action": "switch", "args": {"feature": feature_name},
+             "primary": True, "label": "Switch",
              "preview": (
                  f"checkout expected branch in "
                  f"{', '.join(drifted + missing)}"

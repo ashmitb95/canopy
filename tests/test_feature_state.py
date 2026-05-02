@@ -69,7 +69,10 @@ def test_drift_state_supersedes_everything(workspace_with_feature):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "drifted"
-    assert result["next_actions"][0]["action"] == "realign"
+    # F-12: post-Wave 2.9 the canonical-slot ``switch`` is the universal
+    # recovery primitive for both worktree and main-tree drift; the
+    # deprecated ``realign`` is no longer surfaced.
+    assert result["next_actions"][0]["action"] == "switch"
     assert "repo-b" in result["summary"]["alignment"]["drifted_repos"]
 
 

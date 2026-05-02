@@ -155,6 +155,59 @@ This is the recovery scenario M1 was built for. Detection works end-to-end again
 
 - ✅ Throwaway issues #5 + #6 on `ashmitb95/canopy-test-api` closed at end of run.
 - ✅ canopy-test workspace canopy.toml restored to original; README.md edits in test-api/test-ui reset.
+
+---
+
+# Test Run 2 — 2026-05-03 (canopy 0.5.0, post-Run-1 fixes)
+
+Second pass after [PR #16](https://github.com/ashmitb95/canopy/pull/16)/[#17](https://github.com/ashmitb95/canopy/pull/17)/[#18](https://github.com/ashmitb95/canopy/pull/18)/[#19](https://github.com/ashmitb95/canopy/pull/19)/[#20](https://github.com/ashmitb95/canopy/pull/20) landed. Extended test-plan.md with §6–§12 covering pre-M0 and cross-cutting flows that Run 1 didn't touch (switch, state machine, commit/push semantics, drift detection, universal aliases, stash family, doctor `--fix`).
+
+## Section results (Run 2)
+
+| Section | Result | Notes |
+|---|---|---|
+| §6 switch (6) | ✅ 6/6 | Linear ID + feature alias both resolve; `--release-current` mode works; switch back from warm is fast (~110 ms); fresh feature creates branches. |
+| §7 state machine (9) | ✅ 5/9, ⏭️ 4 | drifted, in_progress, ready_to_commit, ready_to_push, needs_work all reachable. awaiting_review/approved/awaiting_bot_resolution/no_prs blocked on real PR setup. |
+| §8 commit/push (8) | ✅ 4/8, ⏭️ 4 | empty_message + wrong_branch blockers fire; per-repo subset works; bad path correctly fails (intentional). Push tests skipped to avoid creating remote branches. |
+| §9 drift (4) | ✅ 4/4 | Live + cached drift agree; switch recovers; doctor surfaces heads_stale during drift. |
+| §10 universal aliases (6) | ✅ 6/6 | Feature name, Linear ID, `<repo>#<n>`, PR URL, bare GH issue (with provider swap), unknown alias all behave as designed. |
+| §11 stash family (5) | ✅ 4/5 | All feature-tagged operations work via `--feature` flag; one initial confusion about syntax (see retraction). |
+| §12 doctor --fix (6) | ✅ 5/6 | Real workspace went from 6 errors / 2 warnings / 1 info → 0 / 0 / 1 (vsix gated). 12.4 (`--clean-vsix`) skipped to avoid touching live extension installs. |
+
+## New findings
+
+### F-11: `canopy preflight` (no feature arg) doesn't persist a record (FIXED — this PR)
+
+When run from the workspace root (vs. from inside a worktree), `canopy preflight` skipped the `record_result` call because `ctx.feature` was None — even though `active_feature.json` had a canonical feature whose repos matched. Result: `feature_state` couldn't transition `in_progress → ready_to_commit` for the canonical feature without an explicit `--feature` arg, breaking the most natural workflow.
+
+**Fix:** in `cmd_preflight`, fall back to `active_feature.read_active(ws).feature` when `ctx.feature` is None. Verified: `canopy preflight` from workspace root now writes the record; `canopy state <canonical>` immediately reports `ready_to_commit`.
+
+### F-12: drifted state surfaces deprecated `realign` for main-tree (FIXED — this PR)
+
+Per CLAUDE.md, `realign` was deprecated from CLI/MCP in Wave 2.9 — replaced by the canonical-slot `switch` primitive which handles main-tree and worktree-backed features uniformly. But `_drifted_result` in `feature_state.py` still surfaced `realign` as the primary CTA for main-tree features (the worktree branch already used `switch`).
+
+**Fix:** main-tree drifted now also surfaces `switch` (with the same per-repo preview text). `tests/test_feature_state.py:test_drift_state_supersedes_everything` assertion updated.
+
+### F-13: misread — feature stash variants exist via `--feature` flag
+
+Initial run of §11 used `canopy stash save-feature` / `list-grouped` / `pop-feature` and got argparse errors. **Retracted on second look** — the feature variants are accessed via `--feature <name>` on the regular subcommands (`canopy stash save --feature ...` routes internally to `cmd_stash_save_feature`). Functionality works; my test plan had the wrong syntax. Plan §11 updated.
+
+### Plan-expectation corrections (not bugs)
+
+- **§8.5** — bad `--paths` filter produces `failed` (git add errors fatally on missing pathspec), not `nothing`. Original plan expectation was wrong; updated to reflect intentional fail-loud behavior.
+- **§11 JSON shape** — actual response shape is `{by_feature: {...}, untagged: [...]}`, not `{<feature>: [...]}`. Plan updated.
+- **§12.6 syntax** — flag is `--fix-category <name>`, not `--fix=<name>`. Plan updated.
+- **§6 disjoint-repo evacuation** — when a feature spans only some repos, switching to a different feature with disjoint repos leaves the unaffected repos on whatever branch they were on, with no warm-tree evacuation (`evacuation: None`). Sensible behavior, not a bug; worth noting for users who expect more.
+
+## Headline
+
+Run 2 found **2 real bugs (F-11, F-12), both fixed in the same PR**. The MCP/agent surface continues to be healthy; the bugs were both in CLI ergonomics. Combined with Run 1's findings, the cumulative tally is:
+
+- 13 findings filed (F-0 through F-12, plus F-13 retracted)
+- 11 fixed
+- 2 retracted (F-2, F-13 — measurement / syntax errors on the test side)
+
+Test-plan.md now covers §0–§13 (excluding the deferred §4 bot-tracking and §6 of the old composite scenario). §6–§12 are first-time tests for pre-M0 + cross-cutting flows. The plan is repeat-runnable; suggested cadence is once per release.
 - 🟡 Memory file `~/projects/canopy-test/.canopy/memory/sin-7-empty-state.{md,jsonl}` left in place — it's gitignored per M4's auto-write, harmless. Cleanup instruction: `rm -rf ~/projects/canopy-test/.canopy/memory/` if a fully fresh state is wanted.
 
 ## Headline takeaway

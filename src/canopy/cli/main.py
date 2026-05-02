@@ -1176,7 +1176,27 @@ def _cmd_preflight_context(args: argparse.Namespace) -> None:
     # IN_PROGRESS from READY_TO_COMMIT. Maps detect_context's directory
     # names back to canopy-registered repo names so feature_state
     # (which uses canonical names) can match.
-    if ctx.feature and ctx.workspace_root:
+    #
+    # F-11: when run from the workspace root (not inside a worktree),
+    # ``ctx.feature`` is None — but we may still have a canonical
+    # feature in ``active_feature.json`` whose repos overlap. Fall back
+    # to that so `canopy preflight` from the workspace root persists a
+    # record for the canonical feature, which is what `canopy state`
+    # then keys off to surface ready_to_commit.
+    feature_for_record = ctx.feature
+    if feature_for_record is None and ctx.workspace_root:
+        try:
+            from ..actions import active_feature as _af
+            from ..workspace.config import load_config as _load_config
+            from ..workspace.workspace import Workspace as _WS
+            _ws = _WS(_load_config(ctx.workspace_root))
+            _active = _af.read_active(_ws)
+            if _active and _active.feature:
+                feature_for_record = _active.feature
+        except Exception:
+            pass
+
+    if feature_for_record and ctx.workspace_root:
         try:
             from ..actions.preflight_state import record_result
             from ..workspace.config import load_config
@@ -1196,7 +1216,7 @@ def _cmd_preflight_context(args: argparse.Namespace) -> None:
                 head_sha_per_repo[canonical] = git_repo.head_sha(path)
             if head_sha_per_repo:
                 record_result(
-                    ctx.workspace_root, ctx.feature,
+                    ctx.workspace_root, feature_for_record,
                     passed=all_passed,
                     head_sha_per_repo=head_sha_per_repo,
                     summary=("preflight passed" if all_passed

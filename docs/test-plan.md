@@ -24,7 +24,7 @@ Status: `[ ]` `[ ]` `[ ]` `[ ]` `[ ]`
 
 ---
 
-## 1. M1 — `canopy doctor` (16 categories + version handshake)
+## 1. M1 — `canopy doctor` (17 categories + version handshake)
 
 | # | Check | Steps | Expected |
 |---|---|---|---|
@@ -121,7 +121,126 @@ Status: `[ ]` × 11
 
 ---
 
-## 6. End-to-end scenario (composite)
+## 6. `canopy switch` — canonical-slot focus primitive
+
+Switch is the primitive every other action depends on. It moves features between {canonical, warm, cold} states; the cap (`max_worktrees`, default 2) protects against unbounded warm-tree growth.
+
+| # | Check | Steps | Expected |
+|---|---|---|---|
+| 6.1 | switch by feature name | `cd canopy-test && canopy switch sin-7-empty-state --json` | `feature: sin-7-empty-state`, `mode: active_rotation` (or `wind_down`); `per_repo_paths` populated; `memory` field present (M4). Previously canonical evacuates to warm. |
+| 6.2 | switch by Linear ID alias | `canopy switch SIN-6 --json` | Resolves to `sin-6-cache-stats`; same response shape. |
+| 6.3 | active_feature.json updated | `cat .canopy/state/active_feature.json` after 6.2 | `feature == "sin-6-cache-stats"`; `last_touched` map updated. |
+| 6.4 | switch with --release-current (wind-down) | `canopy switch sin-7-empty-state --release-current --json` | Previously-canonical (sin-6) goes cold (no warm worktree, may have feature-tagged stash if dirty); `evacuation` field absent. |
+| 6.5 | switch back uses warm | After 6.1/6.2 with active rotation: `canopy switch <previously-canonical>` | Fast (≤500 ms typical); reads from existing warm worktree. |
+| 6.6 | switch fresh feature creates branches | `canopy switch SIN-9 --json` (assumes no `sin-9-*` lane exists) | Creates branches from default per repo; `branches_created` populated in response. |
+
+Status: `[ ]` × 6
+
+---
+
+## 7. The 9-state machine — all transitions reachable
+
+`feature_state` is the dashboard backend. Every state should be reachable through the right preconditions; this exercises each branch of `_decide_state`.
+
+| # | State | How to reach | Check |
+|---|---|---|---|
+| 7.1 | `drifted` | Manual `git checkout main` in one feature repo | `canopy state <f>` returns `drifted`; primary action is `switch` (post-F-12 — was `realign` pre-fix). |
+| 7.2 | `in_progress` | Switch to feature, edit a file, no preflight | `state == "in_progress"`; primary action `preflight`. |
+| 7.3 | `ready_to_commit` | After 7.2: run `canopy preflight` (passes) | `state == "ready_to_commit"`; primary `commit`. |
+| 7.4 | `ready_to_push` | After 7.3: `canopy commit -m "..."` | `state == "ready_to_push"`; primary `push`. |
+| 7.5 | `awaiting_review` | After 7.4: `canopy push --set-upstream` + open PR | `state == "awaiting_review"`; primary `refresh`. |
+| 7.6 | `approved` | Manually mark PR APPROVED on GitHub | `state == "approved"`; primary `merge`. |
+| 7.7 | `awaiting_bot_resolution` | (M3) PR with only bot comments, no human action | covered by §4 — blocked on CodeRabbit. |
+| 7.8 | `needs_work` | Reviewer requests changes OR ≥1 actionable human comment | `state == "needs_work"`; primary `address_review_comments`. |
+| 7.9 | `no_prs` | New feature, clean tree, no PR yet | `state == "no_prs"`; primary `pr_create`. |
+
+Status: `[ ]` × 9
+
+---
+
+## 8. `canopy commit` + `canopy push` lifecycle (Wave 2.3)
+
+| # | Check | Steps | Expected |
+|---|---|---|---|
+| 8.1 | commit with no message blocks | `canopy commit` (no `-m`) | `BlockerError(code='empty_message')`; exit 1; nothing commits. |
+| 8.2 | commit succeeds across all repos in lane | Switch to a multi-repo feature; edit one file in each; `canopy commit -m "test"` | Per-repo result `ok` for each; SHAs returned; `files_changed: 1` per repo. |
+| 8.3 | commit blocks on wrong_branch | Manually checkout a different branch in one repo, then `canopy commit -m "x"` | `BlockerError(code='wrong_branch')`; per-repo `expected`/`actual` map; **no repo commits** (atomic pre-flight). |
+| 8.4 | commit per-repo subset | `canopy commit --repo test-api -m "..."` | Only `test-api` commits; `test-ui` not in results. |
+| 8.5 | commit with bad path filter | `canopy commit --paths nonexistent.txt -m "..."` | `failed` status — `git add nonexistent.txt` errors fatally; canopy surfaces the git error in `reason`. (Soft-failing would mask user typos; verified intentional.) |
+| 8.6 | push with no upstream blocks | First push of a fresh branch: `canopy push` | `BlockerError(code='no_upstream')`; fix-action carries `--set-upstream`. |
+| 8.7 | push with --set-upstream succeeds | `canopy push --set-upstream` | Per-repo result `ok`; remote branch created. |
+| 8.8 | push when nothing to push | Re-run `canopy push` after 8.7 | `up_to_date` status per repo; no error. |
+
+Status: `[ ]` × 8
+
+---
+
+## 9. Drift detection + recovery
+
+The hook + `heads.json` give us cached drift detection; live `feature_state` is the source of truth. Both should agree, and `switch` should recover from any induced drift.
+
+| # | Check | Steps | Expected |
+|---|---|---|---|
+| 9.1 | Live drift detection | Switch to a multi-repo feature; manually `git checkout main` in one repo. `canopy state <f>` | `state == "drifted"`; `repos.<repo>.is_drifted` or similar marker. |
+| 9.2 | `canopy drift` cached path | After 9.1, `canopy drift --json` | Reports the same drift. (Cached path uses `heads.json` — should still see it after the post-checkout hook fires.) |
+| 9.3 | switch recovers | `canopy switch <f>` after 9.1 | All repos back on the feature branch; `state == ...` (in_progress / no_prs / etc., not `drifted`). |
+| 9.4 | drift survives doctor scan | `canopy doctor` while drifted | Reports `heads_stale` for the repo (live HEAD ≠ heads.json); `auto_fixable: true`. |
+
+Status: `[ ]` × 4
+
+---
+
+## 10. Universal aliases — every read tool agrees on shape
+
+Aliases were rewritten in PR #19 to be provider-aware. Verify the alias surface is consistent across CLI commands.
+
+| # | Alias form | Expected behaviour across `state`, `comments`, `branch`, `issue` |
+|---|---|---|
+| 10.1 | Feature name (`sin-7-empty-state`) | All resolve to the same feature; same `feature` field. |
+| 10.2 | Linear ID (`SIN-7`) | Resolves to `sin-7-empty-state` via `linear_issue` field. |
+| 10.3 | `<repo>#<n>` for PR commands | `canopy pr test-api#1` and `canopy comments test-api#1` work. |
+| 10.4 | PR URL | `canopy pr 'https://github.com/o/r/pull/1'` works. |
+| 10.5 | Bare GH issue # (with provider swapped) | Per F-7 fix: `canopy issue 5` works when `[issue_provider] = github_issues`. |
+| 10.6 | Unknown alias | Surfaces `BlockerError(code='unknown_alias')` with `expected.explicit_features` listing real lanes. |
+
+Status: `[ ]` × 6
+
+---
+
+## 11. Feature-tagged stash family
+
+Stash should be feature-aware: tagged on save, groupable on list, restorable on pop.
+
+| # | Check | Steps | Expected |
+|---|---|---|---|
+| 11.1 | save with --feature tags the stash | Edit a file; `canopy stash save --feature <feature> -m "wip auth"` | Stash entry created; `git stash list` shows `[canopy <feature> @ <ts>] wip auth`. (Note: feature variants live behind the `--feature` flag, not as separate subcommands.) |
+| 11.2 | list with --feature clusters by feature | `canopy stash list --feature <feature> --json` | Returns `{by_feature: {<feature>: [{repo, index, ref, message, feature, ts, user_message}]}, untagged: [...]}`. |
+| 11.3 | pop with --feature restores | Switch to clean state; `canopy stash pop --feature <feature>` | Latest stash for that feature applied; working tree dirty again. |
+| 11.4 | save without --feature is plain stash | `canopy stash save -m "plain"` | Stash created but appears under `untagged` in `list --feature` output. |
+| 11.5 | drop removes a stash | `canopy stash drop --index 0` | Removed; `git stash list` confirms. |
+
+Status: `[ ]` × 5
+
+---
+
+## 12. `canopy doctor --fix` (close M1's repair loop)
+
+Run §1.1 already exercised the *detection* side. This section validates the *repair* side end-to-end against canopy-test's real drift (8 issues found in Run 1).
+
+| # | Check | Steps | Expected |
+|---|---|---|---|
+| 12.1 | Auto-fixable issues exist | `canopy doctor --json` | `summary.errors > 0` OR `summary.warnings > 0` with `auto_fixable: true`. |
+| 12.2 | `--fix` repairs heads_stale | `canopy doctor --fix --json` (no `--clean-vsix`) | `fixed[]` includes `heads_stale` entries with `success: true`. Re-run shows them gone. |
+| 12.3 | `--fix` repairs worktree_missing | Same `--fix` run | `worktree_missing` entries either `success: true` (worktree recreated) or `success: false` with a clear `error`. |
+| 12.4 | `--clean-vsix` opt-in | `canopy doctor --fix --clean-vsix --json` | Removes all but newest `singularityinc.canopy-*` extension dirs. (Verify with `ls ~/.vscode/extensions/`.) |
+| 12.5 | `mcp_orphans` repair (F-3) | If any orphans present, `canopy doctor --fix --json` | `fixed[]` includes `mcp_orphans` with `success: true`; PIDs killed. |
+| 12.6 | category filter | `canopy doctor --fix --fix-category heads --json` | Only `heads_stale` repaired; other auto-fixable issues stay. (Flag is `--fix-category <name>`, not `--fix=<name>`.) |
+
+Status: `[ ]` × 6
+
+---
+
+## 13. End-to-end scenario (composite)
 
 One realistic feature lifecycle that exercises every shipped milestone in sequence. Plan ~30 minutes.
 
@@ -181,7 +300,7 @@ canopy doctor
 
 ---
 
-## 7. Known unverifiable / deferred
+## 14. Known unverifiable / deferred
 
 These are intentionally not testable in v1 — note them but skip:
 
@@ -198,7 +317,7 @@ These are intentionally not testable in v1 — note them but skip:
 
 ---
 
-## 8. After running this plan
+## 15. After running this plan
 
 1. **Record results** — fill in checkboxes in this file and commit (or paste the diff in a session note).
 2. **Triage failures** — each `[✗]` becomes either a bug fix (file an issue), a docs gap (clarify in the relevant SKILL.md / concepts.md), or a known limitation (move into §7).

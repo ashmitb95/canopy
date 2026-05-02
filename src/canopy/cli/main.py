@@ -50,12 +50,37 @@ def _load_workspace():
 
     try:
         config = load_config()
-    except ConfigNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        print("Run `canopy init` to create a canopy.toml.", file=sys.stderr)
+    except ConfigNotFoundError:
+        _print_no_workspace_error()
         sys.exit(1)
 
     return Workspace(config)
+
+
+def _print_no_workspace_error() -> None:
+    """Render the canonical 'no canopy.toml' error.
+
+    Centralised so every workspace-scoped command prints the same helpful
+    message instead of a terse "No canopy.toml found." See test-findings
+    F-1: this is the first error a fresh user is likely to hit.
+    """
+    print("Error: no canopy.toml found here or in any parent directory.",
+          file=sys.stderr)
+    print(file=sys.stderr)
+    print(
+        "Canopy needs to be run from a workspace — a non-git directory that holds",
+        file=sys.stderr,
+    )
+    print(
+        "your repos as subdirectories along with canopy.toml. Either:",
+        file=sys.stderr,
+    )
+    print(file=sys.stderr)
+    print("  • cd into your existing workspace root, or", file=sys.stderr)
+    print(
+        "  • run `canopy init` from a non-git directory containing the repos to bootstrap one.",
+        file=sys.stderr,
+    )
 
 
 # ── Commands ──────────────────────────────────────────────────────────────
@@ -1700,20 +1725,34 @@ def _read_command(impl, args, action_label: str, *extra_kwargs_keys):
 
 
 def cmd_issue(args: argparse.Namespace) -> None:
-    """Fetch a Linear issue by alias."""
-    from ..actions.reads import linear_get_issue
+    """Fetch an issue from the workspace's configured provider.
+
+    Uses the M5 ``issue_get`` action so the CLI surface matches the
+    ``mcp__canopy__issue_get`` MCP tool — canonical state mapping
+    (``todo`` / ``in_progress`` / ``done`` / ``cancelled``) and the
+    full ``Issue`` shape (id, identifier, title, description, state,
+    url, assignee, labels, priority, raw).
+    """
+    from ..actions.reads import issue_get
     from .ui import console
 
-    result = _read_command(linear_get_issue, args, "issue")
+    result = _read_command(issue_get, args, "issue")
     if args.json:
         _print_json(result)
         return
     console.print()
-    console.print(f"  [feature]{result['issue_id']}[/]  [muted]{result.get('state','')}[/]")
+    identifier = result.get("identifier") or result.get("id") or ""
+    state = result.get("state") or ""
+    console.print(f"  [feature]{identifier}[/]  [muted]{state}[/]")
     if result.get("title"):
         console.print(f"  {result['title']}")
     if result.get("url"):
         console.print(f"  [muted]{result['url']}[/]")
+    if result.get("assignee"):
+        console.print(f"  [muted]assignee:[/] {result['assignee']}")
+    labels = result.get("labels") or []
+    if labels:
+        console.print(f"  [muted]labels:[/] {', '.join(labels)}")
     if result.get("description"):
         desc = result["description"].strip()
         if len(desc) > 400:
@@ -1832,16 +1871,18 @@ def cmd_setup_agent(args: argparse.Namespace) -> None:
         if args.json:
             _print_json(status)
             return
-        skill = status["skill"]
+        skills_state = status.get("skills") or [status["skill"]]
         mcp = status["mcp"]
         console.print()
-        if skill["installed"] and skill["is_canopy_skill"]:
-            label = "[success]✓ up to date[/]" if skill["up_to_date"] else "[warning]● out of date[/]"
-            console.print(f"  skill   {label}  [muted]{skill['path']}[/]")
-        elif skill["installed"]:
-            console.print(f"  skill   [warning]foreign file present[/]  [muted]{skill['path']}[/]")
-        else:
-            console.print(f"  skill   [error]✗ not installed[/]  [muted]{skill['path']}[/]")
+        for skill in skills_state:
+            label_name = skill.get("name", "")
+            if skill["installed"] and skill["is_canopy_skill"]:
+                label = "[success]✓ up to date[/]" if skill["up_to_date"] else "[warning]● out of date[/]"
+                console.print(f"  skill[{label_name}]  {label}  [muted]{skill['path']}[/]")
+            elif skill["installed"]:
+                console.print(f"  skill[{label_name}]  [warning]foreign file present[/]  [muted]{skill['path']}[/]")
+            else:
+                console.print(f"  skill[{label_name}]  [muted]not installed[/]  [muted]{skill['path']}[/]")
         if mcp["configured"]:
             root = (mcp.get("env") or {}).get("CANOPY_ROOT", "")
             console.print(f"  mcp     [success]✓ configured[/]  [muted]CANOPY_ROOT={root}[/]")

@@ -149,6 +149,36 @@ def test_check_status_after_install(fake_home, tmp_path):
     assert status["mcp"]["configured"] is True
 
 
+def test_check_status_reports_all_installed_skills(fake_home, tmp_path):
+    """F-9: --check should iterate every bundled skill, not just the default."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    install_skill("using-canopy")
+    install_skill("augment-canopy")
+    status = check_status(workspace)
+    skills = status.get("skills") or []
+    by_name = {s["name"]: s for s in skills}
+    # Both bundled skills appear in the report
+    assert "using-canopy" in by_name
+    assert "augment-canopy" in by_name
+    assert by_name["using-canopy"]["installed"] is True
+    assert by_name["augment-canopy"]["installed"] is True
+    # Back-compat: top-level "skill" still mirrors the default (using-canopy)
+    assert status["skill"]["name"] == "using-canopy"
+
+
+def test_check_status_lists_uninstalled_skills_too(fake_home, tmp_path):
+    """skills array shows installed=false for opt-in skills not yet copied."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    install_skill("using-canopy")
+    # Don't install augment-canopy
+    status = check_status(workspace)
+    by_name = {s["name"]: s for s in (status.get("skills") or [])}
+    assert by_name["using-canopy"]["installed"] is True
+    assert by_name["augment-canopy"]["installed"] is False
+
+
 # ── setup_agent (composite) ──────────────────────────────────────────────
 
 def test_setup_agent_does_both_by_default(fake_home, tmp_path):

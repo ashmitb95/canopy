@@ -23,8 +23,55 @@ from .aliases import (
 from .errors import BlockerError, FixAction
 
 
+def issue_get(workspace: Workspace, alias: str) -> dict:
+    """Fetch an issue and return the canonical ``Issue.to_dict()`` shape.
+
+    Mirrors ``mcp__canopy__issue_get``. Canonical fields: ``id``,
+    ``identifier``, ``title``, ``description``, ``state`` (mapped to
+    ``todo`` / ``in_progress`` / ``done`` / ``cancelled``), ``url``,
+    ``assignee``, ``labels``, ``priority``, ``raw``.
+
+    Use this from new CLI / action code. ``linear_get_issue`` (below)
+    is the legacy wrapper that exposes the raw provider state for
+    pre-M5 callers — kept until they migrate.
+    """
+    issue_id = resolve_linear_id(workspace, alias)
+    provider = get_issue_provider(workspace)
+    try:
+        issue = provider.get_issue(issue_id)
+    except ProviderNotConfigured as e:
+        raise BlockerError(
+            code="issue_provider_not_configured",
+            what=f"Issue provider '{workspace.config.issue_provider.name}' is not configured",
+            details={"alias": alias, "issue_id": issue_id, "error": str(e)},
+            fix_actions=[
+                FixAction(
+                    action="configure_provider",
+                    args={"provider": workspace.config.issue_provider.name},
+                    safe=True,
+                    preview=f"configure {workspace.config.issue_provider.name} per docs/architecture/providers.md §4",
+                ),
+            ],
+        )
+    except IssueNotFoundError as e:
+        raise BlockerError(
+            code="issue_not_found",
+            what=f"Issue '{issue_id}' not found",
+            details={"alias": alias, "issue_id": issue_id, "error": str(e)},
+        )
+    out = issue.to_dict()
+    out["alias"] = alias   # convenience — original alias the caller passed
+    return out
+
+
 def linear_get_issue(workspace: Workspace, alias: str) -> dict:
-    """Fetch an issue from the workspace's configured issue provider.
+    """**Deprecated.** Legacy wrapper that exposes raw provider state.
+
+    Pre-M5 callers used this and asserted on ``state`` carrying the raw
+    string ("Todo", "open"). New code should call ``issue_get`` instead,
+    which returns the canonical mapped ``Issue.to_dict()`` shape.
+
+    Kept until: deprecated MCP tool ``linear_get_issue`` is retired.
 
     Despite the historical name, after M5 this resolves through the
     provider registry — the workspace's ``[issue_provider]`` block picks

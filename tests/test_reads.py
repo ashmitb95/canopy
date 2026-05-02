@@ -105,6 +105,49 @@ def test_linear_get_issue_no_linear_link_raises(workspace_with_feature):
     assert exc_info.value.code == "no_linear_id"
 
 
+# ── issue_get (M5+, canonical Issue shape — F-6 fix) ─────────────────────
+
+
+def test_issue_get_returns_canonical_shape(workspace_with_feature):
+    """F-6: new CLI/action surface returns Issue.to_dict() directly,
+    with canonical state mapping ('todo'/'in_progress'/'done'/'cancelled')
+    rather than raw provider strings."""
+    from canopy.actions.reads import issue_get
+    from canopy.providers.types import Issue
+    ws = _make_workspace(workspace_with_feature)
+    fake = Issue(
+        id="SIN-412", identifier="SIN-412", title="Test",
+        description="d", state="in_progress",
+        url="https://linear.app/x/issue/SIN-412",
+        assignee="alice",
+        labels=("bug", "p1"),
+        raw={"state": {"name": "Active"}},   # raw "Active", canonical "in_progress"
+    )
+    with patch("canopy.actions.reads.get_issue_provider", return_value=_fake_provider(fake)):
+        result = issue_get(ws, "SIN-412")
+    # Canonical fields
+    assert result["identifier"] == "SIN-412"
+    assert result["state"] == "in_progress"   # NOT "Active"
+    assert result["title"] == "Test"
+    assert result["assignee"] == "alice"
+    assert result["labels"] == ["bug", "p1"]   # to_dict converts tuple → list
+    # Convenience field
+    assert result["alias"] == "SIN-412"
+
+
+def test_issue_get_propagates_provider_not_configured(workspace_with_feature):
+    from canopy.actions.reads import issue_get
+    from canopy.providers.types import ProviderNotConfigured
+    from unittest.mock import MagicMock
+    ws = _make_workspace(workspace_with_feature)
+    provider = MagicMock()
+    provider.get_issue.side_effect = ProviderNotConfigured("nope")
+    with patch("canopy.actions.reads.get_issue_provider", return_value=provider):
+        with pytest.raises(BlockerError) as exc_info:
+            issue_get(ws, "SIN-412")
+    assert exc_info.value.code == "issue_provider_not_configured"
+
+
 # ── github_get_pr ────────────────────────────────────────────────────────
 
 def test_github_get_pr_specific_form(workspace_with_feature):

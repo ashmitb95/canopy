@@ -57,7 +57,8 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 | `feature_paths` | Working directory paths per repo |
 | `feature_done` | Clean up worktrees + branches + archive |
 | `feature_link_linear` | Attach a Linear issue to a feature |
-| `feature_state` | **Dashboard backend.** Returns `{state, summary, next_actions, warnings}`. State ∈ `{drifted, needs_work, in_progress, ready_to_commit, ready_to_push, awaiting_review, approved, no_prs}`. See [concepts.md](concepts.md#3-the-8-state-machine). |
+| `feature_state` | **Dashboard backend.** Returns `{state, summary, next_actions, warnings}`. State ∈ `{drifted, needs_work, in_progress, ready_to_commit, ready_to_push, awaiting_bot_resolution, awaiting_review, approved, no_prs}`. The `summary` carries split `actionable_human_count` + `actionable_bot_count` (M3). See [concepts.md](concepts.md#3-the-9-state-machine). |
+| `bot_comments_status` | **M3.** Per-feature rollup of bot review comments — `{feature, repos: {<repo>: {pr_number, total, resolved, unresolved, threads}}, all_resolved, any_bot_comments}`. Resolutions come from the persistent log written by `commit --address`. |
 
 #### Action (Wave 2)
 

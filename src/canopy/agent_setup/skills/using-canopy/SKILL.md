@@ -92,6 +92,14 @@ The `mcp__canopy__version` tool returns `{cli_version, mcp_version, schema_versi
 
 If the user wants canopy to behave differently here — *"use ruff for preflight"*, *"track CodeRabbit and Korbit as bots"*, *"the api repo runs `uv run pytest tests/fast` before commits"* — that's a **canopy.toml augment**. Suggest invoking the `augment-canopy` skill, which knows the schema and how to mutate the file safely. Install it with `canopy setup-agent --skill augment-canopy` if it isn't already.
 
+## Bot review comments
+
+When `mcp__canopy__feature_state` returns state `awaiting_bot_resolution`, only bot nits (CodeRabbit, Korbit, Cubic, etc.) are blocking — humans haven't requested changes. The `summary` splits the actionable count into `actionable_bot_count` and `actionable_human_count` so you can tell which side needs attention.
+
+- `mcp__canopy__bot_comments_status(feature)` returns the per-PR rollup: total / resolved / unresolved + per-thread metadata (id, author, file, body preview).
+- `mcp__canopy__commit(message, address=<comment-id>)` (or `canopy commit --address <id>`) auto-suffixes the commit message with the bot comment's title + URL and persists the resolution to `.canopy/state/bot_resolutions.json`. Resolved comments drop out of `actionable_bot_count` on the next `feature_state` call.
+- Address one comment per commit so the resolution log stays granular and the agent's next `bot-status` call has clean per-comment provenance.
+
 ## Anti-patterns
 
 - ❌ `cd <repo> && git checkout <branch>` — use `mcp__canopy__switch(feature=...)` so all participating repos move together with verification (and the previously-canonical feature evacuates to a warm worktree, preserving its work-in-progress).

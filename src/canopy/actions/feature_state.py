@@ -31,6 +31,8 @@ from ..workspace.workspace import Workspace
 from .aliases import (
     repos_for_feature, resolve_feature, _resolve_owner_slug,
 )
+from .augments import bot_authors
+from .bot_resolutions import resolutions_for_feature
 from .preflight_state import is_fresh
 from .review_filter import classify_threads
 
@@ -191,6 +193,9 @@ def _per_repo_facts(
         facts["repo_slug"] = slug
         facts["pr"] = None
         facts["actionable_count"] = 0
+        facts["actionable_human_count"] = 0
+        facts["actionable_bot_count"] = 0
+        facts["actionable_bot_threads"] = []
         facts["likely_resolved_count"] = 0
         facts["review_decision"] = ""
         if owner and slug:
@@ -208,13 +213,53 @@ def _per_repo_facts(
                         workspace.config.root, owner, slug, pr["number"],
                     )
                     classification = classify_threads(comments, repo_path, branch)
-                    facts["actionable_count"] = len(classification["actionable_threads"])
-                    facts["likely_resolved_count"] = len(classification["likely_resolved_threads"])
+                    actionable = classification["actionable_threads"]
+                    facts["likely_resolved_count"] = len(
+                        classification["likely_resolved_threads"],
+                    )
+                    bot_subs = bot_authors(workspace.config)
+                    resolved_ids = set(
+                        resolutions_for_feature(
+                            workspace.config.root, feature_name,
+                        ).keys()
+                    )
+                    bot_threads = [
+                        t for t in actionable
+                        if _is_bot_comment(t, bot_subs)
+                        and str(t.get("id", "")) not in resolved_ids
+                    ]
+                    human_threads = [
+                        t for t in actionable
+                        if not _is_bot_comment(t, bot_subs)
+                    ]
+                    facts["actionable_human_count"] = len(human_threads)
+                    facts["actionable_bot_count"] = len(bot_threads)
+                    facts["actionable_bot_threads"] = bot_threads
+                    facts["actionable_count"] = (
+                        facts["actionable_human_count"] + facts["actionable_bot_count"]
+                    )
                 except Exception:
                     pass
 
         out[repo_name] = facts
     return out
+
+
+def _is_bot_comment(comment: dict, bot_substrings: list[str]) -> bool:
+    """Determine if a normalized review comment came from a bot.
+
+    With ``review_bots`` configured (M2 augment), require both
+    ``author_type == "Bot"`` AND a substring match against the configured
+    list. Without it, fall back to the GitHub-provided ``author_type``
+    alone — so unconfigured workspaces still benefit from basic bot
+    detection.
+    """
+    author_type = (comment.get("author_type") or "").lower()
+    is_typed_bot = author_type == "bot"
+    if not bot_substrings:
+        return is_typed_bot
+    author = (comment.get("author") or "").lower()
+    return is_typed_bot and any(sub in author for sub in bot_substrings)
 
 
 def _summarize(per_repo: dict[str, dict]) -> dict[str, Any]:
@@ -223,6 +268,12 @@ def _summarize(per_repo: dict[str, dict]) -> dict[str, Any]:
         r: f.get("ahead", 0) for r, f in per_repo.items() if f.get("ahead", 0) > 0
     }
     actionable_total = sum(f.get("actionable_count", 0) for f in per_repo.values())
+    actionable_human_total = sum(
+        f.get("actionable_human_count", 0) for f in per_repo.values()
+    )
+    actionable_bot_total = sum(
+        f.get("actionable_bot_count", 0) for f in per_repo.values()
+    )
     likely_resolved_total = sum(
         f.get("likely_resolved_count", 0) for f in per_repo.values()
     )
@@ -234,10 +285,12 @@ def _summarize(per_repo: dict[str, dict]) -> dict[str, Any]:
         "dirty_repos": dirty_repos,
         "ahead_repos": ahead_repos,
         "actionable_count": actionable_total,
+        "actionable_human_count": actionable_human_total,
+        "actionable_bot_count": actionable_bot_total,
         "likely_resolved_count": likely_resolved_total,
         "review_decisions": decisions,
         "pr_count": pr_count,
-        "repos": {r: {k: v for k, v in f.items() if k != "pr"}
+        "repos": {r: {k: v for k, v in f.items() if k not in ("pr", "actionable_bot_threads")}
                    for r, f in per_repo.items()},
         "prs": {r: f["pr"] for r, f in per_repo.items() if f.get("pr")},
     }
@@ -263,6 +316,8 @@ def _decide_state(
 ) -> tuple[str, list[dict], list[dict]]:
     decisions = summary["review_decisions"]
     actionable = summary["actionable_count"]
+    actionable_human = summary.get("actionable_human_count", actionable)
+    actionable_bot = summary.get("actionable_bot_count", 0)
     dirty = bool(summary["dirty_repos"])
     ahead = bool(summary["ahead_repos"])
     pr_count = summary["pr_count"]
@@ -315,12 +370,15 @@ def _decide_state(
         return "ready_to_push", next_actions, warnings
 
     # Aligned, clean, caught up to remote (or nothing to push).
-    if actionable > 0 or _any_changes_requested(decisions):
+    # Human signals (CHANGES_REQUESTED reviews, or actionable human threads)
+    # block on `needs_work`; bot threads alone route to `awaiting_bot_resolution`.
+    if actionable_human > 0 or _any_changes_requested(decisions):
         next_actions = [
             {"action": "address_review_comments",
              "args": {"feature": feature_name},
              "primary": True, "label": "Address review comments",
-             "preview": f"{actionable} actionable thread(s)"},
+             "preview": f"{actionable_human} human thread(s), {actionable_bot} bot thread(s)"
+                          if actionable_bot else f"{actionable_human} human thread(s)"},
             {"action": "comments", "args": {"feature": feature_name},
              "primary": False, "label": "View comments"},
         ]
@@ -341,7 +399,31 @@ def _decide_state(
              "primary": True, "label": "Merge",
              "preview": "all PRs approved (manual or via UI)"},
         ]
+        # Bots may still have unresolved nits — surface as a non-gating
+        # secondary CTA. State stays `approved` (human approval is the merge
+        # gate; bot nits are a side-channel).
+        if actionable_bot > 0:
+            next_actions.append({
+                "action": "address_bot_comments",
+                "args": {"feature": feature_name},
+                "primary": False, "label": "Address bot comments",
+                "preview": f"{actionable_bot} unresolved bot thread(s)",
+            })
         return "approved", next_actions, warnings
+
+    # No human action pending, PR open, not yet approved. Bot nits get their
+    # own state so the agent + dashboard can distinguish "still review-pending"
+    # from "human is silent but bots flagged things."
+    if actionable_bot > 0:
+        next_actions = [
+            {"action": "address_bot_comments",
+             "args": {"feature": feature_name},
+             "primary": True, "label": "Address bot comments",
+             "preview": f"{actionable_bot} bot thread(s)"},
+            {"action": "comments", "args": {"feature": feature_name},
+             "primary": False, "label": "View comments"},
+        ]
+        return "awaiting_bot_resolution", next_actions, warnings
 
     next_actions = [
         {"action": "refresh", "args": {"feature": feature_name},

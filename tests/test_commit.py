@@ -257,3 +257,178 @@ def test_commit_empty_message_raises(workspace_with_feature):
     with pytest.raises(BlockerError) as exc:
         commit(ws, "", feature="auth-flow")
     assert exc.value.code == "empty_message"
+
+
+# ── --address (M3): bot-comment resolution ──────────────────────────────
+
+
+from unittest.mock import patch
+from canopy.actions.bot_resolutions import is_resolved, load_resolutions
+from canopy.actions.commit import (
+    _format_address_message, _comment_title, _parse_comment_id,
+)
+
+
+def _bot_comment(comment_id, *, body="rename foo to bar"):
+    return {
+        "id": comment_id, "path": "src/auth.py", "line": 1, "body": body,
+        "author": "coderabbit", "author_type": "Bot", "state": "",
+        "created_at": "2030-01-01T00:00:00Z",
+        "url": f"https://github.com/o/r/pull/1#discussion_r{comment_id}",
+        "in_reply_to_id": None,
+    }
+
+
+def _set_remote(repo_path, url):
+    subprocess.run(
+        ["git", "remote", "add", "origin", url],
+        cwd=repo_path, check=True, capture_output=True, text=True,
+    )
+
+
+def _open_pr():
+    return {"number": 1, "title": "x", "url": "u", "state": "open",
+            "head_branch": "auth-flow", "base_branch": "main", "body": "",
+            "review_decision": "REVIEW_REQUIRED", "mergeable": "", "draft": False}
+
+
+# helper unit tests (module-private but worth pinning)
+
+
+def test_parse_comment_id_accepts_numeric():
+    assert _parse_comment_id("123456") == "123456"
+
+
+def test_parse_comment_id_accepts_hash_form():
+    assert _parse_comment_id("#789") == "789"
+
+
+def test_parse_comment_id_accepts_full_url():
+    url = "https://github.com/o/r/pull/142#discussion_r999"
+    assert _parse_comment_id(url) == "999"
+
+
+def test_parse_comment_id_rejects_garbage():
+    with pytest.raises(BlockerError) as exc:
+        _parse_comment_id("not-an-id")
+    assert exc.value.code == "invalid_comment_id"
+
+
+def test_comment_title_first_line():
+    assert _comment_title("first line\nsecond") == "first line"
+    assert _comment_title("") == ""
+
+
+def test_comment_title_truncates():
+    long_title = "a" * 200
+    out = _comment_title(long_title, max_len=50)
+    assert out.endswith("…")
+    assert len(out) == 51
+
+
+def test_format_address_message_with_user_message():
+    msg = _format_address_message("rename complete", "rename foo", "https://gh/c/1")
+    assert msg.startswith("rename complete")
+    assert 'Addresses bot comment: "rename foo" (https://gh/c/1)' in msg
+
+
+def test_format_address_message_without_user_message():
+    msg = _format_address_message("", "rename foo", "https://gh/c/1")
+    assert msg == 'Addresses bot comment: "rename foo" (https://gh/c/1)'
+
+
+# integration tests
+
+
+def test_commit_with_address_records_resolution(workspace_with_feature):
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    ws = _make_workspace(workspace_with_feature, repos=("repo-a",))
+
+    (workspace_with_feature / "repo-a" / "src" / "models.py").write_text(
+        "renamed\n"
+    )
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(123456)], 0)):
+        result = commit(
+            ws, "user message",
+            feature="auth-flow", address="123456",
+        )
+
+    assert result["results"]["repo-a"]["status"] == "ok"
+    addressed = result["addressed"]
+    assert addressed["comment_id"] == "123456"
+    assert addressed["recorded"] is True
+    assert addressed["sha"]   # has the commit sha
+    # Resolution persisted to disk
+    assert is_resolved(workspace_with_feature, 123456) is True
+    entry = load_resolutions(workspace_with_feature)["123456"]
+    assert entry["feature"] == "auth-flow"
+    assert entry["repo"] == "repo-a"
+
+
+def test_commit_with_address_accepts_url(workspace_with_feature):
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    ws = _make_workspace(workspace_with_feature, repos=("repo-a",))
+
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("changed\n")
+
+    url = "https://github.com/o/r/pull/1#discussion_r999"
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(999)], 0)):
+        result = commit(ws, "fix", feature="auth-flow", address=url)
+
+    assert result["addressed"]["comment_id"] == "999"
+    assert result["addressed"]["recorded"] is True
+
+
+def test_commit_with_address_rejects_unknown_id(workspace_with_feature):
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    ws = _make_workspace(workspace_with_feature, repos=("repo-a",))
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(1)], 0)):
+        with pytest.raises(BlockerError) as exc:
+            commit(ws, "fix", feature="auth-flow", address="999999")
+    assert exc.value.code == "not_a_bot_comment"
+
+
+def test_commit_with_address_uses_only_auto_message_when_no_message(
+    workspace_with_feature,
+):
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    ws = _make_workspace(workspace_with_feature, repos=("repo-a",))
+
+    (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("changed\n")
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(123, body="please rename hit_rate")], 0)):
+        result = commit(ws, "", feature="auth-flow", address="123")
+
+    sha = result["results"]["repo-a"]["sha"]
+    msg = subprocess.run(
+        ["git", "log", "-1", "--format=%B", sha],
+        cwd=workspace_with_feature / "repo-a",
+        check=True, capture_output=True, text=True,
+    ).stdout
+    assert msg.strip().startswith('Addresses bot comment: "please rename hit_rate"')

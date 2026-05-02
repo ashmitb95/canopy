@@ -64,20 +64,23 @@ Every read tool accepts the same alias forms. Learn one rule, use everywhere:
 
 For features whose branch differs across repos (e.g., `SIN-13-fixes` in backend, `SIN-13-fixes-v2` in frontend — common when one side rebases or renames mid-flight), the lane's `branches` map handles it transparently. You pass the canonical feature alias; canopy resolves per-repo branches.
 
-## 3. The 8-state machine
+## 3. The 9-state machine
 
-`canopy state <feature>` (and the MCP tool `feature_state(feature)`) returns one of 8 states + an ordered `next_actions` array. Same data the [VSCode extension](https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy) dashboard renders.
+`canopy state <feature>` (and the MCP tool `feature_state(feature)`) returns one of 9 states + an ordered `next_actions` array. Same data the [VSCode extension](https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy) dashboard renders.
 
 | State | Detection | Primary `next_actions` |
 |---|---|---|
 | **`drifted`** | live `current_branch` ≠ expected for any repo in the lane | `switch(feature)` (canonical-slot model — handles both worktree and main-tree cases) |
-| **`needs_work`** | clean + (CHANGES_REQUESTED or actionable comments) | `address_review_comments(feature)` |
+| **`needs_work`** | clean + (CHANGES_REQUESTED or actionable human comments) | `address_review_comments(feature)` |
 | **`in_progress`** | aligned + dirty + no fresh preflight | `preflight(feature)` |
 | **`ready_to_commit`** | aligned + dirty + preflight passed for current HEAD | `commit(feature)` |
 | **`ready_to_push`** | aligned + clean + ahead of remote | `push(feature)` |
+| **`awaiting_bot_resolution`** (M3) | clean + PR open + no human signal + ≥1 unresolved bot comment | `address_bot_comments(feature)` → `commit --address <id>` |
 | **`awaiting_review`** | aligned + clean + PRs open + no actionable threads | refresh / wait |
-| **`approved`** | all PRs APPROVED | `merge` |
+| **`approved`** | all PRs APPROVED | `merge` (+ secondary `address_bot_comments` if bot threads remain) |
 | **`no_prs`** | aligned + clean + no PRs anywhere | `pr_create(feature)` |
+
+**Bot vs human comment classification** (M3): a comment counts as a bot when GitHub reports `author_type == "Bot"`. With `[augments] review_bots = ["coderabbit", ...]` set in canopy.toml, the author also has to substring-match the configured list — so an unconfigured bot account drops out of bot tracking and stays in the human bucket. Resolved bot comments (those addressed via `canopy commit --address <id>`) are subtracted from `actionable_bot_count`. Bot nits never gate `approved`; human approval is the merge gate.
 
 Detection uses **live git state** (not the cached `.canopy/state/heads.json`) for correctness — even if the post-checkout hook hasn't fired, `feature_state` is right. The hook + `heads.json` exist to power `canopy drift`'s fast path.
 
@@ -104,6 +107,9 @@ Detection uses **live git state** (not the cached `.canopy/state/heads.json`) fo
         │                                │                 │
         │                                push              │
         │                                │                 │
+        │                                ▼                 │
+        │                          awaiting_bot_resolution ── (only bot nits
+        │                                │                     unresolved)
         │                                ▼                 │
         │                          awaiting_review ───── (manual git checkout
         │                                │                 elsewhere = drift)

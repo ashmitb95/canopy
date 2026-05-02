@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P2
+effort: ~2d
+depends_on: ["bot-tracking.md"]
+---
+
 # Wave 4 — `draft_replies` for addressed PR review threads
 
 ## Mental model

@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P2
+effort: ~2d
+depends_on: ["bot-tracking.md"]
+---
+
 # CI status integration in `feature_state`
 
 ## Why

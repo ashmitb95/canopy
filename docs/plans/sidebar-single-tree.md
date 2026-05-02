@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P2
+effort: ~1d
+depends_on: []
+---
+
 # Canopy Sidebar — Collapse to Single Tree (Option A)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

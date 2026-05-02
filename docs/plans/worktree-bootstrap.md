@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P2
+effort: ~2d
+depends_on: ["doctor.md"]
+---
+
 # Worktree Bootstrap — env files, dep install, IDE workspace generation
 
 ## Why

@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P3
+effort: ~1-2d
+depends_on: []
+---
+
 # `canopy conflicts` — cross-feature file-overlap detection
 
 ## Why

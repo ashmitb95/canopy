@@ -616,160 +616,22 @@ Files touched by multiple sub-plans / artifacts. Listed once here so executors o
 
 ---
 
-## Section 9 — GitHub Issues tracking
+## Section 9 — Tracking via in-tree docs
 
-**Goal:** every pending plan becomes a trackable GitHub issue on `ashmitb95/canopy`. Plan files move in-tree under `docs/plans/` so contributors (Phil and others) can comment on the plans themselves; issues handle status, priority, dependencies, and discussion.
+Tracking lives in [INDEX.md](INDEX.md), not GitHub issues. Each plan file's YAML frontmatter declares its `status` / `priority` / `effort` / `depends_on`; INDEX.md is the rolled-up epic dashboard with a checkbox per milestone.
 
-### 9.1 — Plan file migration (in-tree)
+**Why in-tree docs instead of issues:**
 
-| Current location | New location | Notes |
-|---|---|---|
-| `~/.claude/plans/2026-04-26-canopy-action-drawer.md` | `docs/plans/action-drawer.md` | rename: drop date prefix |
-| `~/.claude/plans/2026-04-26-canopy-sidebar-single-tree.md` | `docs/plans/sidebar-single-tree.md` | |
-| `~/.claude/plans/2026-04-26-canopy-wave-2-4-ship.md` | `docs/plans/wave-2-4-ship.md` | |
-| `~/.claude/plans/2026-04-26-canopy-wave-4-draft-replies.md` | `docs/plans/wave-4-draft-replies.md` | |
-| `~/.claude/plans/2026-04-28-canopy-ci-status.md` | `docs/plans/ci-status.md` | |
-| `~/.claude/plans/2026-04-28-canopy-cross-feature-conflicts.md` | `docs/plans/cross-feature-conflicts.md` | |
-| `~/.claude/plans/2026-04-28-canopy-doctor.md` | `docs/plans/doctor.md` | append §2.2 contents (install-staleness categories) before publishing |
-| `~/.claude/plans/2026-04-28-canopy-worktree-bootstrap.md` | `docs/plans/worktree-bootstrap.md` | |
-| `~/.claude/plans/2026-04-26-canopy-skipped-phases.md` | (do not migrate) | superseded by this roadmap |
-| `~/.claude/plans/2026-04-26-canopy-wave-2-3-commit-push.md` | `docs/plans/archive/wave-2-3-commit-push.md` | shipped; archive for history |
-| `~/.claude/plans/lets-plaan-all-3-melodic-cloud.md` (this file) | `docs/plans/roadmap.md` | the in-tree canonical roadmap |
+- The plans are already detailed and reviewable as files. Duplicating into issue bodies adds maintenance overhead.
+- The user is mostly solo on canopy today; full GitHub Issues machinery (labels, templates, multi-issue dependency graph) is overkill.
+- Contributors who want to comment on the design can do it via PR review on the plan file. INDEX.md aggregates status; the file is the spec.
 
-The four new artifacts embedded in this roadmap (Sections 2.1–2.5) get extracted into their own `docs/plans/<name>.md` files at execution time (one per artifact):
+**Workflow:**
 
-- `docs/plans/providers-arch.md` (from §2.1)
-- `docs/plans/augments.md` (from §2.3 — N3)
-- `docs/plans/bot-tracking.md` (from §2.4 — N2)
-- `docs/plans/historian.md` (from §2.5)
-
-### 9.2 — Issue template
-
-Add `.github/ISSUE_TEMPLATE/plan.yml`:
-
-```yaml
-name: Plan tracking
-description: Track a planned feature against its in-repo plan file
-title: "[plan] "
-labels: ["plan-tracker"]
-body:
-  - type: input
-    id: plan-file
-    attributes:
-      label: Plan file
-      description: "Path to the in-repo plan file"
-      placeholder: "docs/plans/<name>.md"
-    validations:
-      required: true
-  - type: dropdown
-    id: priority
-    attributes:
-      label: Priority
-      options: [P0 (urgent), P1 (next up), P2 (queued), P3 (nice-to-have)]
-  - type: input
-    id: effort
-    attributes:
-      label: Effort estimate
-      placeholder: "~N days"
-  - type: input
-    id: depends-on
-    attributes:
-      label: Depends on
-      placeholder: "#<issue-number> (if any)"
-  - type: textarea
-    id: summary
-    attributes:
-      label: Summary
-      description: "2-3 sentences: what this delivers and why"
-    validations:
-      required: true
-  - type: textarea
-    id: acceptance
-    attributes:
-      label: Acceptance criteria
-      placeholder: "- [ ] item\n- [ ] item"
-    validations:
-      required: true
-  - type: textarea
-    id: out-of-scope
-    attributes:
-      label: Out of scope
-```
-
-### 9.3 — Labels to create
-
-Via `gh label create` (one-shot script `scripts/setup-labels.sh`):
-
-| Label | Color | Description |
-|---|---|---|
-| `P0` | `#b60205` | urgent |
-| `P1` | `#d93f0b` | next up |
-| `P2` | `#fbca04` | queued |
-| `P3` | `#0e8a16` | nice-to-have |
-| `plan-tracker` | `#5319e7` | tracks an in-repo plan file |
-| `cli` | `#1d76db` | scope: CLI |
-| `mcp` | `#1d76db` | scope: MCP server |
-| `backend` | `#1d76db` | scope: Python backend |
-| `extension` | `#1d76db` | scope: VSCode extension |
-| `docs` | `#0075ca` | scope: documentation |
-| `tests` | `#0075ca` | scope: tests |
-| `blocked` | `#000000` | status: blocked |
-| `in-progress` | `#fbca04` | status: in flight |
-| `ready-for-review` | `#0e8a16` | status: PR open |
-
-### 9.4 — Issues to create (13 sub-issues + 1 parent epic)
-
-| # | Issue title | Plan file | Priority | Scope labels | Depends on |
-|---|---|---|---|---|---|
-| Epic | Canopy roadmap 2026-05 — agent surface + dogfood-failure recoveries | docs/plans/roadmap.md | P0 | plan-tracker | n/a |
-| 1 | Architecture: provider injection contract (issue providers) | docs/plans/providers-arch.md | P0 | plan-tracker, docs | (epic) |
-| 2 | canopy doctor — state-file integrity + install-staleness recovery | docs/plans/doctor.md | P0 | plan-tracker, cli, mcp, backend | (epic) |
-| 3 | Augment skill — per-workspace customization (preflight_cmd, review_bots, test_cmd) | docs/plans/augments.md | P1 | plan-tracker, mcp, cli, backend | #2 |
-| 4 | Bot-comment tracking — `commit --address`, awaiting_bot_resolution state | docs/plans/bot-tracking.md | P1 | plan-tracker, mcp, cli, backend | #3 |
-| 5 | Historian — cross-session feature memory | docs/plans/historian.md | P1 | plan-tracker, mcp, backend | #4 |
-| 6 | Issue-provider scaffold — Linear refactor + GitHub Issues backend | docs/plans/issue-providers.md | P1 | plan-tracker, mcp, backend | #1 |
-| 7 | Worktree bootstrap — env-file copy, dep install, IDE workspace gen | docs/plans/worktree-bootstrap.md | P2 | plan-tracker, mcp, cli, backend | #2 |
-| 8 | Extension sidebar — collapse 5 trees → 1 unified tree | docs/plans/sidebar-single-tree.md | P2 | plan-tracker, extension | n/a |
-| 9 | Wave 2.4 — `canopy ship` (commit + push + open PR) | docs/plans/wave-2-4-ship.md | P2 | plan-tracker, mcp, cli, backend | #4 |
-| 10 | Wave 4 — `draft_replies` (auto-draft addressed-thread replies) | docs/plans/wave-4-draft-replies.md | P2 | plan-tracker, mcp, backend | #4 |
-| 11 | CI status integration — `awaiting_ci` state + `pr_checks` MCP tool | docs/plans/ci-status.md | P2 | plan-tracker, mcp, backend | #4 |
-| 12 | Extension action drawer — dashboard right-rail rebuild (~16 actions) | docs/plans/action-drawer.md | P3 | plan-tracker, extension | #9, #10 |
-| 13 | `canopy conflicts` — cross-feature file-overlap detection | docs/plans/cross-feature-conflicts.md | P3 | plan-tracker, mcp, cli, backend | n/a |
-
-### 9.5 — Per-issue body generation
-
-Each issue body is a 5-section condensation derived from the plan file:
-
-1. **Plan file link** (1 line, top of body): `**Plan:** [docs/plans/<name>.md](docs/plans/<name>.md)`
-2. **Metadata** (4 lines): Status / Priority / Effort / Depends on (from the table in 9.4)
-3. **Summary** (2–3 sentences, from the plan's "Goal" section)
-4. **Acceptance criteria** (5–8 checkbox items derived from the plan's "Verification" section, rephrased as user-visible outcomes)
-5. **Out of scope** (3–5 bullets from the plan's "Out of scope" / "Non-goals" section)
-
-The plan file remains the deeper execution reference; the issue body is the executive summary + tracking checklist.
-
-### 9.6 — Implementation steps (when execution begins)
-
-1. Create `docs/plans/` directory and `docs/plans/archive/` subdirectory in the canopy repo.
-2. Move/rename the 8 active plans + 1 archived plan per the table in 9.1. Update the in-tree doctor plan with §2.2 contents (install-staleness categories + version handshake additions).
-3. Extract the four embedded artifacts (Sections 2.1–2.5) into their own `docs/plans/<name>.md` files.
-4. Move this roadmap to `docs/plans/roadmap.md`.
-5. Commit the plan migration in one atomic commit on a `chore/plan-migration` branch; PR to main.
-6. Add `.github/ISSUE_TEMPLATE/plan.yml` and `scripts/setup-labels.sh`. Run the label-setup script.
-7. Create the parent epic issue first; capture its issue number.
-8. Create each of the 13 sub-issues. Reference the epic in each via "Part of #<epic-number>". Use the priority + scope labels per the table.
-9. Edit the parent epic body to include a checklist of all 13 sub-issues.
-10. Going forward: when work starts on a plan, label its issue `in-progress`; when its PR opens, label `ready-for-review`; when merged, close the issue.
-
-### 9.7 — Workflow conventions after migration
-
-- **Discussion happens on the issue**, not the plan file. The plan file is the spec; the issue is the tracker.
-- **Plan amendments happen on the plan file** via PR. The PR description references the issue.
-- **Cross-issue dependencies are surfaced via the `Depends on:` line in the body**, not via labels. Status-board logic can still parse it.
-- **Sub-issues link to the epic** via "Part of #<epic-number>" in the body. Epic body has the checklist.
-- **Closing the epic** requires all sub-issues closed.
-
----
+1. When a milestone starts: update its checkbox/glyph in INDEX.md (🟦 → 🟨); update its plan's frontmatter (`status: queued` → `in-progress`).
+2. When it ships: ✅ in INDEX.md, `status: shipped` in frontmatter, move the plan to `archive/` with a date.
+3. Plan amendments happen via PR on the plan file itself.
+4. If multi-contributor coordination becomes needed later (more than just Phil's PR), revisit issue tracking — the in-tree approach is the floor, not the ceiling.
 
 ## What changes in `~/.claude/plans/` after this is approved
 

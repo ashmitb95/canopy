@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P0
+effort: ~1d
+depends_on: []
+---
+
 # Architecture: provider-injection contract (issue providers)
 
 ## Why

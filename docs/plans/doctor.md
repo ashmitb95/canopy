@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P0
+effort: ~3-4d
+depends_on: []
+---
+
 # `canopy doctor` — state-file integrity checker + repair
 
 ## Why

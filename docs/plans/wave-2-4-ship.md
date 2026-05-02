@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P2
+effort: ~2-3d
+depends_on: ["bot-tracking.md"]
+---
+
 # Wave 2.4 — `ship` as the canonical-feature delivery primitive
 
 ## Mental model

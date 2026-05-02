@@ -1,3 +1,10 @@
+---
+status: shipped
+priority: -
+effort: (shipped)
+depends_on: []
+---
+
 # Wave 2.3 — `commit` + `push` as canonical-feature primitives
 
 ## Mental model

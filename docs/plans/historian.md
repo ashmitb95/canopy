@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P1
+effort: ~5-6d
+depends_on: ["bot-tracking.md"]
+---
+
 # Historian — cross-session feature memory
 
 ## Why

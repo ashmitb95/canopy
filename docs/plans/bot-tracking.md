@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P1
+effort: ~3d
+depends_on: ["augments.md"]
+---
+
 # Bot-comment tracking + `commit --address`
 
 ## Why

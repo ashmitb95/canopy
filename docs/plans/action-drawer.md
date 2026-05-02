@@ -1,3 +1,10 @@
+---
+status: queued
+priority: P3
+effort: ~3-4d
+depends_on: ["wave-2-4-ship.md", "wave-4-draft-replies.md"]
+---
+
 # Action Drawer — Per-Feature Dashboard Rebuild to Mockup Spec
 
 ## Mental model

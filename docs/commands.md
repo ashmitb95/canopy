@@ -92,6 +92,44 @@ Write actions and execution.
 |---|---|
 | `canopy done <feature> [--force]` | Clean up a completed feature — remove worktrees, delete branches (if merged), archive lane in `features.json`. `--force` overrides the dirty-tree refusal. |
 
+## Recover
+
+| Command | What it does |
+|---|---|
+| `canopy doctor [-v] [--feature <f>]` | Diagnose 16 categories of state-file drift + install staleness. Reports `errors`/`warnings`/`info` with structured `code`, `expected`, `actual`, and per-issue `fix_action`. **Run this first** when any other canopy operation returns an unexpected error — most "something is off" cases trace to one of these categories. `--json` returns the full report shape `{issues, summary, fixed, skipped}`. |
+| `canopy doctor --fix` | Repair every `auto_fixable=true` issue. Examples: rewrite `heads.json` from live git, drop orphan worktree dirs via `git worktree remove --force`, reinstall a missing post-checkout hook, re-resolve broken `active_feature.json` paths, write a missing `.mcp.json` entry, reinstall the `using-canopy` skill. |
+| `canopy doctor --fix-category <c>` | Repair just one category (`heads`, `active_feature`, `worktrees`, `hooks`, `preflight`, `features`, `branches`, `cli`, `mcp`, `skill`, `vsix`). Implies `--fix`. |
+| `canopy doctor --clean-vsix` | Required gate for the destructive `vsix_duplicates` repair (removes all but the newest `singularityinc.canopy-*` install dir). Other repairs are unaffected. |
+| `canopy --version` | Print the installed CLI version. |
+
+### Diagnostic codes
+
+State-integrity (the workspace's own bookkeeping):
+
+| Code | Severity | Detection | Auto-fix |
+|---|---|---|---|
+| `heads_stale` | warn | `heads.json` out of sync with `git rev-parse HEAD` | rewrite from live git |
+| `active_feature_orphan` | error | `active_feature.json` points at unknown feature | clear the file |
+| `active_feature_path_missing` | error | `per_repo_paths` reference non-existent dirs | re-resolve from `features.json` |
+| `worktree_orphan` | warn | `.canopy/worktrees/<f>/<r>/` not referenced by any feature | `git worktree remove --force` |
+| `worktree_missing` | error | feature × repo `worktree_paths` entry has no dir on disk | drop the entry |
+| `hook_missing` | error | repo lacks canopy's post-checkout hook | reinstall (chains existing user hook) |
+| `hook_chained_unsafe` | warn | chained user hook present but not executable | `chmod +x` |
+| `preflight_stale` | info | recorded `head_sha_per_repo` no longer matches live HEAD | drop the entry |
+| `features_unknown_repo` | error | `features.json` references repo not in `canopy.toml` | manual (decide whether to restore the repo or `done` the feature) |
+| `branches_missing` | error | feature's recorded branch doesn't exist locally | manual (restore branch or `done` feature) |
+
+Install-staleness (canopy's installation around the workspace):
+
+| Code | Severity | Detection | Auto-fix |
+|---|---|---|---|
+| `cli_stale` | warn | `canopy --version` < running `__version__` | manual reinstall |
+| `mcp_stale` | error | `canopy-mcp --version` < running `__version__` | manual reinstall |
+| `mcp_missing_in_workspace` | error | `.mcp.json` lacks canopy entry, or its `CANOPY_ROOT` is wrong | `install_mcp(reinstall=True)` |
+| `skill_missing` | warn | no `~/.claude/skills/using-canopy/SKILL.md` | `install_skill()` |
+| `skill_stale` | warn | installed skill drifted from bundled source | `install_skill(reinstall=True)` |
+| `vsix_duplicates` | info | multiple `singularityinc.canopy-*` extension dirs | requires `--clean-vsix` |
+
 ## Debug
 
 | Command | What it does |

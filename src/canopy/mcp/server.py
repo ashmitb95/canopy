@@ -54,6 +54,52 @@ def _get_workspace() -> Workspace:
     return Workspace(config)
 
 
+# ── Meta tools ───────────────────────────────────────────────────────────
+
+# Bump when canopy.toml schema changes in a way the extension/agent must know
+# about. Independent of the package version.
+_SCHEMA_VERSION = "1"
+
+
+@mcp.tool()
+def version() -> dict:
+    """Report canopy versions for the doctor handshake.
+
+    Returns:
+        ``{cli_version, mcp_version, schema_version}``. ``cli_version`` is
+        the ``canopy`` CLI as resolved from PATH (best-effort; empty string
+        if not installed). ``mcp_version`` is the running MCP server's
+        package version. ``schema_version`` covers the canopy.toml shape.
+        The extension calls this once at startup to compare against its
+        bundled expectation; the doctor uses it to detect drift between
+        CLI and MCP installations.
+    """
+    import shutil
+    import subprocess
+    from .. import __version__
+
+    cli_version = ""
+    cli_path = shutil.which("canopy")
+    if cli_path:
+        try:
+            out = subprocess.run(
+                [cli_path, "--version"],
+                capture_output=True, text=True, check=False, timeout=5,
+            )
+            if out.returncode == 0:
+                # "canopy 0.1.0" → "0.1.0"
+                parts = out.stdout.strip().split()
+                cli_version = parts[-1] if parts else ""
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+    return {
+        "cli_version": cli_version,
+        "mcp_version": __version__,
+        "schema_version": _SCHEMA_VERSION,
+    }
+
+
 # ── Workspace tools ──────────────────────────────────────────────────────
 
 @mcp.tool()
@@ -365,6 +411,53 @@ def github_get_pr_comments(alias: str) -> dict:
     from ..actions.reads import github_get_pr_comments as _impl
     ws = _get_workspace()
     return _impl(ws, alias)
+
+
+@mcp.tool()
+def doctor(
+    fix: bool = False,
+    fix_categories: list[str] | None = None,
+    feature: str | None = None,
+    clean_vsix: bool = False,
+) -> dict:
+    """Diagnose workspace + install integrity; optionally repair.
+
+    Returns ``{issues, summary, fixed, skipped, ...}``. ``issues`` is a list
+    of typed records ``{code, severity, what, expected?, actual?, repo?,
+    feature?, fix_action?, auto_fixable, details?}``. ``summary`` rolls up
+    counts by severity. ``fixed`` and ``skipped`` are populated when
+    ``fix=True`` (they are empty otherwise).
+
+    Diagnostic codes (16 categories):
+      State-integrity: heads_stale, active_feature_orphan,
+        active_feature_path_missing, worktree_orphan, worktree_missing,
+        hook_missing, hook_chained_unsafe, preflight_stale,
+        features_unknown_repo, branches_missing.
+      Install-staleness: cli_stale, mcp_stale, mcp_missing_in_workspace,
+        skill_missing, skill_stale, vsix_duplicates.
+
+    Use this as the recovery entry point when any other canopy operation
+    returns an unexpected error — most "something is off" cases trace to
+    one of the categories above.
+
+    Args:
+        fix: repair every auto-fixable issue.
+        fix_categories: limit ``fix`` to a subset of categories
+            (heads, active_feature, worktrees, hooks, preflight, features,
+            branches, cli, mcp, skill, vsix). Implies ``fix=True``.
+        feature: scope feature-bearing checks to one feature.
+        clean_vsix: required to repair ``vsix_duplicates`` (destructive).
+    """
+    from ..actions.doctor import doctor as _doctor
+
+    ws = _get_workspace()
+    return _doctor(
+        ws,
+        fix=fix,
+        fix_categories=fix_categories,
+        feature=feature,
+        clean_vsix=clean_vsix,
+    )
 
 
 @mcp.tool()
@@ -1107,6 +1200,11 @@ def sync(strategy: str = "rebase") -> dict:
 # ── Entry point ──────────────────────────────────────────────────────────
 
 def main():
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
+        from .. import __version__
+        print(f"canopy-mcp {__version__}")
+        return
     mcp.run(transport="stdio")
 
 

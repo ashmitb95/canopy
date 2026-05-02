@@ -24,9 +24,16 @@ Register in any MCP-compatible client. `canopy init` writes this entry into the 
 
 `CANOPY_ROOT` scopes the server to one workspace. To use canopy in multiple workspaces simultaneously, register separate entries with different `CANOPY_ROOT` values (or scope MCP per-project via `.mcp.json` at each workspace root).
 
-### Tools (41)
+### Tools (43)
 
 Grouped by topic. Every tool is alias-aware where it accepts a feature input.
+
+#### Meta
+
+| Tool | Description |
+|---|---|
+| `version` | `{cli_version, mcp_version, schema_version}` for the doctor handshake. The extension calls this once at startup; the doctor uses it to flag CLI/MCP version drift. |
+| `doctor` | Diagnose state-file integrity + install staleness; optionally repair. 16 categories, single tool. **The recovery entry point** — when any other call returns an unexpected error, agents should call `doctor` first to see whether state is corrupted. Returns `{issues, summary, fixed, skipped, ...}`. |
 
 #### Workspace
 

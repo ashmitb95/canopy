@@ -129,6 +129,10 @@
         "title": "Canopy: Install Backend (create managed venv)"
       },
       {
+        "command": "canopy.runDoctor",
+        "title": "Canopy: Run Doctor (diagnose + repair)"
+      },
+      {
         "command": "canopy.reinit",
         "title": "Canopy: Force Reinit Workspace (rescan & regenerate canopy.toml)",
         "icon": "$(sync)"

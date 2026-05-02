@@ -1,5 +1,5 @@
 ---
-status: queued
+status: in-progress
 priority: P0
 effort: ~3-4d
 depends_on: []

@@ -24,6 +24,7 @@ Canopy also returns **pre-classified state**: review comments are temporally fil
 | Commit across the canonical feature (one message, all repos) | `mcp__canopy__commit(message=...)` *(canonical feature inferred; pass `feature=` for non-canonical)* | `mcp__canopy__run(... 'git commit')` per repo |
 | Push the canonical feature to origin | `mcp__canopy__push()` *(add `set_upstream=True` on first push; the `no_upstream` blocker tells you when)* | `mcp__canopy__run(... 'git push')` per repo |
 | Check whether HEADs match expected | `mcp__canopy__drift` | `cd && git branch --show-current` per repo |
+| Recover from "something is off" — opaque errors, missing paths, stale state | `mcp__canopy__doctor` (then `doctor(fix=True)` if `auto_fixable`) | hunting through stash lists / worktree paths manually |
 | Read PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + manual filter |
 | Get PR data (title, decision, draft, ...) | `mcp__canopy__github_get_pr` | `gh pr view --json ...` per repo |
 | Get branch HEAD/divergence/upstream | `mcp__canopy__github_get_branch` | `cd repo && git status -b` |
@@ -76,6 +77,16 @@ The `fix_actions` array lists recommended recovery steps, ordered most-recommend
 - `safe: false` → surface to the user before invoking (it might lose work or affect remote state).
 
 When you see a `BlockerError`, the first step is to read `fix_actions[0]` and decide whether to follow it.
+
+## Recovery: when canopy itself looks broken
+
+If a canopy call returns an unexpected error — `KeyError` from a state read, a "feature not found" for one you just created, a worktree path that should exist but doesn't — call `mcp__canopy__doctor` first. It reports 16 categories of state-file drift + install-staleness, each with `code`, `severity`, `expected`/`actual`, and an `auto_fixable` flag.
+
+- `summary.errors == 0` → not a state problem; investigate the original error normally.
+- Errors present, mostly `auto_fixable: true` → call `doctor(fix=True)`; report `fixed`/`skipped` to the user.
+- `auto_fixable: false` (e.g., `features_unknown_repo`, `branches_missing`, `cli_stale`) → surface the issue's `fix_action` text. The human needs to decide.
+
+The `mcp__canopy__version` tool returns `{cli_version, mcp_version, schema_version}` for the same handshake.
 
 ## Anti-patterns
 

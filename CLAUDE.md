@@ -93,11 +93,12 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 - **Action contract:** `actions/protocol.py` (planned) will formalize the per-repo `{status, before, after, reason?}` shape. For now, each action returns it ad-hoc.
 - **Skill bundling:** `src/canopy/agent_setup/skill.md` ships in the wheel; `canopy setup-agent` (or `canopy init`) copies it to `~/.claude/skills/using-canopy/SKILL.md`. Foreign skills with the same path are not overwritten without `--reinstall`.
 
-## MCP Server (41 tools)
+## MCP Server (43 tools)
 
 Grouped by topic. Run with `canopy-mcp` (entry point) or `python -m canopy.mcp.server`.
 
 ```
+Meta:         version, doctor              # version handshake + 16-category recovery primitive
 Workspace:    workspace_status, workspace_context, workspace_config, workspace_reinit
 Feature:      feature_create, feature_list, feature_status, feature_diff,
               feature_changes, feature_merge_readiness, feature_paths, feature_done,

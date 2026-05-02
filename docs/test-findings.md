@@ -216,9 +216,62 @@ Test-plan.md now covers §0–§13 (excluding the deferred §4 bot-tracking and 
 
 ---
 
+---
+
+# Test Run 3 — 2026-05-03 (canopy 0.5.0 on main, post all fix PRs)
+
+Clean re-run of the full plan after [PR #21](https://github.com/ashmitb95/canopy/pull/21) landed. Goal: confirm every Run-1+Run-2 fix holds on main and exercise the previously-deferred §8.6–§8.8 push tests now that "remote branches OK" is acceptable.
+
+## Section results (Run 3)
+
+| Section | Result | Notes |
+|---|---|---|
+| §0 | ✅ 5/5 | canopy 0.5.0; MCP wired; gh + Linear authenticated; workspace parses to `ready_to_commit`. |
+| §1 | ✅ 5/5 | doctor surfaces 0 errors / 0 warnings / 1 info (only `vsix_duplicates`, gated). F-9 fix confirmed: `--check` reports both skills. |
+| §2 | ✅ all paths | F-6: `canopy issue SIN-5` returns canonical state `todo`. F-7: `canopy issue 5` (with github_issues) returns issue. F-5: `canopy issues` plural exists. |
+| §3 | ✅ baseline | preflight runs hooks correctly; augments not exercised (already verified Run 1). |
+| §5 | ✅ | historian show + compact noop both work. |
+| §6 | ✅ | switch + memory present; Linear ID + feature alias resolution. |
+| §7 / §9 | ✅ + **F-12 verified** | drifted → primary CTA `switch` (was `realign` pre-fix). |
+| **§8.6 / §8.7 / §8.8** | ✅ **first-time pass** | Push lifecycle end-to-end against real remote branches (see below). |
+| §10 | ✅ | feature-name + Linear-ID aliases both resolve. |
+| §11 | ✅ | stash save/list/pop with `--feature` round-trip works. |
+| §12 | ✅ + **F-3 real-world hit** | doctor `--fix` reaped a real orphan canopy-mcp (PID 31992 from `~/.canopy-vscode/venv/`); workspace ended at 0 errors / 0 warnings / 1 info. |
+
+## §8.6 / §8.7 / §8.8 (push lifecycle) — first execution
+
+Created an ephemeral feature `run3-push-test`, made a commit, then walked the lifecycle:
+
+- **§8.6** `canopy push` (no upstream) → `BlockerError(code='no_upstream')`, `fix_actions[0]` carries `set_upstream: True`. Exit 1. ✓
+- **§8.7** `canopy push --set-upstream` → both repos `ok`, remote branches created (verified via `gh api repos/.../branches/run3-push-test`). ✓
+- **§8.8** repeat `canopy push` → both repos `up_to_date`. ✓
+
+Cleanup: deleted local + remote branches + worktree paths + features.json entry. Workspace returned to baseline.
+
+## F-3 mcp_orphans — first real-world hit
+
+Run 2 verified F-3 detection logic with mocked `ps` output. Run 3 caught it firing on a *real* orphan: PID 31992, PPID 1, `/Users/ashmit/.canopy-vscode/venv/bin/canopy-mcp` — the venv-bin reveals it was spawned by a VSCode extension session whose parent process exited without cleanly closing stdin. `canopy doctor --fix` reaped it (`SIGTERM`); `ps -p 31992` afterward returned empty. End-to-end repair verified.
+
+## Bonus finding (not a bug — UX observation worth noting)
+
+**`switch` to a feature whose warm worktree is dirty correctly blocks** with `BlockerError(code='warm_worktree_dirty_on_promote')`. The fix-actions surface both `commit` and `stash_save_feature` as recovery paths. Encountered this naturally during cleanup when the warm worktree for `doc-1001-paired/test-api` had a stray edit from earlier in the session. Block + recovery path both worked as designed.
+
+## Cumulative tally after Run 3
+
+- **14 findings filed** total (F-0 through F-13)
+- **12 fixed** across PRs #16, #18, #19, #20, #21
+- **2 retracted** (F-2 + F-13 — both measurement/syntax errors on the test side)
+- **0 new bugs in Run 3**
+- Test suite holding at 651 passing
+- canopy-test workspace fully clean post-fix (errors:0, warnings:0, info:1 [vsix gated])
+
+The plan is now repeat-runnable end-to-end. Suggested cadence: once per release tag.
+
+---
+
 ## How to interpret this doc
 
-- Findings labeled `F-N` are bugs / gaps surfaced by this test run. Each has severity + suggested fix.
-- The "Action items" at the bottom are the to-do list for the next session.
+- Findings labeled `F-N` are bugs / gaps surfaced by a test run. Each has severity + suggested fix.
+- "Action items" sections are the to-do list for the next session.
 - Pass-with-finding (⚠️) means the surface works but reveals a quality issue worth noting.
-- This file is the *test run record*; the static plan to re-run is at [test-plan.md](test-plan.md).
+- This file is the *test run record* (one section per pass — Run 1, Run 2, Run 3 …); the static plan to re-run is at [test-plan.md](test-plan.md).

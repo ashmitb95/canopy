@@ -1020,6 +1020,7 @@ class FeatureCoordinator:
             }
         """
         from ..integrations.precommit import run_precommit
+        from ..actions.augments import repo_augments
 
         name = self._resolve_name(name)
         paths = self.resolve_paths(name)
@@ -1033,9 +1034,10 @@ class FeatureCoordinator:
             repo_path = Path(path_str)
             entry: dict = {"path": path_str}
 
-            # Run pre-commit hooks
+            # Run pre-commit hooks (honoring per-repo augments.preflight_cmd)
             try:
-                pc_result = run_precommit(repo_path)
+                augments = repo_augments(self.workspace.config, repo_name)
+                pc_result = run_precommit(repo_path, augments=augments)
                 entry["precommit"] = pc_result
                 if not pc_result["passed"]:
                     all_passed = False

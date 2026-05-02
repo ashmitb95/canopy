@@ -1,5 +1,5 @@
 ---
-status: queued
+status: in-progress
 priority: P1
 effort: ~2-3d
 depends_on: ["doctor.md"]

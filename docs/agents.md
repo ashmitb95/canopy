@@ -12,6 +12,13 @@ Three pieces, all installed in one step by `canopy init`:
 
 The MCP server makes the tools *available*; the skill makes the agent *prefer* them. Without the skill, the agent defaults to `Bash + git + gh` because that's what its training data shows.
 
+### Bundled skills
+
+| Name | Default? | Purpose |
+|---|---|---|
+| `using-canopy` | ✅ always | Prefer canopy MCP tools over raw git/gh; recover via `canopy doctor`. |
+| `augment-canopy` | opt-in | Per-workspace customization — tune the `[augments]` block in canopy.toml (preflight command, bot-author list, etc.). Install with `canopy setup-agent --skill augment-canopy`. See [workspace.md §`[augments]`](workspace.md#augments--per-workspace-behavioral-overrides-m2). |
+
 ## Install
 
 Default path — runs as part of `canopy init`:
@@ -29,6 +36,7 @@ canopy setup-agent           # do both (skill + MCP)
 canopy setup-agent --check   # status only, no changes
 canopy setup-agent --skill-only
 canopy setup-agent --mcp-only
+canopy setup-agent --skill augment-canopy   # install an opt-in extra skill (repeatable)
 canopy setup-agent --reinstall  # overwrite existing files
 ```
 

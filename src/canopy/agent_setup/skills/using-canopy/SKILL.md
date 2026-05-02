@@ -88,6 +88,10 @@ If a canopy call returns an unexpected error — `KeyError` from a state read, a
 
 The `mcp__canopy__version` tool returns `{cli_version, mcp_version, schema_version}` for the same handshake.
 
+## Customizing canopy for this workspace
+
+If the user wants canopy to behave differently here — *"use ruff for preflight"*, *"track CodeRabbit and Korbit as bots"*, *"the api repo runs `uv run pytest tests/fast` before commits"* — that's a **canopy.toml augment**. Suggest invoking the `augment-canopy` skill, which knows the schema and how to mutate the file safely. Install it with `canopy setup-agent --skill augment-canopy` if it isn't already.
+
 ## Anti-patterns
 
 - ❌ `cd <repo> && git checkout <branch>` — use `mcp__canopy__switch(feature=...)` so all participating repos move together with verification (and the previously-canonical feature evacuates to a warm worktree, preserving its work-in-progress).

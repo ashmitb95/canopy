@@ -49,6 +49,7 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 ### Shipped
 
+- [x] ✅ **M0 — Architecture: provider injection** — [archive/providers-arch.md](archive/providers-arch.md) · delivered as [`docs/architecture/providers.md`](../architecture/providers.md) · shipped 2026-05-02
 - [x] ✅ **Wave 2.3 — `commit` + `push`** — [archive/wave-2-3-commit-push.md](archive/wave-2-3-commit-push.md) · shipped 2026-04-26
 
 ---
@@ -57,9 +58,9 @@ Live status of canopy's planned work. Update this file as milestones progress; e
 
 | Bucket | Milestones | Estimate |
 |---|---|---|
-| Core (M0–M5) | 6 | ~17–20 days |
+| Core (M1–M5) | 5 | ~16–19 days |
 | Quality-of-life (M6–M12) | 7 | ~13–18 days |
-| **Total queued** | **13** | **~30–38 days** |
+| **Total queued** | **12** | **~29–37 days** |
 
 ---
 

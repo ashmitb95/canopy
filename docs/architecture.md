@@ -24,15 +24,15 @@ src/canopy/
 │   ├── aliases.py             # universal alias resolver (feature, repo#n, repo:branch, URL)
 │   ├── active_feature.py      # .canopy/state/active_feature.json reader/writer + last_touched LRU
 │   ├── drift.py               # detect_drift + assert_aligned (cached path)
-│   ├── evacuate.py            # WAVE 2.9: per-repo evacuate primitive (stash → wt-add → pop)
+│   ├── evacuate.py            # per-repo evacuate primitive (stash → wt-add → pop)
 │   ├── feature_state.py       # 8-state machine + next_actions (dashboard backend, worktree-aware)
 │   ├── preflight_state.py     # .canopy/state/preflight.json read/write + freshness check
 │   ├── reads.py               # linear_get_issue / github_get_pr / github_get_branch / github_get_pr_comments
 │   ├── realign.py             # internal helper used by switch (deprecated from CLI/MCP in Wave 2.9)
 │   ├── review_filter.py       # temporal classifier (actionable vs likely_resolved threads)
 │   ├── stash.py               # feature-tagged stash save/list/pop
-│   ├── switch.py              # WAVE 2.9: canonical-slot focus primitive (active rotation + wind-down)
-│   ├── switch_preflight.py    # WAVE 2.9: predictable-failure detection for switch
+│   ├── switch.py              # canonical-slot focus primitive (active rotation + wind-down)
+│   ├── switch_preflight.py    # predictable-failure detection for switch
 │   └── triage.py              # cross-repo PR enumeration + canonical-slot enrichment
 ├── agent/
 │   └── runner.py              # canopy_run — directory-safe shell exec (no path management)

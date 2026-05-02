@@ -1,8 +1,9 @@
 ---
-status: in-progress
+status: shipped
 priority: P1
 effort: ~5-6d
 depends_on: ["bot-tracking.md"]
+shipped: 2026-05-02
 ---
 
 # Historian — cross-session feature memory

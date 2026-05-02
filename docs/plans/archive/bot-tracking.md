@@ -1,8 +1,9 @@
 ---
-status: in-progress
+status: shipped
 priority: P1
 effort: ~3d
 depends_on: ["augments.md"]
+shipped: 2026-05-02
 ---
 
 # Bot-comment tracking + `commit --address`

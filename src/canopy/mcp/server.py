@@ -1561,6 +1561,25 @@ def sync(strategy: str = "rebase") -> dict:
     return multi.sync_all(ws, strategy=strategy)
 
 
+@mcp.tool()
+def slots() -> dict:
+    """List canonical + warm slot occupancy from slots.json.
+
+    Returns the structured slot state: canonical feature (with per-repo
+    paths), warm slot occupancy keyed by slot id (worktree-1, worktree-2,
+    ...), and the last_touched LRU map. Returns {canonical: None, slots: {}}
+    when no slot state has been written yet.
+
+    Use this to answer "what's in each slot" without inspecting filesystem
+    paths directly. The slot ids returned here are stable and can be passed
+    as feature aliases to any tool that accepts a feature name (added in T14).
+    """
+    from ..actions import slots as slots_mod
+    workspace = _get_workspace()
+    state = slots_mod.read_state(workspace)
+    return state.to_dict() if state else {"canonical": None, "slots": {}}
+
+
 # ── Entry point ──────────────────────────────────────────────────────────
 
 def main():

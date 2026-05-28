@@ -895,6 +895,38 @@ def cmd_worktree_list(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_slots(args: argparse.Namespace) -> None:
+    """Show slot occupancy: canonical + warm slots + last_touched."""
+    from ..actions import slots as slots_mod
+    from .ui import console
+
+    workspace = _load_workspace()
+    state = slots_mod.read_state(workspace)
+    if args.json:
+        _print_json(state.to_dict() if state else {"canonical": None, "slots": {}})
+        return
+    if state is None:
+        console.print()
+        console.print("  [muted]No slot state yet — run `canopy switch <feature>`.[/]")
+        console.print()
+        return
+    console.print()
+    if state.canonical:
+        console.print(f"  [header]Canonical:[/] [info]{state.canonical.feature}[/]"
+                      f"  [muted]({state.canonical.activated_at[:16]})[/]")
+    console.print(f"  [header]Slots ({len(state.slots)}/{state.slot_count}):[/]")
+    for i in range(1, state.slot_count + 1):
+        sid = f"worktree-{i}"
+        entry = state.slots.get(sid)
+        if entry:
+            last = state.last_touched.get(entry.feature, "")
+            console.print(f"    {sid}: [info]{entry.feature}[/]"
+                          f"  [muted]touched {last[:16]}[/]")
+        else:
+            console.print(f"    {sid}: [muted]<empty>[/]")
+    console.print()
+
+
 def _open_ide(ide_cmd: str, args: argparse.Namespace) -> None:
     """Open an IDE with the right directories for a feature or workspace.
 
@@ -3318,6 +3350,13 @@ def main() -> None:
                            help="Explicit feature name to evict to cold (overrides LRU pick)")
     switch_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # slots
+    slots_p = subparsers.add_parser(
+        "slots",
+        help="Show slot occupancy: canonical + warm slots + last_touched LRU",
+    )
+    slots_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     # setup-agent
     setup_p = subparsers.add_parser(
         "setup-agent",
@@ -3554,6 +3593,7 @@ def main() -> None:
         "pr": cmd_pr,
         "comments": cmd_comments,
         "switch": cmd_switch,
+        "slots": cmd_slots,
         "commit": cmd_commit,
         "bot-status": cmd_bot_status,
         "historian": cmd_historian,

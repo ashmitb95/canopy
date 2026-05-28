@@ -41,11 +41,13 @@ def _make_workspace(workspace_dir) -> Workspace:
 
 
 def _setup_feature_worktrees(workspace_dir):
-    """Create a feature with worktrees and return the feature dir."""
+    """Create a feature with worktrees and return the feature's slot dir."""
     ws = _make_workspace(workspace_dir)
     coordinator = FeatureCoordinator(ws)
     coordinator.create("auth-flow", use_worktrees=True)
-    return workspace_dir / ".canopy" / "worktrees" / "auth-flow"
+    features = coordinator._load_features()
+    slot_id = features["auth-flow"]["slot_id"]
+    return workspace_dir / ".canopy" / "worktrees" / slot_id
 
 
 # ── Context detection: feature directory ─────────────────────────────────

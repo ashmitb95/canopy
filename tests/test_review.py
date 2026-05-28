@@ -321,9 +321,10 @@ class TestReviewPrep:
 
         # Create feature with worktrees
         lane = coordinator.create("prep-test", use_worktrees=True)
+        slot_id = coordinator._load_features()["prep-test"]["slot_id"]
 
         # Make changes in a worktree
-        wt_path = canopy_toml / ".canopy" / "worktrees" / "prep-test" / "repo-a"
+        wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / "repo-a"
         (wt_path / "new_file.py").write_text("# new file\n")
 
         result = coordinator.review_prep("prep-test", message="fix: address review")
@@ -342,7 +343,7 @@ class TestReviewPrep:
         from canopy.git import repo as git_repo
         api_main = canopy_toml / "repo-a"
         git_repo.worktree_remove(api_main, wt_path, force=True)
-        ui_wt_path = canopy_toml / ".canopy" / "worktrees" / "prep-test" / "repo-b"
+        ui_wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / "repo-b"
         ui_main = canopy_toml / "repo-b"
         git_repo.worktree_remove(ui_main, ui_wt_path, force=True)
 
@@ -358,6 +359,7 @@ class TestReviewPrep:
 
         # Create worktrees but don't modify anything
         lane = coordinator.create("clean-test", use_worktrees=True)
+        slot_id = coordinator._load_features()["clean-test"]["slot_id"]
 
         result = coordinator.review_prep("clean-test")
 
@@ -369,7 +371,7 @@ class TestReviewPrep:
         # Cleanup
         from canopy.git import repo as git_repo
         for repo_name in ["repo-a", "repo-b"]:
-            wt_path = canopy_toml / ".canopy" / "worktrees" / "clean-test" / repo_name
+            wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / repo_name
             main_path = canopy_toml / repo_name
             git_repo.worktree_remove(main_path, wt_path, force=True)
 
@@ -385,6 +387,7 @@ class TestReviewPrep:
 
         # Create worktrees
         lane = coordinator.create("hook-test", use_worktrees=True)
+        slot_id = coordinator._load_features()["hook-test"]["slot_id"]
 
         # Install a passing pre-commit hook in the api repo
         # The hook lives in the main repo's .git/hooks/ — worktrees inherit it
@@ -396,7 +399,7 @@ class TestReviewPrep:
         hook.chmod(0o755)
 
         # Make a change
-        wt_path = canopy_toml / ".canopy" / "worktrees" / "hook-test" / "repo-a"
+        wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / "repo-a"
         (wt_path / "touched.py").write_text("# touched\n")
 
         result = coordinator.review_prep("hook-test")
@@ -409,6 +412,6 @@ class TestReviewPrep:
         # Cleanup
         from canopy.git import repo as git_repo
         for repo_name in ["repo-a", "repo-b"]:
-            wt_path = canopy_toml / ".canopy" / "worktrees" / "hook-test" / repo_name
+            wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / repo_name
             main_path = canopy_toml / repo_name
             git_repo.worktree_remove(main_path, wt_path, force=True)

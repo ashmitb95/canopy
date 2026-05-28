@@ -54,8 +54,10 @@ class TestFeatureCreateWorktree:
         assert "repo-a" in lane.repos
         assert "repo-b" in lane.repos
 
-        # Worktree directories should exist
-        wt_base = workspace_dir / ".canopy" / "worktrees" / "payment-flow"
+        # Worktree directories should exist (under the allocated slot dir)
+        features = coordinator._load_features()
+        slot_id = features["payment-flow"]["slot_id"]
+        wt_base = workspace_dir / ".canopy" / "worktrees" / slot_id
         assert (wt_base / "repo-a").exists()
         assert (wt_base / "repo-b").exists()
 
@@ -82,8 +84,10 @@ class TestFeatureCreateWorktree:
             "custom-wt", use_worktrees=True, worktree_base=custom_base
         )
 
-        assert (custom_base / "custom-wt" / "repo-a").exists()
-        assert (custom_base / "custom-wt" / "repo-b").exists()
+        features = coordinator._load_features()
+        slot_id = features["custom-wt"]["slot_id"]
+        assert (custom_base / slot_id / "repo-a").exists()
+        assert (custom_base / slot_id / "repo-b").exists()
 
     def test_create_worktree_subset(self, workspace_dir):
         ws = _make_workspace(workspace_dir)
@@ -93,7 +97,9 @@ class TestFeatureCreateWorktree:
             "api-only-wt", repos=["repo-a"], use_worktrees=True
         )
 
-        wt_base = workspace_dir / ".canopy" / "worktrees" / "api-only-wt"
+        features = coordinator._load_features()
+        slot_id = features["api-only-wt"]["slot_id"]
+        wt_base = workspace_dir / ".canopy" / "worktrees" / slot_id
         assert (wt_base / "repo-a").exists()
         assert not (wt_base / "repo-b").exists()
 
@@ -108,9 +114,10 @@ class TestWorktreeSmartStatus:
         coordinator.create("status-wt-test", use_worktrees=True)
         lane = coordinator.status("status-wt-test")
 
+        # Worktree paths now live under .canopy/worktrees/<slot_id>/<repo>
         for repo_name, state in lane.repo_states.items():
             assert "worktree_path" in state
-            assert "status-wt-test" in state["worktree_path"]
+            assert ".canopy/worktrees/" in state["worktree_path"]
 
 
 # ── resolve_paths ────────────────────────────────────────────────────────
@@ -125,9 +132,9 @@ class TestResolvePaths:
 
         assert "repo-a" in paths
         assert "repo-b" in paths
-        # Should point to worktree directories
+        # Should point to worktree directories under .canopy/worktrees/<slot>
         for repo, path in paths.items():
-            assert "resolve-wt" in path
+            assert ".canopy/worktrees/" in path
             assert Path(path).exists()
 
     def test_resolve_branch_paths(self, workspace_with_feature):
@@ -249,12 +256,12 @@ class TestWorktreeAddAndQuery:
 
 class TestWorktreesLive:
     def test_live_scan_empty(self, workspace_dir):
-        """No worktrees → features dict is empty."""
+        """No worktrees → slots dict is empty."""
         ws = _make_workspace(workspace_dir)
         coordinator = FeatureCoordinator(ws)
         result = coordinator.worktrees_live()
 
-        assert result["features"] == {}
+        assert result["slots"] == {}
         assert "repo-a" in result["repos"]
         assert "repo-b" in result["repos"]
 
@@ -266,8 +273,11 @@ class TestWorktreesLive:
 
         result = coordinator.worktrees_live()
 
-        assert "live-test" in result["features"]
-        feat = result["features"]["live-test"]
+        # Find the slot that hosts live-test
+        live_slots = [s for s in result["slots"].values()
+                      if s["feature"] == "live-test"]
+        assert len(live_slots) == 1
+        feat = live_slots[0]
         assert "repo-a" in feat["repos"]
         assert "repo-b" in feat["repos"]
 
@@ -283,11 +293,14 @@ class TestWorktreesLive:
         coordinator = FeatureCoordinator(ws)
         coordinator.create("dirty-test", use_worktrees=True)
 
-        wt_path = workspace_dir / ".canopy" / "worktrees" / "dirty-test" / "repo-a"
+        features = coordinator._load_features()
+        slot_id = features["dirty-test"]["slot_id"]
+        wt_path = workspace_dir / ".canopy" / "worktrees" / slot_id / "repo-a"
         (wt_path / "new_file.py").write_text("print('hello')")
 
         result = coordinator.worktrees_live()
-        api_info = result["features"]["dirty-test"]["repos"]["repo-a"]
+        slot_view = result["slots"][slot_id]
+        api_info = slot_view["repos"]["repo-a"]
         assert api_info["dirty"] is True
         assert api_info["dirty_count"] >= 1
         assert "new_file.py" in api_info["dirty_files"]

@@ -5,91 +5,14 @@ Coverage:
   - cold-Y allocates the lowest free slot for X
   - cap-reached + ``no_evict=True`` raises ``BlockerError(worktree_cap_reached)``
 
-T11 will move these fixtures to conftest.py; for T5 they live inline so
-the switch refactor can be verified before fixture relocation.
+Slot-model fixtures (workspace_with_canonical_only / workspace_with_slots /
+workspace_with_full_slots) live in conftest.py.
 """
 from __future__ import annotations
 
 import subprocess
 
 import pytest
-
-
-# ── T5-inline fixtures (will move to conftest.py in T11) ────────────────
-
-@pytest.fixture
-def canopy_toml_for_workspace(workspace_with_feature):
-    """canopy.toml inside the workspace_with_feature root."""
-    toml = workspace_with_feature / "canopy.toml"
-    toml.write_text("""
-[workspace]
-name = "test"
-slots = 2
-
-[[repos]]
-name = "repo-a"
-path = "repo-a"
-
-[[repos]]
-name = "repo-b"
-path = "repo-b"
-""")
-    return workspace_with_feature
-
-
-@pytest.fixture
-def workspace_with_canonical_only(canopy_toml_for_workspace):
-    """Canonical=X, no warm slots, slots=2. Y exists as a cold branch."""
-    from canopy.workspace.workspace import Workspace
-    from canopy.workspace.config import load_config
-    from canopy.actions import slots as sm
-
-    ws = Workspace(load_config(canopy_toml_for_workspace))
-    # Seed canonical=X with both repos' main checkouts (X branch).
-    for repo in ("repo-a", "repo-b"):
-        subprocess.run(["git", "branch", "X"],
-                       cwd=canopy_toml_for_workspace / repo, check=True)
-        subprocess.run(["git", "checkout", "X"],
-                       cwd=canopy_toml_for_workspace / repo, check=True)
-        subprocess.run(["git", "branch", "Y"],
-                       cwd=canopy_toml_for_workspace / repo, check=True)
-
-    sm.write_state(ws, sm.SlotState(
-        slot_count=2,
-        canonical=sm.CanonicalEntry(
-            feature="X", activated_at=sm.now_iso(),
-            per_repo_paths={
-                "repo-a": str(canopy_toml_for_workspace / "repo-a"),
-                "repo-b": str(canopy_toml_for_workspace / "repo-b"),
-            },
-        ),
-    ))
-    return ws
-
-
-@pytest.fixture
-def workspace_with_slots(workspace_with_canonical_only):
-    """X canonical, Y warm in slot-1."""
-    from canopy.actions.switch import switch
-    switch(workspace_with_canonical_only, "Y")  # Y canonical, X warm slot-1
-    switch(workspace_with_canonical_only, "X")  # X canonical, Y warm slot-1
-    return workspace_with_canonical_only
-
-
-@pytest.fixture
-def workspace_with_full_slots(workspace_with_canonical_only):
-    """slots=2; both slots filled (A and B); canonical=X."""
-    ws = workspace_with_canonical_only
-    for branch in ("A", "B"):
-        for repo in ("repo-a", "repo-b"):
-            subprocess.run(["git", "branch", branch],
-                           cwd=ws.config.root / repo, check=True)
-    from canopy.actions.switch import switch
-    switch(ws, "A")  # X→warm slot-1, A canonical
-    switch(ws, "B")  # A→warm slot-2, B canonical
-    switch(ws, "X")  # B→warm? but X was evicted. We need X to be canonical
-                     # with A and B in the two warm slots.
-    return ws
 
 
 # ── tests ───────────────────────────────────────────────────────────────

@@ -59,7 +59,8 @@ def test_feature_with_worktree_uses_worktree_path(workspace_dir):
 
     result = run_in_repo(ws, repo="repo-a", command="pwd", feature="wt-feat")
     assert result["exit_code"] == 0
-    assert "/.canopy/worktrees/wt-feat/repo-a" in result["cwd"]
+    slot_id = coord._load_features()["wt-feat"]["slot_id"]
+    assert f"/.canopy/worktrees/{slot_id}/repo-a" in result["cwd"]
 
 
 def test_feature_without_worktree_falls_back_to_repo_path(workspace_with_feature):

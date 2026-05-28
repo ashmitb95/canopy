@@ -2,7 +2,7 @@
 
 Stages tracked changes (or explicit ``paths``) and commits across every
 repo in a feature lane with a single message. The canonical feature is
-inferred from ``active_feature.json`` when no ``--feature`` is given;
+inferred from ``slots.json`` when no ``--feature`` is given;
 explicit names override.
 
 Pre-flight: every in-scope repo must currently be on its expected branch
@@ -35,7 +35,7 @@ from typing import Any
 
 from ..git import repo as git
 from ..workspace.workspace import Workspace
-from . import active_feature as af
+from . import slots as slots_mod
 from .aliases import repos_for_feature, resolve_feature
 from .bot_resolutions import record_resolution
 from .errors import BlockerError, FixAction
@@ -48,8 +48,8 @@ def _resolve_feature_name(
     """Pick the feature: explicit alias → resolved name, else canonical."""
     if feature:
         return resolve_feature(workspace, feature)
-    active = af.read_active(workspace)
-    if active is None:
+    state = slots_mod.read_state(workspace)
+    if state is None or state.canonical is None:
         raise BlockerError(
             code="no_canonical_feature",
             what="no active feature; pass --feature or run `canopy switch <name>` first",
@@ -58,7 +58,7 @@ def _resolve_feature_name(
                           preview="canopy switch <feature> sets the canonical slot"),
             ],
         )
-    return active.feature
+    return state.canonical.feature
 
 
 def _verify_branches(
@@ -188,7 +188,7 @@ def commit(
             supplies one). Empty messages should be rejected at the CLI
             parse layer before reaching here.
         feature: feature alias. If None, falls back to the canonical
-            feature in ``active_feature.json``.
+            feature in ``slots.json``.
         repos: optional filter — only commit in these repos within
             the feature scope. Repos NOT in the feature lane are
             silently skipped (single source of truth: the feature).

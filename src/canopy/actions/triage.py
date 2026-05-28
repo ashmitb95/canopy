@@ -18,10 +18,9 @@ from typing import Any
 
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
-from . import active_feature as af
+from . import slots as slots_mod
 from .aliases import _resolve_owner_slug
 from .errors import BlockerError
-from .evacuate import warm_worktree_path
 from .review_filter import classify_threads
 
 
@@ -67,8 +66,8 @@ def triage(
     target_repos = _select_repos(workspace, repos)
     prs_by_repo = _fetch_open_prs(workspace, target_repos, author)
     feature_groups = _group_by_feature(workspace, prs_by_repo)
-    active = af.read_active(workspace)
-    canonical_feature = active.feature if active else None
+    state = slots_mod.read_state(workspace)
+    canonical_feature = state.canonical.feature if state and state.canonical else None
     enriched = [_enrich(workspace, g, canonical_feature) for g in feature_groups]
     enriched.sort(key=lambda f: _PRIORITY_ORDER.get(f["priority"], 99))
     return {
@@ -204,11 +203,15 @@ def _enrich(
         actionable = classification["actionable_threads"]
 
         # Physical state per repo: where this feature lives right now.
-        wt = warm_worktree_path(workspace, feature_name, canopy_repo)
+        slot_id = slots_mod.slot_for_feature(workspace, feature_name)
+        wt = (
+            slots_mod.slot_worktree_path(workspace, slot_id, canopy_repo)
+            if slot_id else None
+        )
         if is_canonical:
             phys = "canonical"
             path = str(state.abs_path.resolve())
-        elif wt.exists() and (wt / ".git").exists():
+        elif wt is not None and wt.exists() and (wt / ".git").exists():
             phys = "warm"
             path = str(wt.resolve())
         else:

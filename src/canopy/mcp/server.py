@@ -257,7 +257,7 @@ def commit(message: str = "", feature: str | None = None,
     """Commit across every repo in a feature lane with a single message (Wave 2.3).
 
     Defaults to the canonical feature when ``feature`` is omitted (reads
-    ``.canopy/state/active_feature.json``). ``--paths`` filters staging
+    ``.canopy/state/slots.json``). ``--paths`` filters staging
     to those files; otherwise stages all tracked changes (``git add -u``).
 
     Pre-flight: every in-scope repo must be on the feature's expected
@@ -320,19 +320,19 @@ def _historian_feature(feature: str | None) -> tuple:
 
     Falls back to the canonical feature when ``feature`` is omitted.
     """
-    from ..actions import active_feature as af
+    from ..actions import slots as slots_mod
     from ..actions.aliases import resolve_feature
     from ..actions.errors import BlockerError
     ws = _get_workspace()
     if feature:
         return ws.config.root, resolve_feature(ws, feature)
-    active = af.read_active(ws)
-    if active is None:
+    state = slots_mod.read_state(ws)
+    if state is None or state.canonical is None:
         raise BlockerError(
             code="no_canonical_feature",
             what="no active feature; pass `feature` or run `canopy switch <name>` first",
         )
-    return ws.config.root, active.feature
+    return ws.config.root, state.canonical.feature
 
 
 @mcp.tool()
@@ -752,7 +752,7 @@ def drift(feature: str | None = None) -> dict:
 
     Use this as the precondition check before any multi-repo write op
     (commit, push, ship). If any feature shows drift, the agent should
-    surface it and offer to run ``realign``.
+    surface it and offer to run ``switch`` to re-align the canonical slot.
 
     Args:
         feature: limit the report to one feature lane. If None, all
@@ -1238,10 +1238,10 @@ def workspace_config(
     With key only: returns that setting's value.
     With key and value: sets the value and returns it.
 
-    Available settings: name, max_worktrees.
+    Available settings: name, slots.
 
     Args:
-        key: Setting name (e.g. "max_worktrees").
+        key: Setting name (e.g. "slots").
         value: New value to set. Omit to read.
     """
     from ..workspace.config import (

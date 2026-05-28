@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from canopy.actions.active_feature import write_active
+from canopy.actions import slots as slots_mod
 from canopy.actions.errors import BlockerError
 from canopy.actions.push import push
 from canopy.git import repo as git
@@ -183,9 +183,13 @@ def test_push_uses_canonical_when_no_feature(workspace_with_remotes):
         "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
     })
     ws = _make_workspace(workspace_with_remotes)
-    write_active(ws, feature="auth-flow", per_repo_paths={
-        r.config.name: str(r.abs_path) for r in ws.repos
-    })
+    state = slots_mod.read_state(ws) or slots_mod.SlotState()
+    state.canonical = slots_mod.CanonicalEntry(
+        feature="auth-flow",
+        activated_at=slots_mod.now_iso(),
+        per_repo_paths={r.config.name: str(r.abs_path) for r in ws.repos},
+    )
+    slots_mod.write_state(ws, state)
 
     result = push(ws, set_upstream=True)
     assert result["feature"] == "auth-flow"

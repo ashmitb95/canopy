@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import active_feature as af
+from . import slots as slots_mod
 from .aliases import repos_for_feature, resolve_feature
 from .bot_resolutions import resolutions_for_feature
 from .errors import BlockerError, FixAction
@@ -88,8 +88,8 @@ def bot_comments_status(
 def _resolve_feature_name(workspace: Workspace, feature: str | None) -> str:
     if feature:
         return resolve_feature(workspace, feature)
-    active = af.read_active(workspace)
-    if active is None:
+    state = slots_mod.read_state(workspace)
+    if state is None or state.canonical is None:
         raise BlockerError(
             code="no_canonical_feature",
             what="no active feature; pass --feature or run `canopy switch <name>` first",
@@ -98,7 +98,7 @@ def _resolve_feature_name(workspace: Workspace, feature: str | None) -> str:
                           preview="canopy switch <feature> sets the canonical slot"),
             ],
         )
-    return active.feature
+    return state.canonical.feature
 
 
 def _thread_summary(

@@ -784,7 +784,7 @@ def cmd_worktree_create(args: argparse.Namespace) -> None:
                 console.print(f"  [muted]Run:[/] [info]canopy done <feature>[/]")
             else:
                 console.print(f"  [muted]Run:[/] [info]canopy done <feature>[/] to free a slot")
-                console.print(f"  [muted]Or:[/]  [info]canopy config max_worktrees {e.limit + 1}[/]")
+                console.print(f"  [muted]Or:[/]  [info]canopy config slots {e.limit + 1}[/]")
         else:
             print_error(str(e))
         sys.exit(1)
@@ -1249,20 +1249,20 @@ def _cmd_preflight_context(args: argparse.Namespace) -> None:
     #
     # F-11: when run from the workspace root (not inside a worktree),
     # ``ctx.feature`` is None — but we may still have a canonical
-    # feature in ``active_feature.json`` whose repos overlap. Fall back
+    # feature in ``slots.json`` whose repos overlap. Fall back
     # to that so `canopy preflight` from the workspace root persists a
     # record for the canonical feature, which is what `canopy state`
     # then keys off to surface ready_to_commit.
     feature_for_record = ctx.feature
     if feature_for_record is None and ctx.workspace_root:
         try:
-            from ..actions import active_feature as _af
+            from ..actions import slots as _slots_mod
             from ..workspace.config import load_config as _load_config
             from ..workspace.workspace import Workspace as _WS
             _ws = _WS(_load_config(ctx.workspace_root))
-            _active = _af.read_active(_ws)
-            if _active and _active.feature:
-                feature_for_record = _active.feature
+            _state = _slots_mod.read_state(_ws)
+            if _state and _state.canonical and _state.canonical.feature:
+                feature_for_record = _state.canonical.feature
         except Exception:
             pass
 
@@ -2093,7 +2093,7 @@ def cmd_setup_agent(args: argparse.Namespace) -> None:
 def cmd_state(args: argparse.Namespace) -> None:
     """Show the feature state + suggested next actions."""
     from ..actions.errors import ActionError, BlockerError, FixAction
-    from ..actions.active_feature import read_active
+    from ..actions import slots as slots_mod
     from ..actions.feature_state import feature_state as state_impl
     from .render import render_blocker
     from .ui import console
@@ -2101,8 +2101,8 @@ def cmd_state(args: argparse.Namespace) -> None:
     workspace = _load_workspace()
     feature = args.feature
     if feature is None:
-        active = read_active(workspace)
-        if active is None:
+        slot_state = slots_mod.read_state(workspace)
+        if slot_state is None or slot_state.canonical is None:
             err = BlockerError(
                 code="no_active_feature",
                 what="no feature passed and no active feature is set",
@@ -2118,7 +2118,7 @@ def cmd_state(args: argparse.Namespace) -> None:
             else:
                 render_blocker(err, action="state")
             sys.exit(1)
-        feature = active.feature
+        feature = slot_state.canonical.feature
 
     try:
         result = state_impl(workspace, feature)
@@ -2440,18 +2440,18 @@ def cmd_bot_status(args: argparse.Namespace) -> None:
 
 def _resolve_historian_feature(workspace, feature: str | None):
     """Resolve (workspace_root, feature_name) for a historian CLI call."""
-    from ..actions import active_feature as af
+    from ..actions import slots as slots_mod
     from ..actions.aliases import resolve_feature
     from ..actions.errors import BlockerError
     if feature:
         return workspace.config.root, resolve_feature(workspace, feature)
-    active = af.read_active(workspace)
-    if active is None:
+    state = slots_mod.read_state(workspace)
+    if state is None or state.canonical is None:
         raise BlockerError(
             code="no_canonical_feature",
             what="no active feature; pass <feature> or run `canopy switch <name>` first",
         )
-    return workspace.config.root, active.feature
+    return workspace.config.root, state.canonical.feature
 
 
 def cmd_historian(args: argparse.Namespace) -> None:
@@ -2688,7 +2688,7 @@ def cmd_drift(args: argparse.Namespace) -> None:
                 line = f"      [repo]{r.repo}[/]  [warning]→ {r.actual}[/]  [muted](expected {r.expected})[/]"
             console.print(line)
         if not fd.aligned:
-            console.print(f"      [muted]fix:[/] [info]canopy realign {fd.feature}[/]")
+            console.print(f"      [muted]fix:[/] [info]canopy switch {fd.feature}[/]")
         console.print()
 
 

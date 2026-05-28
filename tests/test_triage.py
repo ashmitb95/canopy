@@ -346,7 +346,7 @@ def test_triage_marks_warm_feature_with_worktree_path(workspace_with_feature):
     for r in ("repo-a", "repo-b"):
         info = feat["repos"][r]
         assert info["physical_state"] == "warm"
-        assert ".canopy/worktrees/auth-flow/" in info["path"]
+        assert ".canopy/worktrees/" in info["path"]
 
 
 def test_triage_marks_cold_feature_no_worktree(workspace_with_feature):

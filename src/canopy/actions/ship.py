@@ -25,7 +25,7 @@ from typing import Any
 from ..git import repo as git
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
-from . import active_feature as af
+from . import slots as slots_mod
 from .aliases import _resolve_owner_slug, repos_for_feature, resolve_feature
 from .errors import BlockerError, FixAction
 from .feature_state import resolve_repo_paths
@@ -351,8 +351,8 @@ def _format_body_with_siblings(
 def _resolve_feature_name(workspace: Workspace, feature: str | None) -> str:
     if feature:
         return resolve_feature(workspace, feature)
-    active = af.read_active(workspace)
-    if active is None:
+    state = slots_mod.read_state(workspace)
+    if state is None or state.canonical is None:
         raise BlockerError(
             code="no_canonical_feature",
             what="no active feature; pass --feature or run `canopy switch <name>` first",
@@ -361,7 +361,7 @@ def _resolve_feature_name(workspace: Workspace, feature: str | None) -> str:
                           preview="canopy switch <feature> sets the canonical slot"),
             ],
         )
-    return active.feature
+    return state.canonical.feature
 
 
 def _read_feature_entry(workspace: Workspace, feature_name: str) -> dict | None:

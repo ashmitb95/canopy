@@ -550,6 +550,9 @@ class TestFeatureCreateWithLinear:
         )
 
         result = coordinator.worktrees_live()
-        assert "live-linear" in result["features"]
-        api_info = result["features"]["live-linear"]["repos"]["repo-a"]
+        # Slot-keyed view: locate the slot whose feature is live-linear.
+        live_slots = [s for s in result["slots"].values()
+                      if s["feature"] == "live-linear"]
+        assert len(live_slots) == 1
+        api_info = live_slots[0]["repos"]["repo-a"]
         assert api_info["branch"] == "live-linear"

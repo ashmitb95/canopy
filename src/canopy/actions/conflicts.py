@@ -23,7 +23,7 @@ from typing import Any, Iterable
 from ..git import repo as git
 from ..git.multi import cross_repo_diff
 from ..workspace.workspace import Workspace
-from . import active_feature as af
+from . import slots as slots_mod
 from .aliases import resolve_feature
 
 _GENERATED_HINT = re.compile(
@@ -108,11 +108,16 @@ _SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 def _enumerate_features(workspace: Workspace, *, include_cold: bool) -> list[str]:
     """Return canonical + warm features, plus cold ones when requested."""
-    active = af.read_active(workspace)
-    feature_states = af.feature_states(workspace) if hasattr(af, "feature_states") else {}
+    state = slots_mod.read_state(workspace)
+    canonical_feature: str | None = (
+        state.canonical.feature if state and state.canonical else None
+    )
+    warm_features: set[str] = {
+        e.feature for e in (state.slots.values() if state else [])
+    }
     names: list[str] = []
-    if active and active.feature:
-        names.append(active.feature)
+    if canonical_feature:
+        names.append(canonical_feature)
 
     # Walk features.json directly for the full roster — keeps the
     # implementation independent of whichever helper is in vogue.
@@ -131,8 +136,11 @@ def _enumerate_features(workspace: Workspace, *, include_cold: bool) -> list[str
             continue
         if entry.get("status") and entry["status"] != "active":
             continue
-        has_worktree = bool(entry.get("worktree_paths"))
-        if not include_cold and not has_worktree and name != (active.feature if active else None):
+        # A feature is "warm" if it occupies a slot OR if features.json
+        # records worktree_paths for it (the slot map may be stale, and
+        # explicit worktree_paths still mean the feature has a working tree).
+        has_worktree = name in warm_features or bool(entry.get("worktree_paths"))
+        if not include_cold and not has_worktree and name != canonical_feature:
             continue
         names.append(name)
     return names

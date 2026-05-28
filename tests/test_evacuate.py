@@ -12,26 +12,6 @@ from canopy.workspace.config import load_config
 from canopy.workspace.workspace import Workspace
 
 
-@pytest.fixture
-def canopy_toml_for_workspace(workspace_with_feature):
-    """canopy.toml inside the workspace_with_feature root."""
-    toml = workspace_with_feature / "canopy.toml"
-    toml.write_text("""\
-[workspace]
-name = "test"
-slots = 2
-
-[[repos]]
-name = "repo-a"
-path = "repo-a"
-
-[[repos]]
-name = "repo-b"
-path = "repo-b"
-""")
-    return workspace_with_feature
-
-
 def _checkout(repo_path: Path, branch: str) -> None:
     subprocess.run(["git", "checkout", branch], cwd=repo_path, check=True,
                    capture_output=True)

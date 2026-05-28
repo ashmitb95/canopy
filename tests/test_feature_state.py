@@ -342,9 +342,10 @@ def test_drifted_worktree_feature_suggests_switch_not_realign(workspace_dir):
     from canopy.features.coordinator import FeatureCoordinator
     coord = FeatureCoordinator(ws)
     coord.create("sin-10-demo", use_worktrees=True)
+    slot_id = coord._load_features()["sin-10-demo"]["slot_id"]
 
     # Manually break the worktree — checkout a different branch inside it
-    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-10-demo" / "repo-a"
+    wt_api = workspace_dir / ".canopy" / "worktrees" / slot_id / "repo-a"
     _git(["checkout", "-b", "manual-detour"], cwd=wt_api)
 
     with patch("canopy.actions.feature_state.gh.find_pull_request",
@@ -373,9 +374,10 @@ def test_per_repo_facts_use_worktree_path_for_dirty_check(workspace_dir):
     from canopy.features.coordinator import FeatureCoordinator
     coord = FeatureCoordinator(ws)
     coord.create("sin-11-demo", use_worktrees=True)
+    slot_id = coord._load_features()["sin-11-demo"]["slot_id"]
 
     # Modify a file inside the api worktree
-    wt_api = workspace_dir / ".canopy" / "worktrees" / "sin-11-demo" / "repo-a"
+    wt_api = workspace_dir / ".canopy" / "worktrees" / slot_id / "repo-a"
     (wt_api / "src" / "app.py").write_text("dirty in worktree\n")
 
     with patch("canopy.actions.feature_state.gh.find_pull_request",

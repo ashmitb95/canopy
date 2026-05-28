@@ -352,67 +352,8 @@ class TestLinkLinearIssue:
 
 # ── T9: slot-keyed coordinator tests ───────────────────────────────────
 #
-# Inline fixture stack — these mirror the T5/T7 fixtures in
-# test_switch.py / test_new_commands.py. Renamed with a `_t9_` prefix to
-# avoid clashes with any conftest-level fixture that might land later.
-
-import subprocess as _t9_subprocess
-
-
-@pytest.fixture
-def _t9_canopy_toml(workspace_with_feature):
-    toml = workspace_with_feature / "canopy.toml"
-    toml.write_text("""
-[workspace]
-name = "test"
-slots = 2
-
-[[repos]]
-name = "repo-a"
-path = "repo-a"
-
-[[repos]]
-name = "repo-b"
-path = "repo-b"
-""")
-    return workspace_with_feature
-
-
-@pytest.fixture
-def _t9_workspace_with_canonical_only(_t9_canopy_toml):
-    from canopy.workspace.workspace import Workspace
-    from canopy.workspace.config import load_config
-    from canopy.actions import slots as sm
-
-    ws = Workspace(load_config(_t9_canopy_toml))
-    for repo in ("repo-a", "repo-b"):
-        _t9_subprocess.run(["git", "branch", "X"],
-                           cwd=_t9_canopy_toml / repo, check=True)
-        _t9_subprocess.run(["git", "checkout", "X"],
-                           cwd=_t9_canopy_toml / repo, check=True)
-        _t9_subprocess.run(["git", "branch", "Y"],
-                           cwd=_t9_canopy_toml / repo, check=True)
-
-    sm.write_state(ws, sm.SlotState(
-        slot_count=2,
-        canonical=sm.CanonicalEntry(
-            feature="X", activated_at=sm.now_iso(),
-            per_repo_paths={
-                "repo-a": str(_t9_canopy_toml / "repo-a"),
-                "repo-b": str(_t9_canopy_toml / "repo-b"),
-            },
-        ),
-    ))
-    return ws
-
-
-@pytest.fixture
-def workspace_with_slots(_t9_workspace_with_canonical_only):
-    """X canonical, Y warm in worktree-1."""
-    from canopy.actions.switch import switch
-    switch(_t9_workspace_with_canonical_only, "Y")  # Y canonical, X warm slot-1
-    switch(_t9_workspace_with_canonical_only, "X")  # X canonical, Y warm slot-1
-    return _t9_workspace_with_canonical_only
+# Slot-model fixtures (workspace_with_slots, workspace_with_canonical_only,
+# canopy_toml_for_workspace) live in conftest.py.
 
 
 def test_worktrees_live_keyed_by_slot(workspace_with_slots):

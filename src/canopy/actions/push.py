@@ -28,7 +28,7 @@ from typing import Any
 
 from ..git import repo as git
 from ..workspace.workspace import Workspace
-from . import active_feature as af
+from . import slots as slots_mod
 from .aliases import repos_for_feature, resolve_feature
 from .errors import BlockerError, FixAction
 from .feature_state import resolve_repo_paths
@@ -39,8 +39,8 @@ def _resolve_feature_name(
 ) -> str:
     if feature:
         return resolve_feature(workspace, feature)
-    active = af.read_active(workspace)
-    if active is None:
+    state = slots_mod.read_state(workspace)
+    if state is None or state.canonical is None:
         raise BlockerError(
             code="no_canonical_feature",
             what="no active feature; pass --feature or run `canopy switch <name>` first",
@@ -49,7 +49,7 @@ def _resolve_feature_name(
                           preview="canopy switch <feature> sets the canonical slot"),
             ],
         )
-    return active.feature
+    return state.canonical.feature
 
 
 def _check_upstream(
@@ -142,7 +142,7 @@ def push(
     Args:
         workspace: the workspace.
         feature: feature alias. If None, falls back to the canonical
-            feature in ``active_feature.json``.
+            feature in ``slots.json``.
         repos: optional filter — only push these repos within the
             feature scope.
         set_upstream: pass ``--set-upstream`` for repos that lack an

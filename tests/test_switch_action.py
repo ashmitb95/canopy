@@ -21,22 +21,40 @@ from pathlib import Path
 
 import pytest
 
-from canopy.actions.active_feature import is_active, read_active
+from canopy.actions import slots as slots_mod
 from canopy.actions.errors import BlockerError
-from canopy.actions.evacuate import warm_features, warm_worktree_path
 from canopy.actions.switch import switch
 from canopy.git import repo as git
 from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
 
-def _ws(workspace_dir, repos=("repo-a", "repo-b"), max_worktrees=0) -> Workspace:
+def _ws(workspace_dir, repos=("repo-a", "repo-b"), slots=2) -> Workspace:
     return Workspace(WorkspaceConfig(
         name="t",
         repos=[RepoConfig(name=r, path=f"./{r}", role="x", lang="x") for r in repos],
         root=workspace_dir,
-        max_worktrees=max_worktrees,
+        slots=slots,
     ))
+
+
+def _warm_features(ws) -> set[str]:
+    state = slots_mod.read_state(ws)
+    if state is None:
+        return set()
+    return {e.feature for e in state.slots.values()}
+
+
+def _warm_worktree_path(ws, feature, repo):
+    """Resolve the warm worktree path for ``feature`` (must be in a slot)."""
+    sid = slots_mod.slot_for_feature(ws, feature)
+    assert sid is not None, f"feature {feature!r} has no slot"
+    return slots_mod.slot_worktree_path(ws, sid, repo)
+
+
+def _is_active(ws, feature) -> bool:
+    state = slots_mod.read_state(ws)
+    return state is not None and state.canonical is not None and state.canonical.feature == feature
 
 
 def _features_file(workspace_dir, payload):
@@ -75,10 +93,10 @@ class TestActiveRotation:
         for repo in ("repo-a", "repo-b"):
             assert git.current_branch(workspace_with_feature / repo) == "auth-flow"
         # Active state recorded
-        active = read_active(ws)
-        assert active is not None
-        assert active.feature == "auth-flow"
-        assert active.last_touched.get("auth-flow")
+        state = slots_mod.read_state(ws)
+        assert state is not None and state.canonical is not None
+        assert state.canonical.feature == "auth-flow"
+        assert state.last_touched.get("auth-flow")
 
     def test_switch_evacuates_previous_canonical_to_warm(self, workspace_with_feature):
         """X canonical → X warm worktree when Y becomes canonical."""
@@ -97,11 +115,11 @@ class TestActiveRotation:
         # auth-flow now lives in a warm worktree
         for repo in ("repo-a", "repo-b"):
             assert git.current_branch(workspace_with_feature / repo) == "feat-b"
-            wt = warm_worktree_path(ws, "auth-flow", repo)
+            wt = _warm_worktree_path(ws,"auth-flow", repo)
             assert wt.exists()
             assert (wt / ".git").exists()
         # Reflected in features.json by inspecting filesystem
-        assert "auth-flow" in warm_features(ws)
+        assert "auth-flow" in _warm_features(ws)
 
     def test_evacuated_warm_preserves_dirty_via_stash(self, workspace_with_feature):
         """If main has dirty work for X, evacuation stashes + pops in worktree."""
@@ -117,7 +135,7 @@ class TestActiveRotation:
         switch(ws, "feat-b")
 
         # File should follow auth-flow into its warm worktree
-        wt_api = warm_worktree_path(ws, "auth-flow", "repo-a")
+        wt_api = _warm_worktree_path(ws,"auth-flow", "repo-a")
         moved = wt_api / "scratch.txt"
         assert moved.exists() and "uncommitted scribbles" in moved.read_text()
         # Main api repo should not have it anymore
@@ -137,7 +155,7 @@ class TestWindDownMode:
         assert result["mode"] == "wind_down"
         assert result["previously_canonical"] == "auth-flow"
         # auth-flow should NOT have a warm worktree
-        assert "auth-flow" not in warm_features(ws)
+        assert "auth-flow" not in _warm_features(ws)
 
     def test_wind_down_stashes_dirty_with_feature_tag(self, workspace_with_feature):
         _make_feature_branches(workspace_with_feature, "feat-b")
@@ -165,7 +183,7 @@ class TestCapReached:
         """cap=1 → after 2 features, switching to a 3rd hits the cap."""
         _make_feature_branches(workspace_with_feature, "feat-b")
         _make_feature_branches(workspace_with_feature, "feat-c")
-        ws = _ws(workspace_with_feature, max_worktrees=1)
+        ws = _ws(workspace_with_feature, slots=1)
 
         switch(ws, "auth-flow")               # canonical
         switch(ws, "feat-b")                   # auth-flow → warm (1 warm)
@@ -184,7 +202,7 @@ class TestCapReached:
         """Without --no-evict, switch picks the LRU warm and evicts."""
         _make_feature_branches(workspace_with_feature, "feat-b")
         _make_feature_branches(workspace_with_feature, "feat-c")
-        ws = _ws(workspace_with_feature, max_worktrees=1)
+        ws = _ws(workspace_with_feature, slots=1)
 
         switch(ws, "auth-flow")
         switch(ws, "feat-b")    # auth-flow → warm
@@ -195,9 +213,9 @@ class TestCapReached:
         assert result.get("eviction") is not None
         assert result["eviction"]["feature"] == "auth-flow"
         # auth-flow no longer warm
-        assert "auth-flow" not in warm_features(ws)
+        assert "auth-flow" not in _warm_features(ws)
         # feat-b is warm; feat-c canonical
-        assert "feat-b" in warm_features(ws)
+        assert "feat-b" in _warm_features(ws)
         for repo in ("repo-a", "repo-b"):
             assert git.current_branch(workspace_with_feature / repo) == "feat-c"
 
@@ -205,12 +223,12 @@ class TestCapReached:
         """LRU eviction must stash dirty work before removing the worktree."""
         _make_feature_branches(workspace_with_feature, "feat-b")
         _make_feature_branches(workspace_with_feature, "feat-c")
-        ws = _ws(workspace_with_feature, max_worktrees=1)
+        ws = _ws(workspace_with_feature, slots=1)
 
         switch(ws, "auth-flow")
         switch(ws, "feat-b")
         # Dirty the auth-flow warm worktree
-        wt_api = warm_worktree_path(ws, "auth-flow", "repo-a")
+        wt_api = _warm_worktree_path(ws,"auth-flow", "repo-a")
         (wt_api / "evicted_work.txt").write_text("about to be evicted\n")
 
         result = switch(ws, "feat-c")
@@ -248,9 +266,9 @@ def test_switching_to_warm_feature_removes_its_worktree(workspace_with_feature):
     for repo in ("repo-a", "repo-b"):
         assert git.current_branch(workspace_with_feature / repo) == "auth-flow"
     # Its warm worktree should be gone
-    assert "auth-flow" not in warm_features(ws)
+    assert "auth-flow" not in _warm_features(ws)
     # And feat-b should now be the warm one
-    assert "feat-b" in warm_features(ws)
+    assert "feat-b" in _warm_features(ws)
 
 
 # ── no-op when already canonical ────────────────────────────────────────
@@ -265,28 +283,13 @@ def test_switch_to_already_canonical_is_noop_per_repo(workspace_with_feature):
         assert entry["status"] == "noop"
 
 
-# ── lazy migration ──────────────────────────────────────────────────────
+# ── 3.0: migration is now an explicit BlockerError, not lazy ────────────
 
-class TestLazyMigration:
-    def test_migration_runs_on_first_switch_in_pre_2_9_workspace(
-        self, workspace_with_feature,
-    ):
-        """No active_feature.json AND auth-flow checked out in main → migrate
-        seeds canonical=auth-flow + last_touched."""
-        _features_file(workspace_with_feature, {
-            "auth-flow": {"repos": ["repo-a", "repo-b"], "status": "active"},
-        })
-        # Make main repos check out auth-flow first (fixture leaves them on it)
+class TestPreMigrationBlocker:
+    def test_subsequent_switch_does_not_attach_migration_field(self, workspace_with_feature):
+        """A normal switch carries no `migration` key (3.0 layout assumed)."""
         ws = _ws(workspace_with_feature)
-        result = switch(ws, "auth-flow")
-
-        assert "migration" in result
-        assert result["migration"]["ran"] is True
-
-    def test_migration_does_not_run_twice(self, workspace_with_feature):
-        """Once last_touched is populated, subsequent switches don't re-migrate."""
-        ws = _ws(workspace_with_feature)
-        switch(ws, "auth-flow")    # this runs migration
+        switch(ws, "auth-flow")
         result = switch(ws, "auth-flow")
         assert "migration" not in result
 
@@ -309,7 +312,7 @@ def test_switch_creates_missing_branch_from_default(workspace_dir):
 def test_switch_writes_active_feature(workspace_with_feature):
     ws = _ws(workspace_with_feature)
     switch(ws, "auth-flow")
-    assert is_active(ws, "auth-flow")
+    assert _is_active(ws, "auth-flow")
 
 
 # ── PR3 step 1: structured mid-op failure surface ───────────────────────

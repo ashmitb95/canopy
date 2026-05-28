@@ -825,11 +825,14 @@ class FeatureCoordinator:
             self._save_features(features)
             archived = True
 
-        # ── Step 5: Clear active-feature state if this feature is active ──
+        # ── Step 5: Drop canonical pointer if this feature is canonical ──
         active_cleared = False
         try:
-            from ..actions.active_feature import clear_active
-            active_cleared = clear_active(self.workspace, only_if_feature=name)
+            state = slots_mod.read_state(self.workspace)
+            if state and state.canonical and state.canonical.feature == name:
+                state.canonical = None
+                slots_mod.write_state(self.workspace, state)
+                active_cleared = True
         except Exception:
             pass
 

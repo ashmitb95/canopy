@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from canopy.actions.active_feature import write_active
+from canopy.actions import slots as slots_mod
 from canopy.actions.commit import commit
 from canopy.actions.errors import BlockerError
 from canopy.git import repo as git
@@ -42,10 +42,14 @@ def _git(args, cwd):
 
 
 def _set_canonical(workspace_dir, feature, ws):
-    """Mark `feature` canonical in active_feature.json."""
-    write_active(ws, feature=feature, per_repo_paths={
-        r.config.name: str(r.abs_path) for r in ws.repos
-    })
+    """Mark `feature` canonical in slots.json."""
+    state = slots_mod.read_state(ws) or slots_mod.SlotState()
+    state.canonical = slots_mod.CanonicalEntry(
+        feature=feature,
+        activated_at=slots_mod.now_iso(),
+        per_repo_paths={r.config.name: str(r.abs_path) for r in ws.repos},
+    )
+    slots_mod.write_state(ws, state)
 
 
 # ── Happy path: explicit feature ─────────────────────────────────────────

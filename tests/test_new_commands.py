@@ -356,59 +356,9 @@ import argparse
 import json as _json
 
 
-@pytest.fixture
-def canopy_toml_for_slots(workspace_with_feature):
-    toml = workspace_with_feature / "canopy.toml"
-    toml.write_text("""
-[workspace]
-name = "test"
-slots = 2
-
-[[repos]]
-name = "repo-a"
-path = "repo-a"
-
-[[repos]]
-name = "repo-b"
-path = "repo-b"
-""")
-    return workspace_with_feature
-
-
-@pytest.fixture
-def workspace_with_canonical_only_slots(canopy_toml_for_slots):
-    from canopy.workspace.workspace import Workspace
-    from canopy.workspace.config import load_config
-    from canopy.actions import slots as sm
-
-    ws = Workspace(load_config(canopy_toml_for_slots))
-    for repo in ("repo-a", "repo-b"):
-        subprocess.run(["git", "branch", "X"],
-                       cwd=canopy_toml_for_slots / repo, check=True)
-        subprocess.run(["git", "checkout", "X"],
-                       cwd=canopy_toml_for_slots / repo, check=True)
-        subprocess.run(["git", "branch", "Y"],
-                       cwd=canopy_toml_for_slots / repo, check=True)
-
-    sm.write_state(ws, sm.SlotState(
-        slot_count=2,
-        canonical=sm.CanonicalEntry(
-            feature="X", activated_at=sm.now_iso(),
-            per_repo_paths={
-                "repo-a": str(canopy_toml_for_slots / "repo-a"),
-                "repo-b": str(canopy_toml_for_slots / "repo-b"),
-            },
-        ),
-    ))
-    return ws
-
-
-@pytest.fixture
-def workspace_with_slots(workspace_with_canonical_only_slots):
-    from canopy.actions.switch import switch
-    switch(workspace_with_canonical_only_slots, "Y")  # Y canonical, X warm slot-1
-    switch(workspace_with_canonical_only_slots, "X")  # X canonical, Y warm slot-1
-    return workspace_with_canonical_only_slots
+# Slot-model fixtures live in conftest.py:
+#   canopy_toml_for_workspace, workspace_with_canonical_only,
+#   workspace_with_slots, workspace_with_full_slots, workspace_with_two_warm.
 
 
 def test_slots_command_lists_occupancy(workspace_with_slots, capsys, monkeypatch):

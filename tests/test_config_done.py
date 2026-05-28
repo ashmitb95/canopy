@@ -46,35 +46,35 @@ class TestConfigGetSet:
         assert val == "test-workspace"
 
     def test_get_config_unset(self, canopy_toml):
-        """Read a setting that hasn't been set."""
-        val = get_config_value(canopy_toml, "max_worktrees")
+        """Read a setting that hasn't been set returns None (raw lookup)."""
+        val = get_config_value(canopy_toml, "slots")
         assert val is None
 
-    def test_set_config_max_worktrees(self, canopy_toml):
-        """Set max_worktrees and read it back."""
-        set_config_value(canopy_toml, "max_worktrees", "5")
-        val = get_config_value(canopy_toml, "max_worktrees")
+    def test_set_config_slots(self, canopy_toml):
+        """Set slots and read it back."""
+        set_config_value(canopy_toml, "slots", "5")
+        val = get_config_value(canopy_toml, "slots")
         assert val == 5
 
     def test_set_config_updates_existing(self, canopy_toml):
         """Setting a value twice updates it."""
-        set_config_value(canopy_toml, "max_worktrees", "3")
-        set_config_value(canopy_toml, "max_worktrees", "7")
-        val = get_config_value(canopy_toml, "max_worktrees")
+        set_config_value(canopy_toml, "slots", "3")
+        set_config_value(canopy_toml, "slots", "7")
+        val = get_config_value(canopy_toml, "slots")
         assert val == 7
 
     def test_set_config_returns_coerced(self, canopy_toml):
         """set_config_value returns the coerced value."""
-        result = set_config_value(canopy_toml, "max_worktrees", "10")
+        result = set_config_value(canopy_toml, "slots", "10")
         assert result == 10
         assert isinstance(result, int)
 
     def test_get_all_config(self, canopy_toml):
         """get_all_config returns all workspace settings."""
-        set_config_value(canopy_toml, "max_worktrees", "4")
+        set_config_value(canopy_toml, "slots", "4")
         settings = get_all_config(canopy_toml)
         assert settings["name"] == "test-workspace"
-        assert settings["max_worktrees"] == 4
+        assert settings["slots"] == 4
 
     def test_unknown_key_raises(self, canopy_toml):
         """Unknown settings raise ConfigError."""
@@ -84,29 +84,29 @@ class TestConfigGetSet:
     def test_invalid_int_value(self, canopy_toml):
         """Non-integer value for int setting raises."""
         with pytest.raises(ConfigError, match="Invalid value"):
-            set_config_value(canopy_toml, "max_worktrees", "not-a-number")
+            set_config_value(canopy_toml, "slots", "not-a-number")
 
-    def test_load_config_reads_max_worktrees(self, canopy_toml):
-        """load_config populates max_worktrees on WorkspaceConfig."""
-        set_config_value(canopy_toml, "max_worktrees", "3")
+    def test_load_config_reads_slots(self, canopy_toml):
+        """load_config populates slots on WorkspaceConfig."""
+        set_config_value(canopy_toml, "slots", "3")
         config = load_config(canopy_toml)
-        assert config.max_worktrees == 3
+        assert config.slots == 3
 
-    def test_load_config_default_max_worktrees(self, canopy_toml):
-        """max_worktrees defaults to 0 (unlimited)."""
+    def test_load_config_default_slots(self, canopy_toml):
+        """slots defaults to 2 when unset."""
         config = load_config(canopy_toml)
-        assert config.max_worktrees == 0
+        assert config.slots == 2
 
 
 # ── Worktree limit enforcement ──────────────────────────────────────────
 
 class TestWorktreeLimit:
     def test_create_under_limit(self, workspace_with_feature, canopy_toml):
-        """Creating a worktree under the limit succeeds."""
+        """Creating a worktree under the slot cap succeeds."""
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator
 
-        set_config_value(canopy_toml, "max_worktrees", "5")
+        set_config_value(canopy_toml, "slots", "5")
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coordinator = FeatureCoordinator(ws)
@@ -118,23 +118,18 @@ class TestWorktreeLimit:
         coordinator.done("under-limit", force=True)
 
     def test_create_at_limit_fails(self, workspace_with_feature, canopy_toml):
-        """Creating a worktree at the limit raises WorktreeLimitError."""
+        """Creating a worktree at the slot cap raises WorktreeLimitError."""
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator, WorktreeLimitError
 
+        # slots=1 — only one warm slot
+        set_config_value(canopy_toml, "slots", "1")
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coordinator = FeatureCoordinator(ws)
 
-        # Create one worktree
+        # Create one worktree (fills the only slot)
         coordinator.create("first", use_worktrees=True)
-
-        # Set limit to 1
-        set_config_value(canopy_toml, "max_worktrees", "1")
-        # Reload config
-        config = load_config(canopy_toml)
-        ws = Workspace(config)
-        coordinator = FeatureCoordinator(ws)
 
         with pytest.raises(WorktreeLimitError) as exc_info:
             coordinator.create("second", use_worktrees=True)
@@ -145,38 +140,18 @@ class TestWorktreeLimit:
         # Cleanup
         coordinator.done("first", force=True)
 
-    def test_limit_zero_means_unlimited(self, workspace_with_feature, canopy_toml):
-        """max_worktrees=0 means no limit."""
-        from canopy.workspace.workspace import Workspace
-        from canopy.features.coordinator import FeatureCoordinator
-
-        config = load_config(canopy_toml)
-        ws = Workspace(config)
-        coordinator = FeatureCoordinator(ws)
-
-        # Should succeed with default limit of 0
-        lane = coordinator.create("unlimited-test", use_worktrees=True)
-        assert lane.name == "unlimited-test"
-
-        coordinator.done("unlimited-test", force=True)
-
     def test_stale_candidates_returned(self, workspace_with_feature, canopy_toml):
         """WorktreeLimitError includes stale worktree candidates."""
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator, WorktreeLimitError
 
+        set_config_value(canopy_toml, "slots", "1")
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coordinator = FeatureCoordinator(ws)
 
-        # Create a worktree and mark it done (but don't remove it — simulate stale)
+        # Fill the single slot, then try to allocate again
         coordinator.create("stale-one", use_worktrees=True)
-
-        # Set limit to 1
-        set_config_value(canopy_toml, "max_worktrees", "1")
-        config = load_config(canopy_toml)
-        ws = Workspace(config)
-        coordinator = FeatureCoordinator(ws)
 
         with pytest.raises(WorktreeLimitError) as exc_info:
             coordinator.create("blocked", use_worktrees=True)
@@ -201,7 +176,10 @@ class TestFeatureDone:
         coordinator = FeatureCoordinator(ws)
 
         coordinator.create("to-clean", use_worktrees=True)
-        wt_dir = canopy_toml / ".canopy" / "worktrees" / "to-clean"
+        # The slot dir lives at .canopy/worktrees/worktree-N now.
+        features = coordinator._load_features()
+        slot_id = features["to-clean"]["slot_id"]
+        wt_dir = canopy_toml / ".canopy" / "worktrees" / slot_id
         assert wt_dir.exists()
 
         result = coordinator.done("to-clean", force=True)
@@ -261,7 +239,9 @@ class TestFeatureDone:
         coordinator.create("dirty-test", use_worktrees=True)
 
         # Make a worktree dirty
-        wt_path = canopy_toml / ".canopy" / "worktrees" / "dirty-test" / "repo-a"
+        features = coordinator._load_features()
+        slot_id = features["dirty-test"]["slot_id"]
+        wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / "repo-a"
         (wt_path / "dirty_file.py").write_text("# dirty\n")
 
         with pytest.raises(ValueError, match="uncommitted changes"):
@@ -283,11 +263,11 @@ class TestFeatureDone:
             coordinator.done("nonexistent-feature")
 
     def test_done_frees_worktree_slot(self, workspace_with_feature, canopy_toml):
-        """After done, a new worktree can be created within the limit."""
+        """After done, a new worktree can be created within the slot cap."""
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator
 
-        set_config_value(canopy_toml, "max_worktrees", "1")
+        set_config_value(canopy_toml, "slots", "1")
         config = load_config(canopy_toml)
         ws = Workspace(config)
         coordinator = FeatureCoordinator(ws)

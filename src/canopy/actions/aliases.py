@@ -12,6 +12,9 @@ Supported alias forms:
   - PR specific: ``<repo>#<pr_number>`` (e.g. ``docsum-api#1287``) or
     a GitHub PR URL.
   - Branch specific: ``<repo>:<branch>`` (e.g. ``docsum-api:doc-3029``).
+  - **Slot id:** ``worktree-N`` resolves to the feature currently in that
+    slot. ``BlockerError(empty_slot)`` when the slot is empty;
+    ``BlockerError(unknown_slot)`` when N is out of range.
 """
 from __future__ import annotations
 
@@ -26,6 +29,7 @@ _LINEAR_ID = re.compile(r"^[A-Z]+-\d+$", re.IGNORECASE)
 _PR_SPECIFIC = re.compile(r"^([A-Za-z0-9_.-]+)#(\d+)$")
 _BRANCH_SPECIFIC = re.compile(r"^([A-Za-z0-9_.-]+):(.+)$")
 _PR_URL = re.compile(r"^https?://github\.com/([^/]+)/([^/]+)/pull/(\d+)")
+_SLOT_ID = re.compile(r"^worktree-(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -46,6 +50,7 @@ def resolve_feature(workspace: Workspace, alias: str) -> str:
     """Resolve a feature alias to a canonical feature name.
 
     Resolution order:
+      0. Slot id (``worktree-N``) — resolves to the feature occupying that slot.
       1. Explicit lane in ``features.json``.
       2. ``features.json`` lane via ``branches`` mapping (per-repo branch overrides).
       3. Implicit multi-repo feature (``workspace.active_features()`` —
@@ -56,6 +61,28 @@ def resolve_feature(workspace: Workspace, alias: str) -> str:
     features.json entry. Without it, queries like ``canopy comments
     doc-1002-api-only`` fail when only one repo carries the branch.
     """
+    # Step 0: slot-id alias form — must come before _resolve_name, which
+    # treats unknown strings as implicit feature names.
+    m = _SLOT_ID.match(alias)
+    if m:
+        from . import slots as slots_mod
+        cap = workspace.config.slots
+        n = int(m.group(1))
+        if n < 1 or n > cap:
+            raise BlockerError(
+                code="unknown_slot",
+                what=f"slot '{alias}' is out of range (cap={cap})",
+                details={"slot": alias, "cap": cap},
+            )
+        state = slots_mod.read_state(workspace)
+        if state is None or alias not in state.slots:
+            raise BlockerError(
+                code="empty_slot",
+                what=f"slot '{alias}' is empty",
+                details={"slot": alias, "cap": cap},
+            )
+        return state.slots[alias].feature
+
     from ..features.coordinator import FeatureCoordinator
     from ..git import repo as git
     coord = FeatureCoordinator(workspace)

@@ -289,3 +289,23 @@ def test_resolve_pr_url_unmatched_remote_raises(workspace_with_feature):
     with pytest.raises(BlockerError) as exc_info:
         resolve_pr_targets(ws, "https://github.com/other/repo/pull/1")
     assert exc_info.value.code == "unknown_github_repo"
+
+
+# ── slot-id alias form (T14) ─────────────────────────────────────────────
+
+def test_resolve_feature_accepts_slot_id(workspace_with_slots):
+    """`worktree-1` resolves to whatever feature lives in slot-1."""
+    assert resolve_feature(workspace_with_slots, "worktree-1") == "Y"
+
+
+def test_resolve_feature_unknown_slot_raises(workspace_with_slots):
+    with pytest.raises(BlockerError) as e:
+        resolve_feature(workspace_with_slots, "worktree-99")
+    assert e.value.code == "unknown_slot"
+
+
+def test_resolve_feature_empty_slot_raises(workspace_with_canonical_only):
+    """slot-1 exists but empty → BlockerError(empty_slot)."""
+    with pytest.raises(BlockerError) as e:
+        resolve_feature(workspace_with_canonical_only, "worktree-1")
+    assert e.value.code == "empty_slot"

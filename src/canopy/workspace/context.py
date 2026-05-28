@@ -99,20 +99,24 @@ def detect_context(cwd: Path | None = None) -> CanopyContext:
 
 
 def _detect_worktree_context(ctx: CanopyContext) -> None:
-    """Check if cwd is inside .canopy/worktrees/<feature>/[<repo>/]."""
+    """Check if cwd is inside .canopy/worktrees/worktree-N/[<repo>/]."""
     path = ctx.cwd
 
-    # Walk up looking for a path segment that matches .canopy/worktrees/<feature>
+    # Walk up looking for a path segment that matches .canopy/worktrees/<slot-id>
     parts = path.parts
     for i, part in enumerate(parts):
         if part == ".canopy" and i + 2 < len(parts) and parts[i + 1] == "worktrees":
-            # Found .canopy/worktrees/ — next part is the feature name
-            feature_name = parts[i + 2]
+            # Found .canopy/worktrees/ — next part is the slot id (e.g. worktree-1)
+            slot_id = parts[i + 2]
             canopy_dir = Path(*parts[:i])  # workspace root
-            feature_dir = Path(*parts[:i + 3])  # .canopy/worktrees/<feature>
+            slot_dir = Path(*parts[:i + 3])  # .canopy/worktrees/<slot-id>
 
             ctx.workspace_root = canopy_dir
-            ctx.feature = feature_name
+            # Resolve feature via slots.json. If we can't load it (e.g. no
+            # canopy.toml on this branch), fall back to the slot id so
+            # downstream commands have *something*.
+            feature = _slot_to_feature(canopy_dir, slot_id) or slot_id
+            ctx.feature = feature
 
             if i + 3 < len(parts):
                 # We're inside a specific repo worktree
@@ -124,16 +128,31 @@ def _detect_worktree_context(ctx: CanopyContext) -> None:
                 ctx.repo_names = [repo_name]
                 ctx.branch = _safe_branch(repo_path)
             else:
-                # We're at the feature directory level — find all repo worktrees
+                # We're at the slot directory level — find all repo worktrees
                 ctx.context_type = "feature_dir"
-                if feature_dir.exists():
-                    for child in sorted(feature_dir.iterdir()):
+                if slot_dir.exists():
+                    for child in sorted(slot_dir.iterdir()):
                         if child.is_dir() and (child / ".git").exists():
                             ctx.repo_paths.append(child)
                             ctx.repo_names.append(child.name)
                 if ctx.repo_paths:
                     ctx.branch = _safe_branch(ctx.repo_paths[0])
             return
+
+
+def _slot_to_feature(workspace_root: Path, slot_id: str) -> str | None:
+    """Read slots.json to map a slot id back to its current feature."""
+    p = workspace_root / ".canopy/state/slots.json"
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    entry = (data.get("slots") or {}).get(slot_id)
+    if isinstance(entry, dict):
+        return entry.get("feature")
+    return None
 
 
 def _detect_repo_context(ctx: CanopyContext) -> None:

@@ -261,3 +261,57 @@ class TestPreflightFromFeatureDir:
 
         assert results["repo-a"] == "staged"
         assert results["repo-b"] == "clean"
+
+
+# ── Context detection: slot-based worktrees ──────────────────────────────────
+
+@pytest.fixture
+def workspace_with_slots(canopy_toml):
+    """Workspace with a generic slot worktree (.canopy/worktrees/worktree-1/repo-a/)
+    and a slots.json mapping worktree-1 → feature "Y"."""
+    ws_root = canopy_toml
+
+    # Create the slot worktree dir for repo-a
+    slot_repo_path = ws_root / ".canopy" / "worktrees" / "worktree-1" / "repo-a"
+    slot_repo_path.mkdir(parents=True, exist_ok=True)
+
+    # Create a real git worktree linked to the main repo-a
+    from canopy.git import repo as git
+    git.worktree_add(
+        repo_path=ws_root / "repo-a",
+        dest_path=slot_repo_path,
+        branch="Y",
+        create_branch=True,
+    )
+
+    # Write slots.json
+    state_dir = ws_root / ".canopy" / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    import json
+    (state_dir / "slots.json").write_text(json.dumps({
+        "slot_count": 2,
+        "canonical": None,
+        "previous_canonical": None,
+        "slots": {
+            "worktree-1": {"feature": "Y", "occupied_at": "2026-05-28T00:00:00Z"}
+        },
+        "last_touched": {"Y": "2026-05-28T00:00:00Z"},
+    }))
+
+    from canopy.workspace.config import load_config
+    from canopy.workspace.workspace import Workspace
+    ws = Workspace(load_config(ws_root))
+    return ws
+
+
+def test_context_inside_slot_repo_resolves_feature(workspace_with_slots, monkeypatch):
+    """cwd = .canopy/worktrees/worktree-1/repo-a/ — context.feature is the
+       feature in slot worktree-1 from slots.json (Y in the fixture)."""
+    from canopy.workspace.context import detect_context
+    monkeypatch.chdir(
+        workspace_with_slots.config.root / ".canopy/worktrees/worktree-1/repo-a"
+    )
+    ctx = detect_context()
+    assert ctx.context_type == "repo_worktree"
+    assert ctx.feature == "Y"   # resolved via slots.json, NOT from dir name
+    assert ctx.repo_names == ["repo-a"]

@@ -143,3 +143,58 @@ def write_state(workspace: Workspace, state: SlotState) -> None:
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(state.to_dict(), indent=2))
     tmp.replace(path)
+
+
+def slot_worktree_path(workspace: Workspace, slot_id: str, repo: str) -> Path:
+    """Filesystem location of a slot's repo subdir."""
+    return _slots_root(workspace) / slot_id / repo
+
+
+def slot_for_feature(workspace: Workspace, feature: str) -> str | None:
+    """Return the slot id currently holding ``feature``, or None."""
+    state = read_state(workspace)
+    if state is None:
+        return None
+    for sid, entry in state.slots.items():
+        if entry.feature == feature:
+            return sid
+    return None
+
+
+def feature_for_slot(workspace: Workspace, slot_id: str) -> str | None:
+    """Return the feature currently in ``slot_id``, or None."""
+    state = read_state(workspace)
+    if state is None or slot_id not in state.slots:
+        return None
+    return state.slots[slot_id].feature
+
+
+def allocate_slot(state: SlotState) -> str | None:
+    """Return the lowest-index free slot id, or None if all are full."""
+    occupied = set(state.slots.keys())
+    for i in range(1, state.slot_count + 1):
+        sid = f"worktree-{i}"
+        if sid not in occupied:
+            return sid
+    return None
+
+
+def lru_evictee(
+    state: SlotState, *, exclude: set[str] | None = None,
+) -> str | None:
+    """Pick the LRU-coldest occupant feature from the warm slots.
+
+    Returns None when no eligible candidate. Sorting is deterministic:
+    (last_touched ASC, feature name ASC) — features with no timestamp
+    sort as oldest.
+    """
+    exclude = exclude or set()
+    candidates = [
+        e.feature for e in state.slots.values() if e.feature not in exclude
+    ]
+    if not candidates:
+        return None
+    return sorted(
+        candidates,
+        key=lambda f: (state.last_touched.get(f, ""), f),
+    )[0]

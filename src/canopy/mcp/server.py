@@ -107,7 +107,9 @@ def workspace_status() -> dict:
     """Get the full status of the canopy workspace.
 
     Returns repo names, current branches, dirty state, divergence
-    from default branch, and active feature lanes.
+    from default branch, and active feature lanes. Slot occupancy
+    (which feature is in each numbered worktree slot) is tracked
+    separately — call ``worktree_info`` for the slot-keyed view.
     """
     ws = _get_workspace()
     ws.refresh()
@@ -198,14 +200,20 @@ def triage(author: str = "@me", repos: list[str] | None = None) -> dict:
 @mcp.tool()
 def switch(feature: str, release_current: bool = False,
            no_evict: bool = False, evict: str | None = None) -> dict:
-    """Promote a feature to the canonical slot (Wave 2.9 canonical-slot model).
+    """Promote a feature to the canonical slot (Wave 3.0 canonical-slot model).
+
+    Worktrees live in numbered slots (``.canopy/worktrees/worktree-N/``),
+    not feature-named dirs. Slot identity is stable; feature occupancy is
+    transient. If the target feature is already warm in a slot, switch uses
+    a fast 5-op path (stash → checkout → pop in each repo). If the target is
+    cold, the outgoing feature's slot is reused (or the lowest free slot is
+    allocated for it).
 
     Two modes for what happens to the previously-canonical feature X:
 
       - **Active rotation (default)**: X evacuates to a warm worktree
-        at .canopy/worktrees/X/<repo>/ (with full stash → checkout →
-        pop). Use when X still needs your attention soon — switching
-        back is instant.
+        slot (stash → worktree-add → pop). Use when X still needs your
+        attention soon — switching back is instant.
       - **Wind-down (release_current=True)**: X goes straight to cold
         (just the branch + a feature-tagged stash if there were dirty
         changes). Use when X is parked / finished and Y is the new
@@ -1083,13 +1091,17 @@ def stash_drop(
 def worktree_info() -> dict:
     """Get live worktree status across the workspace — always fresh.
 
-    Scans .canopy/worktrees/ on disk and enriches each entry with
-    live git state (branch, dirty files, ahead/behind). Also shows
-    git-level worktree info per main repo.
+    Wave 3.0: worktrees live in numbered slots (``.canopy/worktrees/
+    worktree-N/<repo>/``), not feature-named directories. Slot identity
+    is stable across switches; feature occupancy is transient. Reads
+    slot state from ``.canopy/state/slots.json`` and enriches each
+    slot's repo subdirs with live git state (branch, dirty files,
+    ahead/behind).
 
     Returns:
-        features: per-feature dict with per-repo branch, dirty state,
-            ahead/behind, dirty files list, and worktree path.
+        slots: slot-keyed map ``{worktree-N: {feature, repos}}`` where
+            each repo entry has branch, dirty, dirty_count, dirty_files,
+            ahead, behind, default_branch, and path.
         repos: per-repo git worktree list from the main working tree.
     """
     ws = _get_workspace()
@@ -1105,6 +1117,11 @@ def worktree_create(
 ) -> dict:
     """Create a feature with worktrees, optionally linked to a Linear issue.
 
+    Wave 3.0: worktrees live in numbered slots (``.canopy/worktrees/
+    worktree-N/<repo>/``), not feature-named directories. The allocated
+    slot ID (e.g. ``worktree-1``) is returned as ``slot_id`` so callers
+    can reference the slot directly.
+
     This is the primary workflow entry point: create isolated worktree
     directories for each repo, open them in your IDE, and optionally
     link to a Linear issue for tracking.
@@ -1118,9 +1135,11 @@ def worktree_create(
         repos: Subset of repo names. Default: all repos.
 
     Returns:
-        Lane dict with ``worktree_paths``. When ``issue`` was passed,
-        also includes ``linear_lookup: {status, reason?}`` so the agent
-        sees whether the Linear fetch succeeded:
+        Lane dict with ``slot_id`` (the allocated worktree-N slot) and
+        ``worktree_paths`` (per-repo absolute paths inside that slot).
+        When ``issue`` was passed, also includes
+        ``linear_lookup: {status, reason?}`` so the agent sees whether
+        the Linear fetch succeeded:
 
           - ``ok`` — title/url populated.
           - ``not_configured`` — no linear entry in mcps.json; lane has
@@ -1199,6 +1218,10 @@ def worktree_create(
 
     result = lane.to_dict()
     result["worktree_paths"] = coordinator.resolve_paths(name)
+    from ..actions import slots as _slots_mod
+    slot_id = _slots_mod.slot_for_feature(ws, name)
+    if slot_id is not None:
+        result["slot_id"] = slot_id
     if issue:
         result["linear_lookup"] = linear_lookup
     return result

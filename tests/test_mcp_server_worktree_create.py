@@ -145,3 +145,45 @@ class TestLinearLookupSignal:
         # doesn't fail the worktree creation
         assert result["linear_issue"] == "SIN-5"
         assert "worktree_paths" in result
+
+
+# ── Wave 3.0: slot-keyed return shapes ──────────────────────────────────
+
+
+class TestSlotIdInReturnShape:
+    """Wave 3.0: worktree_create must expose slot_id; worktree_info must
+    return a slot-keyed map under the 'slots' key."""
+
+    def test_worktree_create_returns_slot_id(self, tmp_path):
+        """worktree_create result should include slot_id (worktree-N)."""
+        ws_root = _setup_workspace(tmp_path)
+        result = _call_worktree_create(ws_root, name="feature-slot")
+        assert "slot_id" in result, f"missing slot_id in {list(result)}"
+        assert result["slot_id"].startswith("worktree-"), result["slot_id"]
+
+    def test_worktree_create_paths_land_under_slot(self, tmp_path):
+        """The worktree_paths values should be inside the allocated slot dir."""
+        ws_root = _setup_workspace(tmp_path)
+        result = _call_worktree_create(ws_root, name="slotted-feature")
+        slot_id = result["slot_id"]
+        for repo, path in result.get("worktree_paths", {}).items():
+            assert slot_id in path, (
+                f"worktree_paths[{repo}]={path!r} does not contain slot {slot_id!r}"
+            )
+
+    def test_worktree_info_returns_slots_key(self, workspace_with_slots):
+        """worktree_info (via coordinator.worktrees_live) returns slot-keyed map."""
+        from canopy.features.coordinator import FeatureCoordinator
+        coord = FeatureCoordinator(workspace_with_slots)
+        info = coord.worktrees_live()
+        assert "slots" in info, f"missing 'slots' key in worktrees_live: {list(info)}"
+
+    def test_worktree_info_slot_has_feature_and_repos(self, workspace_with_slots):
+        """Each slot in worktree_info has 'feature' and 'repos' keys."""
+        from canopy.features.coordinator import FeatureCoordinator
+        coord = FeatureCoordinator(workspace_with_slots)
+        info = coord.worktrees_live()
+        for slot_id, slot_data in info["slots"].items():
+            assert "feature" in slot_data, f"{slot_id} missing 'feature'"
+            assert "repos" in slot_data, f"{slot_id} missing 'repos'"
+            assert slot_id.startswith("worktree-"), slot_id

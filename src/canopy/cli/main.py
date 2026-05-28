@@ -791,6 +791,10 @@ def cmd_worktree_create(args: argparse.Namespace) -> None:
 
     result = lane.to_dict()
     result["worktree_paths"] = coordinator.resolve_paths(name)
+    from ..actions import slots as _slots_mod
+    _slot_id = _slots_mod.slot_for_feature(workspace, name)
+    if _slot_id is not None:
+        result["slot_id"] = _slot_id
 
     if args.json:
         _print_json(result)

@@ -206,3 +206,38 @@ def test_reply_to_thread_resolve_after(canopy_toml, monkeypatch):
     log = tr.load(canopy_toml)
     assert "PRRT_abc" in log
     assert log["PRRT_abc"]["via_command"] == "reply_resolve"
+
+
+# ── CLI wiring smoke test ────────────────────────────────────────────────
+
+
+def test_reply_command_json_smoke(canopy_toml, monkeypatch, capsys):
+    """cmd_reply_thread wires body → action → JSON output (no GH call)."""
+    import argparse
+    import json as _json
+
+    posted = {"comment_id": "IC_1", "url": "https://github.com/org/repo/pull/1#r999"}
+    monkeypatch.setattr(
+        "canopy.integrations.github.reply_to_thread",
+        lambda root, tid, body: posted,
+    )
+
+    ws = _make_workspace(canopy_toml)
+    monkeypatch.setattr("canopy.cli.main._load_workspace", lambda: ws)
+    monkeypatch.setattr("canopy.cli.main._resolve_thread_feature",
+                        lambda workspace, feature: "feat")
+
+    from canopy.cli.main import cmd_reply_thread
+    args = argparse.Namespace(
+        thread_id="PRRT_abc",
+        body="Looks good to me.",
+        body_file=None,
+        resolve=False,
+        feature="feat",
+        json=True,
+    )
+    cmd_reply_thread(args)
+
+    data = _json.loads(capsys.readouterr().out)
+    assert "posted" in data
+    assert data["posted"]["url"] == posted["url"]

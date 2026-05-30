@@ -789,6 +789,38 @@ def conflicts(
 
 
 @mcp.tool()
+def reply_to_thread(
+    thread_id: str,
+    body: str,
+    feature: str | None = None,
+    resolve_after: bool = False,
+) -> dict:
+    """Post a reply to a GH review thread; optionally resolve after.
+
+    Args:
+        thread_id: The GitHub review thread node ID (must start with
+            ``PRRT_``).
+        body: The reply text to post.
+        feature: Feature to attribute the reply to. Defaults to the
+            canonical feature if not supplied.
+        resolve_after: If True, resolve the thread after posting the reply
+            and record the resolution in the canopy log.
+    """
+    from ..actions.thread_actions import reply_to_thread as _impl
+    from ..actions.errors import ActionError
+
+    ws = _get_workspace()
+    try:
+        feat = _historian_feature(feature)[1]
+    except ActionError as e:
+        return e.to_dict()
+    try:
+        return _impl(ws, thread_id, body, feature=feat, resolve_after=resolve_after)
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
 def resolve_thread(thread_id: str, feature: str | None = None) -> dict:
     """Resolve a GitHub PR review thread and record the resolution locally.
 

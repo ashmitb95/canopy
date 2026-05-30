@@ -3131,6 +3131,60 @@ def _resolve_thread_feature(workspace, feature: str | None) -> str:
     return state.canonical.feature
 
 
+def cmd_reply_thread(args: argparse.Namespace) -> None:
+    """Post a reply to a GitHub PR review thread, optionally resolving it."""
+    from ..actions.thread_actions import reply_to_thread
+    from ..actions.errors import ActionError, BlockerError
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        feature = _resolve_thread_feature(workspace, getattr(args, "feature", None))
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="reply")
+        sys.exit(1)
+
+    if args.body is not None:
+        body = args.body
+    elif args.body_file is not None:
+        from pathlib import Path
+        body = Path(args.body_file).read_text()
+    else:
+        body = sys.stdin.read()
+
+    if not body.strip():
+        err = BlockerError(code="empty_reply_body", what="reply body is empty")
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="reply")
+        sys.exit(1)
+
+    try:
+        result = reply_to_thread(workspace, args.thread_id, body,
+                                 feature=feature, resolve_after=args.resolve)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="reply")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    console.print(f"  Posted reply: [info]{result['posted']['url']}[/]")
+    if args.resolve and "resolved" in result:
+        console.print(f"  Resolved [info]{args.thread_id}[/]")
+    console.print()
+
+
 def cmd_resolve_thread(args: argparse.Namespace) -> None:
     """Resolve a GitHub PR review thread and record the resolution locally."""
     from ..actions.thread_actions import resolve_thread
@@ -3746,6 +3800,22 @@ def main() -> None:
     )
     doctor_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    reply_p = subparsers.add_parser(
+        "reply",
+        help="Post a reply to a GH review thread",
+    )
+    reply_p.add_argument("thread_id", help="Thread node ID (starts with PRRT_)")
+    _reply_body_g = reply_p.add_mutually_exclusive_group()
+    _reply_body_g.add_argument("--body", default=None,
+                               help="Reply body text")
+    _reply_body_g.add_argument("--body-file", default=None,
+                               help="Path to file containing the reply body")
+    reply_p.add_argument("--resolve", action="store_true",
+                         help="Resolve the thread after posting")
+    reply_p.add_argument("--feature", default=None,
+                         help="Feature alias; defaults to canonical feature")
+    reply_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     resolve_p = subparsers.add_parser(
         "resolve",
         help="Resolve a GitHub PR review thread and record it locally",
@@ -3801,6 +3871,7 @@ def main() -> None:
         "worktree-bootstrap": cmd_worktree_bootstrap,
         "pr-checks": cmd_pr_checks,
         "resolve": cmd_resolve_thread,
+        "reply": cmd_reply_thread,
     }
 
     if args.command == "feature":

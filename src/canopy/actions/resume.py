@@ -275,8 +275,53 @@ def _populate_current(
     feature: str,
     current: dict[str, Any],
 ) -> dict[str, Any]:
-    """T9-T11 fill this. T6 only seeds the internal __feature_name__ key."""
+    """T9: feature_state, ci_summary_per_repo, branch_position_per_repo.
+
+    T10-T11 fill the remaining sections. Errors in any sub-section are
+    swallowed so the brief always returns with reasonable defaults.
+    """
     current["__feature_name__"] = feature
+
+    from . import feature_state as fs
+    from ..git import repo as git
+    from .aliases import repos_for_feature
+
+    # feature_state + ci_summary_per_repo ─────────────────────────────────
+    try:
+        st = fs.feature_state(workspace, feature)
+    except Exception:
+        st = {}
+
+    current["feature_state"] = st.get("state", "unknown")
+
+    # CI lives in summary["ci_per_repo"] → {repo: {"status": ...}}
+    ci_per_repo = (st.get("summary") or {}).get("ci_per_repo") or {}
+    current["ci_summary_per_repo"] = {
+        r: (info.get("status") or "no_checks")
+        for r, info in ci_per_repo.items()
+    }
+
+    # branch_position_per_repo ────────────────────────────────────────────
+    pos: dict[str, dict] = {}
+    for repo_name, branch in repos_for_feature(workspace, feature).items():
+        try:
+            repo_state = workspace.get_repo(repo_name)
+            default = repo_state.config.default_branch
+            ahead, behind = git.divergence(repo_state.abs_path, branch, default)
+            last_sync_at = git.commit_iso_date(
+                repo_state.abs_path, f"{branch}...{default}",
+            )
+            pos[repo_name] = {
+                "branch": branch,
+                "default_branch": default,
+                "ahead": ahead,
+                "behind": behind,
+                "last_sync_at": last_sync_at or "",
+            }
+        except Exception:
+            continue
+    current["branch_position_per_repo"] = pos
+
     return current
 
 

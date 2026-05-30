@@ -594,3 +594,130 @@ class TestThreadDeltaSinceLastVisit:
         assert s["threads_new"] == []
         assert s["threads_resolved_on_github"] == []
         assert s["threads_resolved_by_canopy"] == []
+
+
+class TestCurrentStatePopulation:
+    """Tests for T9: feature_state, ci_summary_per_repo, branch_position_per_repo."""
+
+    def test_resume_branch_position_per_repo(self, canopy_toml_for_workspace):
+        """branch_position_per_repo has correct shape for each repo in the feature."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        brief = feature_resume(ws, "auth-flow")
+        pos = brief["current_state"]["branch_position_per_repo"]
+
+        assert isinstance(pos, dict), "branch_position_per_repo must be a dict"
+        # The fixture creates auth-flow in both repo-a and repo-b.
+        assert len(pos) >= 1, "At least one repo should appear in branch_position"
+
+        for repo_name, entry in pos.items():
+            assert "branch" in entry, f"{repo_name}: missing 'branch'"
+            assert "default_branch" in entry, f"{repo_name}: missing 'default_branch'"
+            assert "ahead" in entry, f"{repo_name}: missing 'ahead'"
+            assert "behind" in entry, f"{repo_name}: missing 'behind'"
+            assert "last_sync_at" in entry, f"{repo_name}: missing 'last_sync_at'"
+            assert entry["ahead"] >= 0, f"{repo_name}: ahead must be >= 0"
+            assert entry["behind"] >= 0, f"{repo_name}: behind must be >= 0"
+            assert entry["branch"] == "auth-flow"
+            assert isinstance(entry["last_sync_at"], str)
+
+    def test_resume_ci_summary_per_repo(self, canopy_toml_for_workspace, monkeypatch):
+        """ci_summary_per_repo lifts CI status strings from feature_state summary."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def fake_feature_state(workspace, feature):
+            return {
+                "state": "awaiting_ci",
+                "summary": {
+                    "ci_per_repo": {
+                        "repo-a": {"status": "passing"},
+                        "repo-b": {"status": "failing"},
+                    },
+                },
+            }
+
+        monkeypatch.setattr(
+            "canopy.actions.feature_state.feature_state",
+            fake_feature_state,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        ci = brief["current_state"]["ci_summary_per_repo"]
+
+        assert ci.get("repo-a") == "passing"
+        assert ci.get("repo-b") == "failing"
+        assert brief["current_state"]["feature_state"] == "awaiting_ci"
+
+    def test_resume_align_with_default_hint_surfaces(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """align_with_default intent hint fires when any repo has behind > 0."""
+        import os
+        import subprocess
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        env = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": "Test",
+            "GIT_AUTHOR_EMAIL": "test@test.com",
+            "GIT_COMMITTER_NAME": "Test",
+            "GIT_COMMITTER_EMAIL": "test@test.com",
+        }
+
+        # Add a commit to main in repo-a AFTER the auth-flow branch was created,
+        # so auth-flow ends up behind main by 1.
+        repo_a = canopy_toml_for_workspace / "repo-a"
+        subprocess.run(["git", "checkout", "main"], cwd=repo_a, env=env, check=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "main: advance default"],
+            cwd=repo_a, env=env, check=True,
+        )
+        subprocess.run(["git", "checkout", "auth-flow"], cwd=repo_a, env=env, check=True)
+
+        # Suppress feature_state (avoids GH calls) — we only need branch_position.
+        monkeypatch.setattr(
+            "canopy.actions.feature_state.feature_state",
+            lambda ws, f: {},
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        pos = brief["current_state"]["branch_position_per_repo"]
+        assert pos.get("repo-a", {}).get("behind", 0) > 0, (
+            "repo-a should be behind main after the commit on main"
+        )
+
+        hint_kinds = [h["kind"] for h in brief["intent_hints"]]
+        assert "align_with_default" in hint_kinds, (
+            f"align_with_default hint must fire when behind > 0; hints={brief['intent_hints']}"
+        )
+
+        align_hint = next(h for h in brief["intent_hints"] if h["kind"] == "align_with_default")
+        assert align_hint["priority"] == 2
+
+    def test_resume_feature_state_unknown_when_lookup_fails(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """feature_state lookup raises → current_state.feature_state == 'unknown', brief intact."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def boom(workspace, feature):
+            raise RuntimeError("simulated failure")
+
+        monkeypatch.setattr(
+            "canopy.actions.feature_state.feature_state",
+            boom,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["current_state"]["feature_state"] == "unknown"
+        # The rest of the brief should still be populated (not crash).
+        assert "branch_position_per_repo" in brief["current_state"]
+        assert "ci_summary_per_repo" in brief["current_state"]
+        assert isinstance(brief["intent_hints"], list)

@@ -1637,3 +1637,58 @@ class TestResumeCLI:
         data = _json.loads(capsys.readouterr().out)
         assert data["feature"] == "auth-flow"
         assert data["cleared"] is True
+
+
+class TestThreadsAggregation:
+    """Tests for multi-repo threads_new aggregation and edge cases."""
+
+    def test_resume_threads_new_aggregates_across_repos(self, canopy_toml_for_workspace, monkeypatch):
+        """When both repos have new threads, all surface in threads_new with repo+pr_number."""
+        from canopy.actions.last_visit import mark_visited
+        from canopy.actions.resume import feature_resume
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        mark_visited(ws, "auth-flow")
+        import time; time.sleep(1.1)
+
+        monkeypatch.setattr("canopy.actions.resume._pr_coords_per_repo",
+            lambda ws, f: {
+                "repo-a": {"owner": "o", "repo_slug": "a", "pr_number": 1},
+                "repo-b": {"owner": "o", "repo_slug": "b", "pr_number": 2},
+            })
+
+        def fake_threads(root, owner, slug, pr):
+            return [{"thread_id": f"PRRT_{slug}_1", "is_resolved": False, "resolved_at": None,
+                      "comments": [{"comment_id": pr * 10, "created_at": "2999-01-01T00:00:00Z",
+                                     "author": "u", "path": "x", "line": 1, "body": "new", "url": "u"}]}]
+        monkeypatch.setattr("canopy.integrations.github.list_review_threads", fake_threads)
+
+        brief = feature_resume(ws, "auth-flow")
+        new = brief["since_last_visit"]["threads_new"]
+        repos_seen = {t["repo"] for t in new}
+        assert repos_seen == {"repo-a", "repo-b"}
+        assert all(t["pr_number"] in (1, 2) for t in new)
+
+    def test_resume_unresolved_thread_with_stale_resolved_at_excluded(self, canopy_toml_for_workspace, monkeypatch):
+        """A thread with is_resolved=False but stale resolved_at (from prior resolve+unresolve) is excluded
+        from both threads_new (it's old) and threads_resolved_on_github (it's not resolved)."""
+        from canopy.actions.last_visit import mark_visited
+        from canopy.actions.resume import feature_resume
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        mark_visited(ws, "auth-flow")
+        import time; time.sleep(1.1)
+
+        monkeypatch.setattr("canopy.actions.resume._pr_coords_per_repo",
+            lambda ws, f: {"repo-a": {"owner": "o", "repo_slug": "a", "pr_number": 1}})
+
+        monkeypatch.setattr("canopy.integrations.github.list_review_threads",
+            lambda *a, **k: [{
+                "thread_id": "PRRT_x", "is_resolved": False, "resolved_at": "2999-01-01T00:00:00Z",
+                "comments": [{"comment_id": 1, "created_at": "1900-01-01T00:00:00Z",
+                               "author": "u", "path": "x", "line": 1, "body": "old", "url": "u"}],
+            }])
+
+        brief = feature_resume(ws, "auth-flow")
+        assert brief["since_last_visit"]["threads_new"] == []
+        assert brief["since_last_visit"]["threads_resolved_on_github"] == []

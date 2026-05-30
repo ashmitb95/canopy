@@ -108,7 +108,7 @@ The bundled `using-canopy` skill's "Session start" section encodes this as the e
 ```
 1. feature_resume(feature)  → session-start brief + switch-if-needed (Plan 2)
    OR triage()              → if you don't know what to work on
-2. feature_state(feature)   → get current state + next_actions (also in resume brief)
+2. feature_state(feature)   → get current state (brief.current_state has feature_state + intent_hints)
 3. follow next_actions[0]   → primary CTA (canopy decided what to do next)
 4. feature_state again      → confirm state advanced
 5. repeat

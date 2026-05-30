@@ -101,13 +101,13 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 |---|---|
 | `ship` | **M8.** PR open/update orchestrator with cross-repo body links. Idempotent — `up_to_date` on re-run. |
 | `draft_replies` | **M9.** File-history-based addressed-comment classifier. Returns draft reply text with high/medium/low confidence per comment. No LLM. |
-| `feature_resume` | **Plan 2.** Switch-aware compound brief. One call: alias → switch-if-needed → refresh GitHub + Linear → compute `{feature, switch_performed, first_visit, window_hours, since_last_visit, current_state, next_actions, intent_hints}` → bump last-visit anchor. Refreshes GH + Linear on every call (never cached at the canopy layer). See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief). |
+| `feature_resume` | **Plan 2.** Switch-aware compound brief. One call: alias → switch-if-needed → refresh GitHub + Linear → compute `{feature, switch_performed, first_visit, window_hours, since_last_visit, current_state, intent_hints}` → bump last-visit anchor. Refreshes GH + Linear on every call (never cached at the canopy layer). See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief). |
 
 #### Threads (Plan 2)
 
 | Tool | Description |
 |---|---|
-| `resolve_thread` | Close a GitHub PR review thread via GraphQL + record the closure in `.canopy/state/thread_resolutions.json`. Params: `thread_id` (str), `feature` (optional — defaults to canonical). The log feeds `feature_resume`'s `since_last_visit.resolved_threads` count. |
+| `resolve_thread` | Close a GitHub PR review thread via GraphQL + record the closure in `.canopy/state/thread_resolutions.json`. Params: `thread_id` (str), `feature` (optional — defaults to canonical). The log feeds `feature_resume`'s `since_last_visit.threads_resolved_by_canopy` list. |
 | `reply_to_thread` | Post a reply to a GitHub review thread. Params: `thread_id` (str), `body` (str), `feature` (optional), `resolve_after` (bool, default `False`). When `resolve_after=True`, closes the thread after posting and logs via `thread_resolutions`. |
 
 #### Run / preflight

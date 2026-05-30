@@ -478,6 +478,12 @@ def _post_switch_persist(
     state.in_flight = None
 
     slots_mod.write_state(workspace, state)
+
+    # T13: bump last_visit after slots.json is committed — every successful
+    # switch into a feature counts as a "conscious look" per the plan.
+    from . import last_visit as lv
+    lv.mark_visited(workspace, feature_name)
+
     out["activated_at"] = now
     if state.previous_canonical:
         out["previous_feature_in_state"] = state.previous_canonical

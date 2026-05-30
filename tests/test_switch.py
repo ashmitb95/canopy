@@ -187,3 +187,51 @@ def test_switch_blocked_when_in_flight_set(workspace_with_canonical_only):
     with pytest.raises(BlockerError) as e:
         switch(ws, "Y")
     assert e.value.code == "slot_state_inconsistent"
+
+
+# ── T13: last_visit bumping ────────────────────────────────────────────────
+
+
+def test_switch_bumps_last_visit(workspace_with_canonical_only):
+    """Successful switch advances last_visit for the target feature."""
+    ws = workspace_with_canonical_only
+    from canopy.actions.switch import switch
+    from canopy.actions import last_visit as lv
+
+    # Pre-condition: no anchor for Y
+    assert lv.get_last_visit(ws, "Y") is None
+
+    # Switch to Y
+    result = switch(ws, "Y")
+
+    # Verify switch succeeded
+    assert result["feature"] == "Y"
+
+    # Verify last_visit was bumped
+    visit = lv.get_last_visit(ws, "Y")
+    assert visit is not None
+    assert "last_visit" in visit
+    assert visit["last_visit"] is not None
+
+
+def test_switch_bumps_previous_visit_on_reswitch(workspace_with_canonical_only):
+    """Subsequent switches roll the prior anchor into previous_visit."""
+    import time
+    ws = workspace_with_canonical_only
+    from canopy.actions.switch import switch
+    from canopy.actions import last_visit as lv
+
+    # First switch to Y
+    switch(ws, "Y")
+    ts1 = lv.get_last_visit(ws, "Y")["last_visit"]
+
+    # Wait to ensure timestamp advances
+    time.sleep(1.1)
+
+    # Re-switch to Y (no-op on branches, but anchor still bumps)
+    switch(ws, "Y")
+
+    # Verify last_visit advanced and previous_visit holds the old value
+    after = lv.get_last_visit(ws, "Y")
+    assert after["last_visit"] > ts1, "last_visit must have advanced"
+    assert after["previous_visit"] == ts1, "previous_visit must hold the old anchor"

@@ -857,6 +857,36 @@ def resolve_thread(thread_id: str, feature: str | None = None) -> dict:
 
 
 @mcp.tool()
+def feature_resume(alias: str) -> dict:
+    """Fresh "what changed since last visit" brief.
+
+    Refreshes GitHub + Linear on every call. Returns:
+      - since_last_visit: commits, new threads, resolved threads (GH + canopy),
+        ci status delta (v1: empty), draft_replies_pending, historian_excerpt
+      - current_state: feature_state, ci_summary_per_repo, bot_unresolved_total,
+        draft_replies_summary, branch_position_per_repo, linear link
+      - first_visit, last_visit, window_hours
+      - switch_performed, switch_summary
+      - intent_hints (prioritized next actions)
+
+    The agent should call this on first activity in a feature per session
+    (or after returning from another feature). Switch already embeds a
+    counts-only summary; this is the full payload.
+
+    Args:
+        alias: Feature name, Linear ID, PR URL, or slot ID.
+    """
+    from ..actions.resume import feature_resume as _impl
+    from ..actions.errors import ActionError
+
+    ws = _get_workspace()
+    try:
+        return _impl(ws, alias)
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
 def drift(feature: str | None = None) -> dict:
     """Compare recorded HEAD state vs feature lane expectations.
 

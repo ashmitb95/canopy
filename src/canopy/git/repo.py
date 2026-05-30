@@ -827,3 +827,33 @@ def log_structured(
             "subject": parts[4],
         })
     return entries
+
+
+def log_since(repo_path: Path, branch: str, since_iso: str) -> list[dict]:
+    """Return commits on ``branch`` authored after ``since_iso`` (ISO 8601).
+
+    Used by feature_resume to populate the commits-since-last-visit section.
+    Returns a list of {sha, short_sha, at, author, subject} or [] on error.
+    """
+    sep = "\x1f"  # unit separator
+    fmt = f"%H{sep}%h{sep}%aI{sep}%an{sep}%s"
+    output = _run_ok(
+        ["log", branch, f"--since={since_iso}", f"--format={fmt}"],
+        cwd=repo_path,
+    )
+    if not output:
+        return []
+
+    entries = []
+    for line in output.splitlines():
+        parts = line.split(sep)
+        if len(parts) < 5:
+            continue
+        entries.append({
+            "sha": parts[0],
+            "short_sha": parts[1],
+            "at": parts[2],
+            "author": parts[3],
+            "subject": parts[4],
+        })
+    return entries

@@ -112,8 +112,33 @@ def _populate_since(
     last_visit_iso: str,
     since: dict[str, Any],
 ) -> dict[str, Any]:
-    """T7-T12 fill this. T6 leaves the shape as-is."""
+    """T7-T12 fill this. T7 populates commits."""
+    since["commits"] = _commits_since(workspace, feature, last_visit_iso)
     return since
+
+
+def _commits_since(workspace: Workspace, feature: str, since_iso: str) -> dict[str, list]:
+    """Populate per-repo commits authored after since_iso on the feature branch.
+
+    Returns {repo_name: [commit dicts]} where each commit has
+    {sha, short_sha, at, author, subject}. Per-repo errors (missing branch,
+    git failures) silently default to empty list; exceptions don't crash the brief.
+    """
+    from ..git import repo as git
+    from .aliases import repos_for_feature
+
+    out: dict[str, list] = {}
+    repos_map = repos_for_feature(workspace, feature)
+
+    for repo_name, branch in repos_map.items():
+        try:
+            state = workspace.get_repo(repo_name)
+            out[repo_name] = git.log_since(state.abs_path, branch, since_iso)
+        except Exception:
+            # Missing repo in workspace, or git error — default to empty list.
+            out[repo_name] = []
+
+    return out
 
 
 def _populate_current(

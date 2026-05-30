@@ -15,6 +15,9 @@ Single-bump invariant (plan lines 131-146):
   - switch ran  → resume does NOT call mark_visited.
   - no switch   → resume calls mark_visited once at the end.
 """
+import json
+import time
+
 import pytest
 
 from canopy.actions import last_visit as lv
@@ -344,8 +347,6 @@ class TestCommitsSinceLastVisit:
         Fixture creates commits at setup time. We set anchor, sleep, then resume.
         Since no commits are made AFTER the anchor, all repos should be empty.
         """
-        import time
-
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
 
@@ -368,3 +369,228 @@ class TestCommitsSinceLastVisit:
                 f"Expected empty commit list for {repo_name}, "
                 f"but got {commit_list}"
             )
+
+
+class TestThreadDeltaSinceLastVisit:
+    """Tests for T8: threads_new, threads_resolved_on_github, threads_resolved_by_canopy."""
+
+    # Shared fake threads used across several tests.
+    _FAKE_THREADS = [
+        {
+            "thread_id": "PRRT_old",
+            "is_resolved": False,
+            "resolved_at": None,
+            "comments": [{
+                "comment_id": 1,
+                "created_at": "1900-01-01T00:00:00Z",
+                "author": "alice",
+                "path": "a.py",
+                "line": 1,
+                "body": "old comment",
+                "url": "https://github.com/o/r/pull/1#discussion_r1",
+            }],
+        },
+        {
+            "thread_id": "PRRT_new",
+            "is_resolved": False,
+            "resolved_at": None,
+            "comments": [{
+                "comment_id": 2,
+                "created_at": "2999-01-01T00:00:00Z",
+                "author": "bob",
+                "path": "b.py",
+                "line": 2,
+                "body": "new comment",
+                "url": "https://github.com/o/r/pull/1#discussion_r2",
+            }],
+        },
+    ]
+
+    def _patch_pr_coords(self, monkeypatch):
+        """Patch _pr_coords_per_repo to return one fake repo+PR."""
+        import canopy.actions.resume as resume_mod
+        monkeypatch.setattr(
+            resume_mod,
+            "_pr_coords_per_repo",
+            lambda ws, f: {"repo-a": {"owner": "o", "repo_slug": "r", "pr_number": 1}},
+        )
+
+    def test_resume_threads_new_only_after_last_visit(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """Only threads with created_at > last_visit and not resolved land in threads_new."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        self._patch_pr_coords(monkeypatch)
+        monkeypatch.setattr(
+            "canopy.integrations.github.list_review_threads",
+            lambda *a, **k: self._FAKE_THREADS,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        new_ids = [t["thread_id"] for t in brief["since_last_visit"]["threads_new"]]
+        assert new_ids == ["PRRT_new"], (
+            f"Expected only PRRT_new in threads_new, got {new_ids}"
+        )
+        # PRRT_old predates the anchor and must be absent.
+        assert "PRRT_old" not in new_ids
+
+    def test_resume_threads_resolved_gh_attributed_to_canopy(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """A resolved thread whose thread_id is in thread_resolutions.json gets by_canopy=True."""
+        from canopy.actions import thread_resolutions as tr
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        # Pre-write a canopy resolution for PRRT_resolved.
+        tr.record(
+            ws.config.root,
+            thread_id="PRRT_resolved",
+            feature="auth-flow",
+            via_command="resolve",
+        )
+
+        resolved_thread = {
+            "thread_id": "PRRT_resolved",
+            "is_resolved": True,
+            "resolved_at": "2999-06-01T00:00:00Z",
+            "comments": [{
+                "comment_id": 10,
+                "created_at": "2999-01-01T00:00:00Z",
+                "author": "carol",
+                "path": "x.py",
+                "line": 5,
+                "body": "please fix this",
+                "url": "https://github.com/o/r/pull/1#discussion_r10",
+            }],
+        }
+
+        self._patch_pr_coords(monkeypatch)
+        monkeypatch.setattr(
+            "canopy.integrations.github.list_review_threads",
+            lambda *a, **k: [resolved_thread],
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        resolved = brief["since_last_visit"]["threads_resolved_on_github"]
+        assert len(resolved) == 1
+        assert resolved[0]["thread_id"] == "PRRT_resolved"
+        assert resolved[0]["by_canopy"] is True
+
+    def test_resume_threads_resolved_gh_not_attributed_when_external(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """A resolved thread with no canopy log entry gets by_canopy=False."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        resolved_thread = {
+            "thread_id": "PRRT_external",
+            "is_resolved": True,
+            "resolved_at": "2999-06-01T00:00:00Z",
+            "comments": [{
+                "comment_id": 20,
+                "created_at": "2999-01-01T00:00:00Z",
+                "author": "dave",
+                "path": "y.py",
+                "line": 7,
+                "body": "fix this too",
+                "url": "https://github.com/o/r/pull/1#discussion_r20",
+            }],
+        }
+
+        self._patch_pr_coords(monkeypatch)
+        monkeypatch.setattr(
+            "canopy.integrations.github.list_review_threads",
+            lambda *a, **k: [resolved_thread],
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        resolved = brief["since_last_visit"]["threads_resolved_on_github"]
+        assert len(resolved) == 1
+        assert resolved[0]["thread_id"] == "PRRT_external"
+        assert resolved[0]["by_canopy"] is False
+
+    def test_resume_threads_by_canopy_filtered_by_feature_and_since(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """bot_resolutions entries: only matching feature AND addressed_at > anchor appear."""
+        from canopy.actions.bot_resolutions import record_resolution
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        # Record one entry for auth-flow AFTER anchor, one BEFORE, one for wrong feature.
+        record_resolution(
+            ws.config.root,
+            comment_id="111",
+            feature="auth-flow",
+            repo="repo-a",
+            commit_sha="abc",
+            comment_title="fix cache",
+            addressed_at="2999-01-01T00:00:00Z",   # after anchor → should appear
+        )
+        record_resolution(
+            ws.config.root,
+            comment_id="222",
+            feature="auth-flow",
+            repo="repo-a",
+            commit_sha="def",
+            comment_title="old fix",
+            addressed_at="1900-01-01T00:00:00Z",   # before anchor → must be excluded
+        )
+        record_resolution(
+            ws.config.root,
+            comment_id="333",
+            feature="other-feature",
+            repo="repo-a",
+            commit_sha="ghi",
+            comment_title="unrelated",
+            addressed_at="2999-06-01T00:00:00Z",   # after anchor but wrong feature
+        )
+
+        # Suppress GH calls — threads_by_canopy doesn't need them.
+        self._patch_pr_coords(monkeypatch)
+        monkeypatch.setattr(
+            "canopy.integrations.github.list_review_threads",
+            lambda *a, **k: [],
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        by_canopy = brief["since_last_visit"]["threads_resolved_by_canopy"]
+        cids = [e["comment_id"] for e in by_canopy]
+        assert "111" in cids, "entry 111 (auth-flow, after anchor) must appear"
+        assert "222" not in cids, "entry 222 (auth-flow, before anchor) must be excluded"
+        assert "333" not in cids, "entry 333 (other-feature) must be excluded"
+
+    def test_resume_threads_delta_empty_when_no_pr(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """When _pr_coords_per_repo returns {}, all three thread fields are empty arrays."""
+        import canopy.actions.resume as resume_mod
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        monkeypatch.setattr(
+            resume_mod, "_pr_coords_per_repo", lambda ws, f: {},
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        s = brief["since_last_visit"]
+        assert s["threads_new"] == []
+        assert s["threads_resolved_on_github"] == []
+        assert s["threads_resolved_by_canopy"] == []

@@ -112,8 +112,14 @@ def _populate_since(
     last_visit_iso: str,
     since: dict[str, Any],
 ) -> dict[str, Any]:
-    """T7-T12 fill this. T7 populates commits."""
+    """T7-T12 fill this. T7 populates commits. T8 populates thread deltas."""
     since["commits"] = _commits_since(workspace, feature, last_visit_iso)
+    threads = _threads_delta(workspace, feature, last_visit_iso)
+    since["threads_new"] = threads["new"]
+    since["threads_resolved_on_github"] = threads["resolved_gh"]
+    since["threads_resolved_by_canopy"] = _resolutions_by_canopy_since(
+        workspace, feature, last_visit_iso,
+    )
     return since
 
 
@@ -138,6 +144,129 @@ def _commits_since(workspace: Workspace, feature: str, since_iso: str) -> dict[s
             # Missing repo in workspace, or git error — default to empty list.
             out[repo_name] = []
 
+    return out
+
+
+def _pr_coords_per_repo(
+    workspace: Workspace, feature: str,
+) -> dict[str, dict | None]:
+    """Return {repo_name: {"owner": str, "repo_slug": str, "pr_number": int} | None}.
+
+    Uses the same pattern as FeatureCoordinator.review_status: iterates repos
+    in the feature lane, resolves remote URL → owner/slug, finds the open PR.
+    On any per-repo error (no remote, unparseable URL, no PR) returns None for
+    that repo. Propagates only hard exceptions (feature not found, etc.).
+    """
+    from ..git import repo as git
+    from ..integrations.github import _extract_owner_repo, find_pull_request
+    from .aliases import repos_for_feature
+
+    repos_map = repos_for_feature(workspace, feature)
+    out: dict[str, dict | None] = {}
+
+    for repo_name, branch in repos_map.items():
+        try:
+            state = workspace.get_repo(repo_name)
+            remote = git.remote_url(state.abs_path)
+            if not remote:
+                out[repo_name] = None
+                continue
+            parsed = _extract_owner_repo(remote)
+            if not parsed:
+                out[repo_name] = None
+                continue
+            owner, repo_slug = parsed
+            pr = find_pull_request(workspace.config.root, owner, repo_slug, branch)
+            if pr is None:
+                out[repo_name] = None
+            else:
+                out[repo_name] = {
+                    "owner": owner,
+                    "repo_slug": repo_slug,
+                    "pr_number": pr["number"],
+                }
+        except Exception:
+            out[repo_name] = None
+
+    return out
+
+
+def _threads_delta(
+    workspace: Workspace, feature: str, since_iso: str,
+) -> dict[str, list]:
+    """Return {"new": [...], "resolved_gh": [...]}.
+
+    Calls list_review_threads per-repo+PR. On ANY exception (no PR yet,
+    GH unreachable, etc.), returns {"new": [], "resolved_gh": []} and
+    swallows. Never crashes the brief.
+    """
+    from ..integrations import github as gh
+    from . import thread_resolutions as tr
+
+    try:
+        pr_coords = _pr_coords_per_repo(workspace, feature)
+    except Exception:
+        return {"new": [], "resolved_gh": []}
+
+    canopy_log = tr.load(workspace.config.root)
+    new_threads: list[dict] = []
+    resolved_gh: list[dict] = []
+
+    for repo_name, coords in pr_coords.items():
+        if not coords:
+            continue
+        owner = coords["owner"]
+        repo_slug = coords["repo_slug"]
+        pr_number = coords["pr_number"]
+        try:
+            threads = gh.list_review_threads(
+                workspace.config.root, owner, repo_slug, pr_number,
+            )
+        except Exception:
+            continue
+        for t in threads:
+            first = (t.get("comments") or [None])[0]
+            created_at = (first or {}).get("created_at", "")
+            if (not t["is_resolved"]) and created_at > since_iso:
+                new_threads.append({
+                    "thread_id": t["thread_id"],
+                    "comment_id": (first or {}).get("comment_id"),
+                    "author": (first or {}).get("author", ""),
+                    "path": (first or {}).get("path", ""),
+                    "line": (first or {}).get("line", 0),
+                    "body_excerpt": ((first or {}).get("body") or "")[:200],
+                    "created_at": created_at,
+                    "url": (first or {}).get("url", ""),
+                    "repo": repo_name,
+                    "pr_number": pr_number,
+                })
+            elif t["is_resolved"] and (t.get("resolved_at") or "") > since_iso:
+                resolved_gh.append({
+                    "thread_id": t["thread_id"],
+                    "resolved_at": t["resolved_at"],
+                    "by_canopy": t["thread_id"] in canopy_log,
+                    "repo": repo_name,
+                    "pr_number": pr_number,
+                    "summary_excerpt": ((first or {}).get("body") or "")[:200],
+                })
+
+    return {"new": new_threads, "resolved_gh": resolved_gh}
+
+
+def _resolutions_by_canopy_since(
+    workspace: Workspace, feature: str, since_iso: str,
+) -> list[dict]:
+    """Bot_resolutions entries for this feature with addressed_at > since_iso."""
+    from . import bot_resolutions as br
+
+    out: list[dict] = []
+    try:
+        entries = br.resolutions_for_feature(workspace.config.root, feature)
+    except Exception:
+        return []
+    for cid, e in entries.items():
+        if e.get("addressed_at", "") > since_iso:
+            out.append({"comment_id": cid, **e})
     return out
 
 

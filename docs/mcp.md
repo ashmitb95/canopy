@@ -24,7 +24,7 @@ Register in any MCP-compatible client. `canopy init` writes this entry into the 
 
 `CANOPY_ROOT` scopes the server to one workspace. To use canopy in multiple workspaces simultaneously, register separate entries with different `CANOPY_ROOT` values (or scope MCP per-project via `.mcp.json` at each workspace root).
 
-### Tools (64)
+### Tools (67)
 
 Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 
@@ -94,6 +94,21 @@ Grouped by topic. Every tool is alias-aware where it accepts a feature input.
 | `github_get_pr` | PR data per repo. Accepts feature alias, `<repo>#<n>`, or PR URL. |
 | `github_get_branch` | Branch HEAD/divergence/upstream per repo. Accepts feature or `<repo>:<branch>`. |
 | `github_get_pr_comments` | Temporally classified review comments. Same alias forms as `github_get_pr`. |
+
+#### Workflow
+
+| Tool | Description |
+|---|---|
+| `ship` | **M8.** PR open/update orchestrator with cross-repo body links. Idempotent — `up_to_date` on re-run. |
+| `draft_replies` | **M9.** File-history-based addressed-comment classifier. Returns draft reply text with high/medium/low confidence per comment. No LLM. |
+| `feature_resume` | **Plan 2.** Switch-aware compound brief. One call: alias → switch-if-needed → refresh GitHub + Linear → compute `{feature, switch_performed, first_visit, window_hours, since_last_visit, current_state, intent_hints}` → bump last-visit anchor. Refreshes GH + Linear on every call (never cached at the canopy layer). See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief). |
+
+#### Threads (Plan 2)
+
+| Tool | Description |
+|---|---|
+| `resolve_thread` | Close a GitHub PR review thread via GraphQL + record the closure in `.canopy/state/thread_resolutions.json`. Params: `thread_id` (str), `feature` (optional — defaults to canonical). The log feeds `feature_resume`'s `since_last_visit.threads_resolved_by_canopy` list. |
+| `reply_to_thread` | Post a reply to a GitHub review thread. Params: `thread_id` (str), `body` (str), `feature` (optional), `resolve_after` (bool, default `False`). When `resolve_after=True`, closes the thread after posting and logs via `thread_resolutions`. |
 
 #### Run / preflight
 

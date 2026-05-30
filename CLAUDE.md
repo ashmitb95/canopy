@@ -48,7 +48,11 @@ src/canopy/
 │   ├── stash.py             # feature-tagged stash save/list/pop
 │   ├── switch.py            # WAVE 3.0: slot-model focus primitive (+ --to-slot / --evict-to)
 │   ├── switch_preflight.py  # WAVE 3.0: predictable-failure detection for switch
-│   └── triage.py            # cross-repo PR enumeration + priority tiers (slot-enriched)
+│   ├── triage.py            # cross-repo PR enumeration + priority tiers (slot-enriched)
+│   ├── last_visit.py        # per-feature last-visit anchor (visits.json get/mark/reset)
+│   ├── resume.py            # feature_resume compound action + resume_summary (counts-only)
+│   ├── thread_actions.py    # GH thread resolve/reply wrappers + local resolution log
+│   └── thread_resolutions.py  # thread_resolutions.json load/record/filter_since
 ├── agent/
 │   └── runner.py            # canopy_run — directory-safe shell exec
 ├── agent_setup/             # ships bundled skills + setup_agent installer
@@ -61,7 +65,7 @@ src/canopy/
 │   ├── github.py            # GitHub PR + comments (MCP or gh CLI fallback)
 │   └── precommit.py         # detect + run pre-commit hooks
 └── mcp/
-    ├── server.py            # MCP server — 59 tools, stdio transport
+    ├── server.py            # MCP server — 67 tools, stdio transport
     └── client.py            # MCP client — stdio + HTTP+OAuth transports
 ```
 
@@ -75,7 +79,7 @@ src/canopy/
 - **Per-repo branches map** — `FeatureLane.branches: dict[repo, branch]` overrides "branch == feature name" for legacy mismatched-naming features. Use `lane.branch_for(repo)` or `repos_for_feature(workspace, feature)` everywhere — never recompute as `[r for r in feature.repos]` with feature name as branch (regresses Gap 2).
 - **Feature lanes use real Git branches and worktrees.** No virtual branches.
 - **Feature metadata lives in `.canopy/features.json`. Worktrees in `.canopy/worktrees/worktree-N/<repo>/` (generic numbered slots).** A slot holds one feature at a time; a feature's repos sit as siblings inside its slot. Canonical (main repo dirs) is the only place to *run* code; worktrees are passive branch storage.
-- **State files** at `.canopy/state/heads.json` (post-checkout hook output), `.canopy/state/preflight.json` (preflight tracker), and `.canopy/state/slots.json` (canonical + warm slot occupancy + `last_touched` LRU map + `in_flight` transaction marker). OAuth tokens at `~/.canopy/mcp-tokens/`.
+- **State files** at `.canopy/state/heads.json` (post-checkout hook output), `.canopy/state/preflight.json` (preflight tracker), `.canopy/state/slots.json` (canonical + warm slot occupancy + `last_touched` LRU map + `in_flight` transaction marker), `.canopy/state/visits.json` (per-feature last-visit anchor: `{feature: {last_visit, previous_visit}}`), and `.canopy/state/thread_resolutions.json` (log of GH review threads canopy itself resolved: `{thread_id: {resolved_by_canopy_at, feature, via_command, via_commit_sha}}`). OAuth tokens at `~/.canopy/mcp-tokens/`.
 - **MCP client supports two transports.** Stdio (existing) for npm/python servers. HTTP+OAuth (new) for hosted servers like Linear's `mcp.linear.app`. Tokens cache per server.
 - **GitHub fallback to gh CLI.** When no `github` MCP server is configured, `integrations/github.py` falls back to `gh api` / `gh pr` for the same return shapes. If neither is available, raises `BlockerError(code='github_not_configured')` with platform-aware install hints.
 - **Single source of truth for state.** `feature_state` uses live git (not heads.json) so it's correct even when the hook hasn't fired. `drift` uses heads.json for the fast cached path.
@@ -107,7 +111,7 @@ For integration testing against real services, see `~/projects/canopy-test/` (me
 - **Skill bundling:** Bundled skills live at `src/canopy/agent_setup/skills/<name>/SKILL.md`. `canopy setup-agent` copies them to `~/.claude/skills/<name>/SKILL.md`. The default `using-canopy` skill always installs; opt-in extras (e.g. `augment-canopy`) install via `--skill <name>` (repeatable). Foreign skills with the same path are not overwritten without `--reinstall`. The `_SKILL_SOURCE` constant remains as a backward-compat alias pointing at `using-canopy`'s source.
 - **Version bumps:** When shipping a milestone, bump `__version__` in [`src/canopy/__init__.py`](src/canopy/__init__.py) and add a section to [`CHANGELOG.md`](CHANGELOG.md). The version handshake (`canopy --version`, `mcp__canopy__version`, doctor's `cli_stale` / `mcp_stale` checks) is only useful when this number actually moves — drift was the bug 0.5.0 caught.
 
-## MCP Server (64 tools)
+## MCP Server (67 tools)
 
 Grouped by topic. Run with `canopy-mcp` (entry point) or `python -m canopy.mcp.server`.
 
@@ -121,7 +125,8 @@ Slots:        slots, slot_load, slot_clear, slot_swap, migrate_slots   # WAVE 3.
 Actions:      switch, triage, drift, conflicts   # switch is the slot-model focus primitive
 Reads:        linear_get_issue, github_get_pr, github_get_branch, github_get_pr_comments,
               linear_my_issues, pr_checks         # pr_checks = M10 CI rollup
-Workflow:     ship, draft_replies                 # M8 + M9 — capstone + addressed-comment drafts
+Workflow:     ship, draft_replies, feature_resume  # M8 + M9 + Plan 2 — capstone + reply drafts + session resume
+Threads:      resolve_thread, reply_to_thread      # Plan 2 — GH review thread mutations + local log
 Run/Pre:      run, preflight, review_status, review_comments, review_prep
 Stash:        stash_save_feature, stash_list_grouped, stash_pop_feature,
               stash_save, stash_pop, stash_list, stash_drop

@@ -202,3 +202,76 @@ Decoupling slot identity from feature identity matters because:
 - **Not branch-management.** `switch` doesn't create branches that don't exist (that's `feature_create`), doesn't open IDEs (that's `code`), doesn't commit/push (those are `commit`/`push`/`ship`). It only moves features between {canonical, warm, cold}.
 - **Not slot-allocation either.** Use `slot load` to warm a cold feature into a slot without changing canonical. Use `slot clear` to free a slot without bringing a new feature in. `switch` is specifically the "what's in focus" verb.
 - **Not unsafe.** Three layers of defense: a preflight catches predictable failures cheaply; a fast-path 5-op-per-repo swap when Y is already warm; a journaled rollback walker plus a `slots.json.in_flight` marker for the residual real-world failures (disk full, network blip, partial multi-repo failure). Either every repo finishes the switch or every repo rolls back to its pre-switch state.
+
+## 5. Returning to a feature — the resume brief
+
+When the agent (or human) returns to a feature in a new session, `canopy resume <alias>` (or `mcp__canopy__feature_resume(alias)`) runs the full recovery chain:
+
+```
+alias → switch-if-needed → refresh GitHub + Linear → brief → bump last-visit anchor
+```
+
+One call gets you oriented. There's no separate "switch, then fetch PR state, then read comments" dance.
+
+### What the brief carries
+
+```json
+{
+  "version": 1,
+  "feature": "SIN-12-search",
+  "now": "2026-05-30T10:00:00Z",
+  "last_visit": "2026-05-29T15:30:00Z",
+  "first_visit": false,
+  "window_hours": 18.5,
+  "switch_performed": true,
+  "switch_summary": {"status": "ok"},
+  "intent_hints": [
+    {"kind": "review_comments", "summary": "2 open threads", "suggested_tool": "github_get_pr_comments", "suggested_args": {}, "priority": 1}
+  ],
+  "since_last_visit": {
+    "commits": {
+      "backend": [{"sha": "abc1234", "short_sha": "abc1234", "at": "2026-05-30T09:00:00Z", "author": "alice", "subject": "fix: auth token refresh"}]
+    },
+    "threads_new": [
+      {"thread_id": "PRRT_1", "comment_id": 42, "author": "bob", "path": "src/auth.py", "line": 10, "body_excerpt": "This needs a guard.", "created_at": "2026-05-30T08:00:00Z", "url": "https://github.com/...", "repo": "backend", "pr_number": 7}
+    ],
+    "threads_resolved_on_github": [],
+    "threads_resolved_by_canopy": [],
+    "ci_status_delta": {},
+    "draft_replies_pending": 1,
+    "historian_excerpt": "Last session: implemented token refresh. Left off before adding tests."
+  },
+  "current_state": {
+    "feature_state": "needs_work",
+    "open_thread_count": 2,
+    "ci_summary_per_repo": {"backend": "passing"},
+    "bot_unresolved_total": 0,
+    "draft_replies_summary": {"addressed_total": 1, "unaddressed_total": 1},
+    "branch_position_per_repo": {"backend": {"branch": "SIN-12-search", "default_branch": "main", "ahead": 3, "behind": 0, "last_sync_at": "2026-05-30T09:00:00Z"}},
+    "linear_issue": "SIN-12",
+    "linear_url": "https://linear.app/..."
+  }
+}
+```
+
+- `switch_performed` — whether `resume` had to call `switch` to move the feature to canonical.
+- `first_visit` — true when no prior anchor exists; no delta computed.
+- `window_hours` — wall-clock hours since the last visit anchor was set.
+- `since_last_visit` — full delta since the last visit: `commits` (per-repo list), `threads_new` (unresolved threads whose first comment is newer than last_visit), `threads_resolved_on_github` and `threads_resolved_by_canopy` (two separate resolution logs), `draft_replies_pending` count, `historian_excerpt`.
+- `current_state` — live snapshot from `feature_state` + branch positions + Linear link. NOT forwarded verbatim; the brief extracts specific fields into this sub-object.
+- `intent_hints` — canopy's best guess at the most likely next action categories (e.g., `review_comments`, `check_ci`, `push`). Derived from the brief data, not from `feature_state`. Use as a prompt, not a constraint.
+
+### Freshness policy
+
+- **Every `resume` call refreshes GitHub + Linear.** The brief is never cached at the canopy layer; upstream HTTP/MCP layers may cache.
+- **Auxiliary state** (`bot_resolutions`, `thread_resolutions`, `visits.json`) is read live on every call.
+- **`switch` always bumps `last_visit`.** Every `switch` call (whether invoked directly or triggered internally by `resume`) bumps `last_visit` for the incoming feature after the slot state is written. When you call `switch` without `resume` — e.g., a quick focus change mid-session — the switch return includes a lightweight `since_last_visit_summary` (counts only, no intent hints) so you immediately see whether anything changed since you were last here. `degraded: true` appears in this field when GitHub is unreachable.
+
+### Last-visit anchor — the single-bump invariant
+
+`visits.json` stores `{feature: {last_visit: <ISO>, previous_visit: <ISO|null>}}`. The anchor advances exactly once per `feature_resume` call. If `resume` triggered a `switch`, the bump happened inside `switch` — `resume` does NOT bump again. If no switch ran, `resume` bumps at the END of the call (after the brief is computed). Either way, exactly one bump per `feature_resume` invocation.
+
+This invariant means:
+- The delta window always reflects the period since you last *consciously* resumed the feature, not since the last focus change.
+- Repeated `resume` calls in quick succession return the same delta (not a 0-minute window the second time).
+- `--reset-anchor` (CLI) / `reset_anchor=True` (MCP) explicitly resets the anchor to now — use when you want to start fresh without reopening a new session.

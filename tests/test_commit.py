@@ -436,3 +436,222 @@ def test_commit_with_address_uses_only_auto_message_when_no_message(
         check=True, capture_output=True, text=True,
     ).stdout
     assert msg.strip().startswith('Addresses bot comment: "please rename hit_rate"')
+
+
+# ── T4: --resolve-thread / --no-resolve-thread / augment ────────────────
+
+
+def _thread(thread_id, comment_id):
+    """Minimal review thread dict matching list_review_threads output."""
+    return {
+        "thread_id": thread_id,
+        "is_resolved": False,
+        "resolved_at": None,
+        "comments": [
+            {
+                "comment_id": int(comment_id),
+                "path": "src/auth.py",
+                "line": 1,
+                "body": "rename foo to bar",
+                "author": "coderabbit",
+                "created_at": "2030-01-01T00:00:00Z",
+                "url": f"https://github.com/o/r/pull/1#discussion_r{comment_id}",
+            }
+        ],
+    }
+
+
+def _setup_address_workspace(workspace_with_feature, comment_id):
+    """Common setup for --address resolve-thread tests.
+
+    Returns workspace with repo-a feature and a dirty file to commit.
+    """
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    ws = _make_workspace(workspace_with_feature, repos=("repo-a",))
+    (workspace_with_feature / "repo-a" / "src" / "models.py").write_text("fixed\n")
+    return ws
+
+
+def test_commit_address_with_resolve_thread_flag(workspace_with_feature):
+    """--resolve-thread resolves the GH thread and logs to thread_resolutions.json."""
+    from canopy.actions import thread_resolutions as tr
+
+    comment_id = 12345
+    thread_id = "PRRT_x"
+    ws = _setup_address_workspace(workspace_with_feature, comment_id)
+
+    gh_resolve_result = {"thread_id": thread_id, "is_resolved": True}
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(comment_id)], 0)), \
+         patch("canopy.integrations.github.list_review_threads",
+               return_value=[_thread(thread_id, comment_id)]), \
+         patch("canopy.integrations.github.resolve_thread",
+               return_value=gh_resolve_result):
+        result = commit(
+            ws, "fix it",
+            feature="auth-flow",
+            address=str(comment_id),
+            resolve_thread=True,
+        )
+
+    assert result["results"]["repo-a"]["status"] == "ok"
+    addressed = result["addressed"]
+    assert addressed["recorded"] is True
+    tr_result = addressed["thread_resolved"]
+    assert tr_result.get("is_resolved") is True
+
+    # thread_resolutions.json should carry via_command + via_commit_sha
+    log = tr.load(workspace_with_feature)
+    assert thread_id in log
+    entry = log[thread_id]
+    assert entry["via_command"] == "commit_address"
+    assert entry["via_commit_sha"] == addressed["sha"]
+
+    # bot_resolutions.json still written (unchanged behaviour)
+    assert is_resolved(workspace_with_feature, comment_id) is True
+
+
+def test_commit_address_no_resolve_default(workspace_with_feature):
+    """Without --resolve-thread and no augment, GH thread resolution is skipped."""
+    comment_id = 99991
+    ws = _setup_address_workspace(workspace_with_feature, comment_id)
+
+    # resolve_thread must NOT be called — crash if it is.
+    def _crash(*_a, **_kw):
+        raise AssertionError("resolve_thread should not have been called")
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(comment_id)], 0)), \
+         patch("canopy.integrations.github.list_review_threads", side_effect=_crash), \
+         patch("canopy.integrations.github.resolve_thread", side_effect=_crash):
+        result = commit(
+            ws, "fix it",
+            feature="auth-flow",
+            address=str(comment_id),
+            # resolve_thread not passed → defaults to None → augment default (False)
+        )
+
+    assert result["results"]["repo-a"]["status"] == "ok"
+    # No thread_resolved key when resolution was not attempted
+    assert "thread_resolved" not in result.get("addressed", {})
+
+
+def test_commit_address_augment_default_true(workspace_with_feature):
+    """augment auto_resolve_threads_on_address=true fires resolve without CLI flag."""
+    from canopy.actions import thread_resolutions as tr
+    from canopy.workspace.config import load_config
+
+    comment_id = 77777
+    thread_id = "PRRT_augment"
+
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    (workspace_with_feature / "canopy.toml").write_text(
+        "[workspace]\nname = \"test\"\n\n"
+        "[augments]\nauto_resolve_threads_on_address = true\n\n"
+        "[[repos]]\nname = \"repo-a\"\npath = \"./repo-a\"\nrole = \"x\"\nlang = \"x\"\n"
+    )
+    ws = Workspace(load_config(workspace_with_feature))
+    (workspace_with_feature / "repo-a" / "src" / "models.py").write_text("augment\n")
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(comment_id)], 0)), \
+         patch("canopy.integrations.github.list_review_threads",
+               return_value=[_thread(thread_id, comment_id)]), \
+         patch("canopy.integrations.github.resolve_thread",
+               return_value={"thread_id": thread_id, "is_resolved": True}):
+        result = commit(
+            ws, "augment driven",
+            feature="auth-flow",
+            address=str(comment_id),
+            # resolve_thread not passed → None → augment kicks in
+        )
+
+    assert result["addressed"]["thread_resolved"].get("is_resolved") is True
+    log = tr.load(workspace_with_feature)
+    assert thread_id in log
+
+
+def test_commit_address_no_resolve_thread_overrides_augment(workspace_with_feature):
+    """--no-resolve-thread prevents resolution even if augment is true."""
+    from canopy.workspace.config import load_config
+
+    comment_id = 55555
+
+    _features_file(workspace_with_feature, {
+        "auth-flow": {"repos": ["repo-a"], "status": "active"},
+    })
+    _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
+    (workspace_with_feature / "canopy.toml").write_text(
+        "[workspace]\nname = \"test\"\n\n"
+        "[augments]\nauto_resolve_threads_on_address = true\n\n"
+        "[[repos]]\nname = \"repo-a\"\npath = \"./repo-a\"\nrole = \"x\"\nlang = \"x\"\n"
+    )
+    ws = Workspace(load_config(workspace_with_feature))
+    (workspace_with_feature / "repo-a" / "src" / "models.py").write_text("noreso\n")
+
+    def _crash(*_a, **_kw):
+        raise AssertionError("resolve_thread should not have been called")
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(comment_id)], 0)), \
+         patch("canopy.integrations.github.list_review_threads", side_effect=_crash), \
+         patch("canopy.integrations.github.resolve_thread", side_effect=_crash):
+        result = commit(
+            ws, "explicit skip",
+            feature="auth-flow",
+            address=str(comment_id),
+            resolve_thread=False,  # explicit False overrides augment=true
+        )
+
+    assert result["results"]["repo-a"]["status"] == "ok"
+    assert "thread_resolved" not in result.get("addressed", {})
+
+
+def test_commit_address_resolve_thread_skipped_when_thread_not_found(workspace_with_feature):
+    """When list_review_threads returns no matching comment_id, skipped=thread_not_found."""
+    from canopy.actions import thread_resolutions as tr
+
+    comment_id = 12345
+    ws = _setup_address_workspace(workspace_with_feature, comment_id)
+
+    # Thread exists but its comments have a *different* comment_id
+    unrelated_thread = _thread("PRRT_other", 99999)
+
+    with patch("canopy.actions.feature_state.gh.find_pull_request",
+               return_value=_open_pr()), \
+         patch("canopy.actions.feature_state.gh.get_review_comments",
+               return_value=([_bot_comment(comment_id)], 0)), \
+         patch("canopy.integrations.github.list_review_threads",
+               return_value=[unrelated_thread]), \
+         patch("canopy.integrations.github.resolve_thread",
+               side_effect=AssertionError("should not be called")):
+        result = commit(
+            ws, "not found",
+            feature="auth-flow",
+            address=str(comment_id),
+            resolve_thread=True,
+        )
+
+    assert result["results"]["repo-a"]["status"] == "ok"
+    assert result["addressed"]["thread_resolved"] == {
+        "skipped": "thread_not_found",
+        "comment_id": str(comment_id),
+    }
+    # thread_resolutions.json should NOT have an entry
+    log = tr.load(workspace_with_feature)
+    assert log == {}

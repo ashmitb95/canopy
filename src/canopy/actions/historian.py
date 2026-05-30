@@ -316,6 +316,24 @@ def format_for_agent(workspace_root: Path, feature: str) -> str:
     return _render(feature, entries)
 
 
+def format_for_agent_since(
+    workspace_root: Path, feature: str, since_iso: str,
+) -> str:
+    """Render only entries with timestamp > since_iso.
+
+    Returns an empty string when no entries match the filter or the feature
+    has no memory yet. Timestamps are compared lexicographically, so
+    since_iso must be in ISO 8601 Z format (e.g. "2026-05-26T15:30:00Z").
+    """
+    entries = _load_entries(workspace_root, feature)
+    if not entries:
+        return ""
+    filtered = [e for e in entries if e.get("at", "") > since_iso]
+    if not filtered:
+        return ""
+    return _render(feature, filtered)
+
+
 # ── Compaction ──────────────────────────────────────────────────────────
 
 

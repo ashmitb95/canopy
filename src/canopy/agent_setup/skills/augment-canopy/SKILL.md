@@ -48,6 +48,7 @@ augments = { preflight_cmd = "uv run pytest tests/fast" }   # api-only override
 | `preflight_cmd` | string | `canopy preflight` (and `review_prep` path inside `coordinator.py`) | Runs via `sh -c` so pipes / `&&` chains work |
 | `test_cmd` | string | future `canopy test` (not v1) | Schema-reserved; safe to set |
 | `review_bots` | list[string] | M3 bot-comment tracking (when shipped) | Workspace-level only; per-repo overrides ignored for this key |
+| `auto_resolve_threads_on_address` | bool | `canopy commit --address <id>` | When true, `canopy commit --address <id>` auto-resolves the corresponding GH review thread after push. `--no-resolve-thread` overrides. Default: false. |
 
 Unknown keys are silently preserved by the parser — future augments don't require schema migration.
 

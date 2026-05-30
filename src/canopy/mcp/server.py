@@ -299,7 +299,8 @@ def slot_swap(slot_a: str, slot_b: str) -> dict:
 def commit(message: str = "", feature: str | None = None,
            repos: list[str] | None = None, paths: list[str] | None = None,
            no_hooks: bool = False, amend: bool = False,
-           address: str | None = None) -> dict:
+           address: str | None = None,
+           resolve_thread: bool | None = None) -> dict:
     """Commit across every repo in a feature lane with a single message (Wave 2.3).
 
     Defaults to the canonical feature when ``feature`` is omitted (reads
@@ -315,6 +316,11 @@ def commit(message: str = "", feature: str | None = None,
     and a resolution is recorded in ``.canopy/state/bot_resolutions.json``
     against the matching repo's commit SHA. Non-bot comments raise
     ``BlockerError(code='not_a_bot_comment')``.
+
+    ``resolve_thread`` (T4): when ``address`` is set, controls whether the
+    corresponding GitHub review thread is resolved after a successful commit.
+    ``True`` forces resolve; ``False`` forces skip; ``None`` (default) defers
+    to the workspace augment ``auto_resolve_threads_on_address``.
 
     Per-repo result statuses:
       - ``ok``           — committed; carries ``sha``, ``files_changed``.
@@ -334,6 +340,7 @@ def commit(message: str = "", feature: str | None = None,
             ws, message,
             feature=feature, repos=repos, paths=paths,
             no_hooks=no_hooks, amend=amend, address=address,
+            resolve_thread=resolve_thread,
         )
     except ActionError as e:
         return e.to_dict()
@@ -786,6 +793,97 @@ def conflicts(
         ws, feature=feature, other=other,
         include_cold=include_cold, line_level=line_level,
     )
+
+
+@mcp.tool()
+def reply_to_thread(
+    thread_id: str,
+    body: str,
+    feature: str | None = None,
+    resolve_after: bool = False,
+) -> dict:
+    """Post a reply to a GH review thread; optionally resolve after.
+
+    Args:
+        thread_id: The GitHub review thread node ID (must start with
+            ``PRRT_``).
+        body: The reply text to post.
+        feature: Feature to attribute the reply to. Defaults to the
+            canonical feature if not supplied.
+        resolve_after: If True, resolve the thread after posting the reply
+            and record the resolution in the canopy log.
+    """
+    from ..actions.thread_actions import reply_to_thread as _impl
+    from ..actions.errors import ActionError
+
+    ws = _get_workspace()
+    try:
+        feat = _historian_feature(feature)[1]
+    except ActionError as e:
+        return e.to_dict()
+    try:
+        return _impl(ws, thread_id, body, feature=feat, resolve_after=resolve_after)
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
+def resolve_thread(thread_id: str, feature: str | None = None) -> dict:
+    """Resolve a GitHub PR review thread and record the resolution locally.
+
+    Calls the GitHub GraphQL ``resolveReviewThread`` mutation and appends
+    an entry to ``.canopy/state/thread_resolutions.json`` so the resume
+    brief can distinguish threads closed by canopy from those resolved
+    directly on GitHub.
+
+    Args:
+        thread_id: The GitHub review thread node ID (must start with
+            ``PRRT_``).
+        feature: Feature to attribute the resolution to. Defaults to the
+            canonical feature if not supplied.
+    """
+    from ..actions.thread_actions import resolve_thread as _impl
+    from ..actions.errors import ActionError
+
+    ws = _get_workspace()
+    try:
+        feat = _historian_feature(feature)[1]
+    except ActionError as e:
+        return e.to_dict()
+    try:
+        return _impl(ws, thread_id, feature=feat)
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
+def feature_resume(alias: str) -> dict:
+    """Fresh "what changed since last visit" brief.
+
+    Refreshes GitHub + Linear on every call. Returns:
+      - since_last_visit: commits, new threads, resolved threads (GH + canopy),
+        ci status delta (v1: empty), draft_replies_pending, historian_excerpt
+      - current_state: feature_state, ci_summary_per_repo, bot_unresolved_total,
+        draft_replies_summary, branch_position_per_repo, linear link
+      - first_visit, last_visit, window_hours
+      - switch_performed, switch_summary
+      - intent_hints (prioritized next actions)
+
+    The agent should call this on first activity in a feature per session
+    (or after returning from another feature). Switch already embeds a
+    counts-only summary; this is the full payload.
+
+    Args:
+        alias: Feature name, Linear ID, PR URL, or slot ID.
+    """
+    from ..actions.resume import feature_resume as _impl
+    from ..actions.errors import ActionError
+
+    ws = _get_workspace()
+    try:
+        return _impl(ws, alias)
+    except ActionError as e:
+        return e.to_dict()
 
 
 @mcp.tool()

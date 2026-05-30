@@ -6,7 +6,7 @@ How AI coding agents (Claude Code primarily; others by analogy) integrate with c
 
 Three pieces, all installed in one step by `canopy init`:
 
-1. **Canopy MCP server** (`canopy-mcp` binary) — 64 tools exposing every canopy operation. Registered in `<workspace>/.mcp.json`.
+1. **Canopy MCP server** (`canopy-mcp` binary) — 67 tools exposing every canopy operation. Registered in `<workspace>/.mcp.json`.
 2. **`using-canopy` skill** at `~/.claude/skills/using-canopy/SKILL.md` — tells the agent *when* to prefer canopy MCP over raw bash.
 3. **Per-workspace MCP config** in `<workspace>/.mcp.json` with `CANOPY_ROOT` set so the server scopes to the right workspace.
 
@@ -54,6 +54,7 @@ The skill encodes this matrix; the agent reads it on session start. Mirror here 
 
 | What you want | Canopy tool | Don't use |
 |---|---|---|
+| Return to a feature in a new session | `mcp__canopy__feature_resume` | `switch` + `feature_state` + `github_get_pr_comments` separately |
 | What feature should I work on? | `mcp__canopy__triage` | per-repo `gh pr list` + manual grouping |
 | Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads |
 | Switch a feature into main (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout`, or guessing paths |
@@ -72,6 +73,8 @@ The skill encodes this matrix; the agent reads it on session start. Mirror here 
 | Free a slot without bringing a new feature in | `mcp__canopy__slot_clear(slot_id)` | manual stash + branch checkout |
 | Exchange two slots' occupants (e.g., shuffle warm order) | `mcp__canopy__slot_swap(slot_a, slot_b)` | two `slot_load` calls with `replace=True` |
 | Migrate a pre-3.0 workspace to the slot model | `mcp__canopy__migrate_slots` | hand-renaming `.canopy/worktrees/` dirs |
+| Close a GitHub review thread + log it | `mcp__canopy__resolve_thread(thread_id)` | raw GraphQL or `gh api` |
+| Reply to a GitHub review thread | `mcp__canopy__reply_to_thread(thread_id, body)` | raw GraphQL or `gh pr review` |
 
 ### Vocabulary note: hibernate ⇄ release_current
 
@@ -86,11 +89,26 @@ Same operation. Different surface vocab. A future canopy release may add `hibern
 
 A feature in the resulting state is **hibernating** (synonyms in the wild: "branch only", "released to cold", "wound down" — all the same thing).
 
+## Session start — returning to a feature
+
+When opening a new session on a feature you've worked on before, call `feature_resume` first:
+
+```python
+mcp__canopy__feature_resume(alias="SIN-12-search")
+# → switches if needed, refreshes GH + Linear, returns brief + intent_hints
+# → bumps the last-visit anchor so the next resume gets an accurate delta
+```
+
+The brief tells you: what state the feature is in, what changed since you last visited (commits, new/resolved threads), and `intent_hints` for the most likely next action categories. It replaces the manual `switch → feature_state → github_get_pr_comments` chain at session start.
+
+The bundled `using-canopy` skill's "Session start" section encodes this as the expected agent protocol. See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief) for the full brief shape and freshness policy.
+
 ## The daily loop
 
 ```
-1. triage()                 → pick a feature from the prioritized list
-2. feature_state(feature)   → get current state + next_actions
+1. feature_resume(feature)  → session-start brief + switch-if-needed (Plan 2)
+   OR triage()              → if you don't know what to work on
+2. feature_state(feature)   → get current state (brief.current_state has feature_state + intent_hints)
 3. follow next_actions[0]   → primary CTA (canopy decided what to do next)
 4. feature_state again      → confirm state advanced
 5. repeat

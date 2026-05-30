@@ -4,6 +4,58 @@ Tracks the Python side (CLI + MCP server). The VSCode extension has its own [vsc
 
 Versions follow semver. Pre-1.0 — minor bumps may add features or break behavior; the README is the source-of-truth contract.
 
+## 3.1.0 — 2026-05-30 (Plan 2 — Feature Resume)
+
+### Added
+- `canopy resume <alias>` (+ `mcp__canopy__feature_resume`): switch-aware
+  compound action. One call: alias → switch-if-needed → refresh GitHub + Linear →
+  compute structured brief with `intent_hints` for the most likely next actions.
+  See `docs/concepts.md#returning-to-a-feature`.
+- `canopy resolve <thread_id>` (+ `mcp__canopy__resolve_thread`): close a
+  GitHub review thread + log to `.canopy/state/thread_resolutions.json` for
+  attribution in the resume brief.
+- `canopy reply <thread_id> [--body | --body-file | stdin]`
+  (+ `mcp__canopy__reply_to_thread`): post a reply to a GH review thread.
+  `--resolve` (or `resolve_after=True`) closes the thread after posting.
+- `canopy commit --address <id> --resolve-thread`: optionally close the GH
+  review thread after the local commit. Augment
+  `auto_resolve_threads_on_address = true` in canopy.toml makes this the
+  default for the workspace. `--no-resolve-thread` overrides the augment
+  per-invocation.
+- New state files: `.canopy/state/visits.json` (per-feature last-visit anchor
+  `{feature: {last_visit, previous_visit}}`); `.canopy/state/thread_resolutions.json`
+  (canopy-driven GH thread closures `{thread_id: {resolved_by_canopy_at,
+  feature, via_command, via_commit_sha}}`).
+- `actions/last_visit.py` — get/mark/reset the per-feature visit anchor.
+- `actions/resume.py` — `feature_resume` compound action + `resume_summary`
+  (counts-only view embedded in `switch` return).
+- `actions/thread_actions.py` — `resolve_thread` + `reply_to_thread` wrappers
+  + local resolution log writer.
+- `actions/thread_resolutions.py` — load/record/filter_since for the
+  thread-resolutions log.
+- GraphQL thread API in `integrations/github.py`: `list_review_threads`,
+  `resolve_thread`, `unresolve_thread`, `reply_to_thread`. Every comment from
+  `get_review_comments` now carries a `thread_id` field (GraphQL-sourced when
+  available, `""` on REST fallback) and `author_type` from GraphQL `__typename`.
+- Bundled `using-canopy` skill now teaches `feature_resume` as the
+  session-start primitive and documents the "Closing out review threads"
+  workflow.
+
+### Changed
+- `switch(feature)` bumps `last_visit` on every successful switch and embeds
+  `since_last_visit_summary` in its return value — a counts-only view
+  (commits, threads, GH resolutions, draft replies) so the agent sees
+  "something changed" without a full `feature_resume` round-trip. Sets
+  `degraded: true` if GitHub is unreachable.
+- `get_review_comments` prefers GraphQL when available (single round-trip for
+  thread IDs + `author_type`); falls back to REST with `thread_id=""`.
+
+### Notes
+- `feature_resume` refreshes GitHub + Linear on every call — the brief is
+  never cached at the canopy layer.
+- Plan 1's slot model is the prerequisite. If upgrading from pre-3.0, run
+  `canopy migrate-slots` first.
+
 ## 3.0.0 — 2026-05-28 (Wave 3.0)
 
 **Breaking — slot model.** Worktree directories are now generic numbered slots (`worktree-1`, `worktree-2`, ...) instead of feature-named. `max_worktrees` renamed to `slots` (default 2). State unified in `.canopy/state/slots.json`; `active_feature.json` deleted. Run `canopy migrate-slots` once per workspace.

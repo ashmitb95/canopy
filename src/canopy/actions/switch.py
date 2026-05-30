@@ -477,7 +477,37 @@ def _post_switch_persist(
     # Clear any in_flight marker — this switch completed cleanly.
     state.in_flight = None
 
+    # T14: capture prior anchor BEFORE the T13 bump so the summary's
+    # "since when" window reflects what the user last saw, not this visit.
+    from . import last_visit as lv
+    _prior = lv.get_last_visit(workspace, feature_name)
+    prior_iso: str | None = _prior["last_visit"] if _prior else None
+
     slots_mod.write_state(workspace, state)
+
+    # T13: bump last_visit after slots.json is committed — every successful
+    # switch into a feature counts as a "conscious look" per the plan.
+    lv.mark_visited(workspace, feature_name)
+
+    # T14: embed since-last-visit summary using the PRIOR anchor.
+    try:
+        from . import resume
+        out["since_last_visit_summary"] = resume.resume_summary(
+            workspace, feature_name, prior_iso=prior_iso,
+        )
+    except Exception:
+        out["since_last_visit_summary"] = {
+            "last_visit": prior_iso,
+            "first_visit": prior_iso is None,
+            "new_commit_count": 0,
+            "new_thread_count": 0,
+            "github_resolved_count": 0,
+            "ci_changed": False,
+            "draft_replies_pending": 0,
+            "memory_present": False,
+            "degraded": True,
+        }
+
     out["activated_at"] = now
     if state.previous_canonical:
         out["previous_feature_in_state"] = state.previous_canonical

@@ -179,6 +179,7 @@ def commit(
     no_hooks: bool = False,
     amend: bool = False,
     address: str | None = None,
+    resolve_thread: bool | None = None,
 ) -> dict[str, Any]:
     """Commit across every repo in a feature lane.
 
@@ -202,13 +203,23 @@ def commit(
             ``.canopy/state/bot_resolutions.json``. Comment must belong
             to one of the feature's actionable bot threads; a non-bot
             comment raises ``BlockerError(code='not_a_bot_comment')``.
+        resolve_thread: when ``address`` is set, controls whether the
+            corresponding GitHub review thread is resolved after a
+            successful commit. ``True`` forces resolve; ``False`` forces
+            skip; ``None`` (default) defers to the workspace augment
+            ``auto_resolve_threads_on_address`` (which defaults to
+            ``False`` when absent). Thread resolution is a best-effort
+            step — failures are captured in ``result["thread_resolved"]``
+            as ``{"skipped": "<reason>"}`` rather than raising.
 
     Returns ``{feature, results: {<repo>: {...}}, addressed?}``. The
     per-repo dict has shape ``{status, sha?, files_changed?, reason?,
     hook_output?, amended?}`` where ``status`` is one of
     ``ok | nothing | hooks_failed | failed``. When ``--address`` is given
     and a resolution was recorded, ``addressed`` carries
-    ``{comment_id, repo, sha, title, url}``.
+    ``{comment_id, repo, sha, title, url}``.  When thread resolution was
+    attempted, ``addressed`` also carries ``thread_resolved`` (a dict
+    with the GH result or a ``{"skipped": "<reason>"}`` entry).
     """
     feature_name = _resolve_feature_name(workspace, feature)
     repo_branches = repos_for_feature(workspace, feature_name)
@@ -237,8 +248,10 @@ def commit(
     addressed_info: dict[str, Any] | None = None
     if address is not None:
         comment_id = _parse_comment_id(address)
-        bot_comment, owning_repo = _find_actionable_bot_comment(
-            workspace, feature_name, repo_branches, repo_paths, comment_id,
+        bot_comment, owning_repo, _owner, _repo_slug, _pr_number = (
+            _find_actionable_bot_comment(
+                workspace, feature_name, repo_branches, repo_paths, comment_id,
+            )
         )
         if bot_comment is None:
             raise BlockerError(
@@ -265,6 +278,9 @@ def commit(
             "repo": owning_repo,
             "title": title,
             "url": url,
+            "_owner": _owner,
+            "_repo_slug": _repo_slug,
+            "_pr_number": _pr_number,
         }
 
     if not message and not amend:
@@ -326,11 +342,95 @@ def commit(
                 pass
             addressed_info["sha"] = sha
             addressed_info["recorded"] = True
+
+            # ── Optional: resolve the GH review thread (T4) ─────────────
+            # Determine effective resolve flag: explicit flag > augment default.
+            # Note: this fires on local commit success. The thread will be
+            # resolved before the commit reaches GitHub — push your branch to
+            # make the linkage live on the remote.
+            from ..integrations import github as gh
+            from .thread_actions import resolve_thread as _resolve_thread_action
+
+            augment_default = bool(
+                (workspace.config.augments or {}).get(
+                    "auto_resolve_threads_on_address", False,
+                )
+            )
+            effective_resolve = (
+                resolve_thread if resolve_thread is not None else augment_default
+            )
+
+            if effective_resolve:
+                owner = addressed_info.get("_owner") or ""
+                repo_slug = addressed_info.get("_repo_slug") or ""
+                pr_number = addressed_info.get("_pr_number")
+                comment_id_val = addressed_info["comment_id"]
+
+                if not (owner and repo_slug and pr_number):
+                    addressed_info["thread_resolved"] = {
+                        "skipped": "pr_not_found",
+                        "comment_id": comment_id_val,
+                    }
+                else:
+                    try:
+                        threads = gh.list_review_threads(
+                            workspace.config.root, owner, repo_slug, pr_number,
+                        )
+                    except Exception as exc:
+                        addressed_info["thread_resolved"] = {
+                            "skipped": "gh_unreachable",
+                            "error": str(exc),
+                            "comment_id": comment_id_val,
+                        }
+                    else:
+                        # comment_id may be str or int; normalise to int for comparison.
+                        try:
+                            cid_int = int(comment_id_val)
+                        except (ValueError, TypeError):
+                            cid_int = None
+
+                        target_tid = next(
+                            (
+                                t["thread_id"]
+                                for t in threads
+                                if any(
+                                    c.get("comment_id") == cid_int
+                                    for c in t.get("comments", [])
+                                )
+                            ),
+                            None,
+                        )
+                        if target_tid is None:
+                            addressed_info["thread_resolved"] = {
+                                "skipped": "thread_not_found",
+                                "comment_id": comment_id_val,
+                            }
+                        else:
+                            try:
+                                from .errors import ActionError
+                                addressed_info["thread_resolved"] = _resolve_thread_action(
+                                    workspace,
+                                    target_tid,
+                                    feature=feature_name,
+                                    via_command="commit_address",
+                                    via_commit_sha=sha,
+                                )
+                            except ActionError as exc:
+                                addressed_info["thread_resolved"] = {
+                                    "skipped": "resolve_failed",
+                                    "error": exc.to_dict(),
+                                    "comment_id": comment_id_val,
+                                }
         else:
             addressed_info["recorded"] = False
             addressed_info["reason"] = (
                 f"owning repo '{owning}' commit status: {owning_result.get('status', 'unknown')}"
             )
+
+        # Strip internal PR-coordinate keys before returning.
+        addressed_info.pop("_owner", None)
+        addressed_info.pop("_repo_slug", None)
+        addressed_info.pop("_pr_number", None)
         out["addressed"] = addressed_info
 
     return out
@@ -365,18 +465,27 @@ def _find_actionable_bot_comment(
     repo_branches: dict[str, str],
     repo_paths: dict[str, Path],
     comment_id: str,
-) -> tuple[dict | None, str | None]:
+) -> tuple[dict | None, str | None, str | None, str | None, int | None]:
     """Walk per-repo bot threads for a matching comment id.
 
-    Returns ``(comment_dict, owning_repo)`` or ``(None, None)`` when no
-    actionable bot thread carries the requested id.
+    Returns ``(comment_dict, owning_repo, owner, repo_slug, pr_number)`` or
+    ``(None, None, None, None, None)`` when no actionable bot thread carries
+    the requested id.  The extra fields come from the same ``_per_repo_facts``
+    call so no second network round-trip is needed.
     """
     facts = _per_repo_facts(workspace, feature_name, repo_branches, repo_paths)
     for repo_name, repo_facts in facts.items():
         for thread in repo_facts.get("actionable_bot_threads", []):
             if str(thread.get("id", "")) == comment_id:
-                return thread, repo_name
-    return None, None
+                pr = repo_facts.get("pr") or {}
+                return (
+                    thread,
+                    repo_name,
+                    repo_facts.get("owner"),
+                    repo_facts.get("repo_slug"),
+                    pr.get("number"),
+                )
+    return None, None, None, None, None
 
 
 def _comment_title(body: str, max_len: int = 80) -> str:

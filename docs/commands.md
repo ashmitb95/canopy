@@ -49,6 +49,9 @@ Write actions and execution.
 
 | Command | What it does |
 |---|---|
+| `canopy resume <alias> [--reset-anchor]` | **Session-start primitive (Plan 2).** Switch-aware compound action: alias → switch-if-needed → refresh GitHub + Linear → compute structured brief → bump last-visit anchor. Returns `{feature, switch_performed, first_visit, window_hours, since_last_visit, current_state, next_actions, intent_hints}`. Use this instead of manually calling `switch` + `feature_state` + `github_get_pr_comments` at the start of a session. `--reset-anchor` sets the anchor to now (useful when you want a fresh delta window). See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief). |
+| `canopy resolve <thread_id> [--feature <f>]` | **Plan 2.** Resolve a GitHub PR review thread via GraphQL + record the closure in `.canopy/state/thread_resolutions.json`. The log feeds `feature_resume`'s `since_last_visit.resolved_threads` count. `--feature` pins which feature the resolution is attributed to (defaults to the canonical feature). |
+| `canopy reply <thread_id> [--body <text> \| --body-file <path> \| stdin] [--resolve] [--feature <f>]` | **Plan 2.** Post a reply to a GitHub review thread. Body comes from `--body`, `--body-file`, or stdin (pipe-friendly). `--resolve` closes the thread after posting (equivalent to `reply_to_thread(..., resolve_after=True)`) and logs the closure. |
 | `canopy switch <feature> [--release-current] [--no-evict] [--evict <f>] [--evict-to <slot-N>] [--to-slot <slot-N>]` | **The focus primitive (Wave 3.0 slot model).** Promote a feature to the canonical slot. Default (active rotation): previously-canonical evacuates into a warm slot (full stash → checkout → pop). When the destination is already warm, the swap is a fast 5-op-per-repo dance — no `mv`, no slot renaming. `--release-current` (wind-down): previous goes cold with a feature-tagged stash. `--evict-to <slot-N>` pins which slot the outgoing canonical lands in. `--to-slot <slot-N>` promotes whatever feature already occupies that slot (omit `<feature>`). Cap-reached blocker surfaces explicit fix actions (wind-down, evict a specific slot, raise cap). See [docs/concepts.md §4](concepts.md#4-the-slot-model). |
 | `canopy slot load <feature> [<slot-N>] [--replace] [--bootstrap]` | **Wave 3.0.** Warm a cold feature into a slot WITHOUT changing canonical. `<slot-N>` defaults to the lowest free slot. `--replace` evicts the slot's current occupant to cold first. `--bootstrap` runs the env-file copy + install_cmd + IDE workspace gen (same as `canopy worktree-bootstrap`). The feature must already be registered — create it with `canopy feature create` first. |
 | `canopy slot clear <slot-N>` | **Wave 3.0.** Evict that slot's occupant to cold with a feature-tagged stash if dirty. The slot id stays — only the occupant moves. |
@@ -57,7 +60,7 @@ Write actions and execution.
 | `canopy run <repo> <command> [--feature]` | Run a shell command in a canopy-managed repo with cwd resolved internally. The "agent never `cd`s" tool — also useful from a CLI in a deeply nested directory. |
 | `canopy code\|cursor\|fork <feature\|.>` | Open the feature in VS Code / Cursor / Fork.app (alias-aware; generates `.code-workspace` for the IDE ones). |
 | `canopy sync` | Pull default branch + rebase feature branches across repos. |
-| `canopy commit -m <msg> [--feature <f>] [--repo <r,...>] [--paths <p ...>] [--no-hooks] [--amend] [--address <id>]` | **Wave 2.3 + M3.** Commit across every repo in the canonical (or named) feature with a single message. Pre-flight refuses with `BlockerError(code='wrong_branch')` if any in-scope repo has drifted; per-repo hook failures don't cancel the others (status: `hooks_failed`). `--address <comment-id>` (numeric id or GitHub URL) auto-suffixes the message with the bot comment's title + URL and records the resolution in `.canopy/state/bot_resolutions.json`. Non-bot comments raise `BlockerError(code='not_a_bot_comment')`. |
+| `canopy commit -m <msg> [--feature <f>] [--repo <r,...>] [--paths <p ...>] [--no-hooks] [--amend] [--address <id>] [--resolve-thread \| --no-resolve-thread]` | **Wave 2.3 + M3 + Plan 2.** Commit across every repo in the canonical (or named) feature with a single message. Pre-flight refuses with `BlockerError(code='wrong_branch')` if any in-scope repo has drifted; per-repo hook failures don't cancel the others (status: `hooks_failed`). `--address <comment-id>` (numeric id or GitHub URL) auto-suffixes the message with the bot comment's title + URL and records the resolution in `.canopy/state/bot_resolutions.json`. Non-bot comments raise `BlockerError(code='not_a_bot_comment')`. `--resolve-thread` additionally closes the corresponding GitHub review thread and logs it to `thread_resolutions.json`. `--no-resolve-thread` disables this even when `[augments] auto_resolve_threads_on_address = true` is set in canopy.toml. |
 | `canopy bot-status [--feature <f>] [--unresolved-only]` | **M3.** Per-feature rollup of bot review comments — total / resolved / unresolved per repo + an `all_resolved` flag. Bot vs human classification respects `[augments] review_bots` in canopy.toml. |
 | `canopy historian show [<feature>]` | **M4.** Print the rendered memory file for a feature (3 sections: resolutions log, PR context, sessions). Returns empty when no memory has been recorded yet. |
 | `canopy historian compact [<feature>] [--keep-sessions <n>]` | **M4.** Trim the Sessions section to the most-recent N (default 5). Resolutions log + PR context are preserved regardless. v1 is mechanical (no LLM); future iterations will summarize. |
@@ -149,6 +152,15 @@ Install-staleness (canopy's installation around the workspace):
 | `canopy context` | Show detected canopy context for the current dir (which feature, repo, branch). Powers `preflight`'s context detection. |
 
 ## Common patterns
+
+Session start — returning to a feature:
+
+```bash
+canopy resume <feature>    # switch-if-needed + fresh brief + bump last-visit anchor
+# brief shows: window_hours, since_last_visit counts, current_state, intent_hints
+canopy reply <thread_id> --body "Done — fixed in abc123." --resolve  # close a thread
+canopy resolve <thread_id>  # close a thread without replying
+```
 
 The daily loop:
 

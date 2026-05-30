@@ -27,6 +27,76 @@ from .aliases import resolve_feature
 from .switch import switch
 
 
+_UNSET = object()  # sentinel to distinguish "not passed" from "explicitly None"
+
+
+def resume_summary(
+    workspace: Workspace, feature: str, prior_iso: str | None = _UNSET,  # type: ignore[assignment]
+) -> dict[str, Any]:
+    """Counts-only view embedded in switch return.
+
+    No GH fetch on failure — falls back to local state and sets degraded: True.
+
+    ``prior_iso`` should be the last_visit anchor captured BEFORE any
+    mark_visited call so the diff window is meaningful.
+
+    - Pass the prior anchor explicitly (including ``None`` for first visit) when
+      you've already captured it (e.g. switch.py).
+    - Omit it (leave as default) to let resume_summary read the current
+      last_visit itself. Only do this when mark_visited has NOT yet run.
+    """
+    from . import historian
+
+    # Resolve anchor: explicit wins; fallback reads live state.
+    if prior_iso is _UNSET:
+        visit = lv.get_last_visit(workspace, feature)
+        anchor: str | None = visit["last_visit"] if visit else None
+    else:
+        anchor = prior_iso  # type: ignore[assignment]
+
+    memory_present = bool(
+        historian.format_for_agent(workspace.config.root, feature)
+    )
+
+    if anchor is None:
+        return {
+            "last_visit": None,
+            "first_visit": True,
+            "new_commit_count": 0,
+            "new_thread_count": 0,
+            "github_resolved_count": 0,
+            "ci_changed": False,
+            "draft_replies_pending": 0,
+            "memory_present": memory_present,
+            "degraded": False,
+        }
+
+    new_commit_count = sum(
+        len(c) for c in _commits_since(workspace, feature, anchor).values()
+    )
+    degraded = False
+    new_thread_count = 0
+    github_resolved_count = 0
+    try:
+        td = _threads_delta(workspace, feature, anchor)
+        new_thread_count = len(td["new"])
+        github_resolved_count = len(td["resolved_gh"])
+    except Exception:
+        degraded = True
+
+    return {
+        "last_visit": anchor,
+        "first_visit": False,
+        "new_commit_count": new_commit_count,
+        "new_thread_count": new_thread_count,
+        "github_resolved_count": github_resolved_count,
+        "ci_changed": False,   # v1: no persisted snapshot to diff
+        "draft_replies_pending": 0,   # v1: skip for switch tail
+        "memory_present": memory_present,
+        "degraded": degraded,
+    }
+
+
 def feature_resume(workspace: Workspace, alias: str) -> dict[str, Any]:
     """Resolve alias, switch-if-needed, build and return the resume brief."""
     feature = resolve_feature(workspace, alias)

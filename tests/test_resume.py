@@ -1403,3 +1403,152 @@ class TestHistorianExcerpt:
         assert "old session work" not in excerpt
         # Should still have markdown structure.
         assert "# Feature: auth-flow" in excerpt
+
+
+# ── T14: resume_summary unit tests ───────────────────────────────────────────
+
+
+_SUMMARY_KEYS = {
+    "last_visit", "first_visit", "new_commit_count", "new_thread_count",
+    "github_resolved_count", "ci_changed", "draft_replies_pending",
+    "memory_present", "degraded",
+}
+
+
+class TestResumeSummary:
+    """Unit tests for resume_summary — the counts-only view embedded in switch."""
+
+    def test_resume_summary_first_visit(self, canopy_toml_for_workspace):
+        """No prior anchor → first_visit=True, all counts zero, degraded=False."""
+        from canopy.actions.resume import resume_summary
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        summary = resume_summary(ws, "auth-flow")
+
+        assert summary["first_visit"] is True
+        assert summary["last_visit"] is None
+        assert summary["new_commit_count"] == 0
+        assert summary["new_thread_count"] == 0
+        assert summary["github_resolved_count"] == 0
+        assert summary["ci_changed"] is False
+        assert summary["draft_replies_pending"] == 0
+        assert summary["degraded"] is False
+        # All required keys must be present.
+        assert _SUMMARY_KEYS <= set(summary.keys()), (
+            f"Missing keys: {_SUMMARY_KEYS - set(summary.keys())}"
+        )
+
+    def test_resume_summary_with_prior_iso_explicit(self, canopy_toml_for_workspace):
+        """When prior_iso is passed explicitly, diff anchors to it even if current anchor differs."""
+        from canopy.actions.resume import resume_summary
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        # Bump the live anchor.
+        lv.mark_visited(ws, "auth-flow")
+
+        # Pass an explicit prior that's much older — the summary should report it back.
+        summary = resume_summary(ws, "auth-flow", prior_iso="2020-01-01T00:00:00Z")
+
+        assert summary["first_visit"] is False
+        assert summary["last_visit"] == "2020-01-01T00:00:00Z"
+
+    def test_resume_summary_prior_iso_none_falls_back_to_live_anchor(
+        self, canopy_toml_for_workspace
+    ):
+        """When prior_iso is omitted, falls back to the current live anchor."""
+        from canopy.actions.resume import resume_summary
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        ts = lv.mark_visited(ws, "auth-flow")
+
+        summary = resume_summary(ws, "auth-flow")  # no prior_iso
+
+        assert summary["first_visit"] is False
+        assert summary["last_visit"] == ts
+
+    def test_resume_summary_degraded_when_threads_fail(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """GH unreachable → degraded=True, thread counts zero."""
+        from canopy.actions.resume import resume_summary
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        lv.mark_visited(ws, "auth-flow")
+
+        def boom(*a, **k):
+            raise RuntimeError("offline")
+
+        monkeypatch.setattr("canopy.actions.resume._threads_delta", boom)
+
+        summary = resume_summary(ws, "auth-flow", prior_iso="2020-01-01T00:00:00Z")
+
+        assert summary["degraded"] is True
+        assert summary["new_thread_count"] == 0
+        assert summary["github_resolved_count"] == 0
+        # Commit count is unaffected by GH failure (local-only computation).
+        assert isinstance(summary["new_commit_count"], int)
+
+    def test_resume_summary_counts_new_commits(self, canopy_toml_for_workspace):
+        """Commits on the feature branch after prior_iso appear in new_commit_count."""
+        import os
+        import subprocess
+        from canopy.actions.resume import resume_summary
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        # Capture the anchor BEFORE making commits.
+        prior_iso = lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        # Make a commit on auth-flow in repo-a.
+        repo_a = ws.config.root / ws.config.repos[0].path
+        env = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": "Test",
+            "GIT_AUTHOR_EMAIL": "test@test.com",
+            "GIT_COMMITTER_NAME": "Test",
+            "GIT_COMMITTER_EMAIL": "test@test.com",
+        }
+        subprocess.run(["git", "checkout", "auth-flow"], cwd=repo_a, env=env, check=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "feat: new work"],
+            cwd=repo_a, env=env, check=True,
+        )
+
+        summary = resume_summary(ws, "auth-flow", prior_iso=prior_iso)
+
+        assert summary["first_visit"] is False
+        assert summary["new_commit_count"] >= 1, (
+            "Expected at least one new commit in new_commit_count"
+        )
+
+    def test_resume_summary_memory_present_when_historian_has_content(
+        self, canopy_toml_for_workspace
+    ):
+        """memory_present=True when historian.format_for_agent returns non-empty."""
+        from canopy.actions import historian
+        from canopy.actions.resume import resume_summary
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        historian.record_event(
+            ws.config.root, "auth-flow",
+            summary="did some work",
+            at="2026-01-01T00:00:00Z",
+        )
+
+        summary = resume_summary(ws, "auth-flow")
+
+        assert summary["memory_present"] is True
+
+    def test_resume_summary_memory_not_present_when_no_content(
+        self, canopy_toml_for_workspace
+    ):
+        """memory_present=False when historian has no content for the feature."""
+        from canopy.actions.resume import resume_summary
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        # No historian entries written.
+        summary = resume_summary(ws, "auth-flow")
+
+        assert summary["memory_present"] is False

@@ -345,7 +345,9 @@ def commit(
 
             # ── Optional: resolve the GH review thread (T4) ─────────────
             # Determine effective resolve flag: explicit flag > augment default.
-            from . import augments as augments_mod
+            # Note: this fires on local commit success. The thread will be
+            # resolved before the commit reaches GitHub — push your branch to
+            # make the linkage live on the remote.
             from ..integrations import github as gh
             from .thread_actions import resolve_thread as _resolve_thread_action
 

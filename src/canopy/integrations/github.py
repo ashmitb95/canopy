@@ -692,7 +692,12 @@ def _graphql_via_gh_cli(query: str, vars: dict) -> dict:
     """
     args = ["gh", "api", "graphql", "-f", f"query={query}"]
     for k, v in vars.items():
-        args.extend(["-F", f"{k}={v}"])
+        if isinstance(v, bool):
+            args.extend(["-F", f"{k}={'true' if v else 'false'}"])
+        elif isinstance(v, int):
+            args.extend(["-F", f"{k}={v}"])
+        else:
+            args.extend(["-f", f"{k}={v}"])
     proc = subprocess.run(args, capture_output=True, text=True)
     if proc.returncode != 0:
         raise GitHubNotConfiguredError(
@@ -742,7 +747,7 @@ def list_review_threads(
               comments(first: 20) {
                 nodes {
                   databaseId path line body createdAt url
-                  author { login }
+                  author { login __typename }
                 }
               }
             }
@@ -770,6 +775,7 @@ def list_review_threads(
                 "created_at": c.get("createdAt"),
                 "url": c.get("url"),
                 "author": (c.get("author") or {}).get("login", ""),
+                "author_type": (c.get("author") or {}).get("__typename", ""),
             }
             for c in (n.get("comments") or {}).get("nodes", [])
         ]
@@ -832,7 +838,7 @@ def _build_comments_from_threads(threads: list[dict]) -> tuple[list[dict], int]:
     resolved_count = 0
     for t in threads:
         if t["is_resolved"]:
-            resolved_count += len(t["comments"])
+            resolved_count += 1
             continue
         for c in t["comments"]:
             comments.append({
@@ -841,7 +847,7 @@ def _build_comments_from_threads(threads: list[dict]) -> tuple[list[dict], int]:
                 "line": c["line"] or 0,
                 "body": c["body"] or "",
                 "author": c["author"],
-                "author_type": "",
+                "author_type": c.get("author_type", ""),
                 "state": "",
                 "created_at": c["created_at"] or "",
                 "url": c["url"] or "",

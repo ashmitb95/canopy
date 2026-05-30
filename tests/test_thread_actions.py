@@ -208,6 +208,34 @@ def test_reply_to_thread_resolve_after(canopy_toml, monkeypatch):
     assert log["PRRT_abc"]["via_command"] == "reply_resolve"
 
 
+def test_reply_to_thread_resolve_after_failure_keeps_posted(canopy_toml, monkeypatch):
+    """When resolve fails after successful post, both states are reported."""
+    from canopy.actions import thread_actions
+    from canopy.actions.errors import BlockerError
+
+    monkeypatch.setattr(
+        "canopy.integrations.github.reply_to_thread",
+        lambda root, tid, body: {"comment_id": "C_1", "url": "https://github.com/o/r/pull/1#r"},
+    )
+
+    def boom(root, tid):
+        raise BlockerError(code="gh_error", what="fake failure")
+
+    monkeypatch.setattr("canopy.integrations.github.resolve_thread", boom)
+
+    ws = _make_workspace(canopy_toml)
+    result = thread_actions.reply_to_thread(
+        ws, "PRRT_abc", "Looks good", feature="feat", resolve_after=True,
+    )
+
+    # The successful reply must be present
+    assert result["posted"]["url"] == "https://github.com/o/r/pull/1#r"
+    # The failed resolve must be captured, not raised
+    assert "resolved" in result
+    assert "error" in result["resolved"]
+    assert result["resolved"]["error"]["code"] == "gh_error"
+
+
 # ── CLI wiring smoke test ────────────────────────────────────────────────
 
 

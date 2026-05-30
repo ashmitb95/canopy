@@ -3170,6 +3170,16 @@ def cmd_reply_thread(args: argparse.Namespace) -> None:
         from pathlib import Path
         body = Path(args.body_file).read_text()
     else:
+        if sys.stdin.isatty():
+            err = BlockerError(
+                code="missing_reply_body",
+                what="reply body required: pass --body, --body-file, or pipe stdin",
+            )
+            if args.json:
+                _print_json(err.to_dict())
+            else:
+                render_blocker(err, action="reply")
+            sys.exit(1)
         body = sys.stdin.read()
 
     if not body.strip():

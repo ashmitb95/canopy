@@ -7,7 +7,7 @@ Each wrapper calls the GitHub integration and records the event locally in
 from __future__ import annotations
 
 from ..workspace.workspace import Workspace
-from .errors import BlockerError
+from .errors import ActionError, BlockerError
 from . import thread_resolutions as tr
 
 
@@ -78,8 +78,11 @@ def reply_to_thread(
     posted = gh.reply_to_thread(workspace.config.root, thread_id, body)
     result: dict = {"posted": posted}
     if resolve_after:
-        resolved = resolve_thread(
-            workspace, thread_id, feature=feature, via_command="reply_resolve",
-        )
-        result["resolved"] = resolved
+        try:
+            res = resolve_thread(
+                workspace, thread_id, feature=feature, via_command="reply_resolve",
+            )
+            result["resolved"] = res
+        except ActionError as e:
+            result["resolved"] = {"error": e.to_dict()}
     return result

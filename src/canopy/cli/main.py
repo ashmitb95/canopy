@@ -3115,6 +3115,57 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     console.print()
 
 
+def _resolve_thread_feature(workspace, feature: str | None) -> str:
+    """Return a feature name for thread commands, falling back to canonical."""
+    from ..actions import slots as slots_mod
+    from ..actions.aliases import resolve_feature
+    from ..actions.errors import BlockerError
+    if feature:
+        return resolve_feature(workspace, feature)
+    state = slots_mod.read_state(workspace)
+    if state is None or state.canonical is None:
+        raise BlockerError(
+            code="no_canonical_feature",
+            what="no active feature; pass --feature or run `canopy switch <name>` first",
+        )
+    return state.canonical.feature
+
+
+def cmd_resolve_thread(args: argparse.Namespace) -> None:
+    """Resolve a GitHub PR review thread and record the resolution locally."""
+    from ..actions.thread_actions import resolve_thread
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+    try:
+        feature = _resolve_thread_feature(workspace, getattr(args, "feature", None))
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="resolve")
+        sys.exit(1)
+
+    try:
+        result = resolve_thread(workspace, args.thread_id, feature=feature)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="resolve")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(result)
+        return
+
+    console.print()
+    console.print(f"  Resolved [info]{args.thread_id}[/]")
+    console.print()
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     """Show detected canopy context for current directory (debug)."""
     from ..workspace.context import detect_context
@@ -3695,6 +3746,15 @@ def main() -> None:
     )
     doctor_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    resolve_p = subparsers.add_parser(
+        "resolve",
+        help="Resolve a GitHub PR review thread and record it locally",
+    )
+    resolve_p.add_argument("thread_id", help="Thread node ID (starts with PRRT_)")
+    resolve_p.add_argument("--feature", default=None,
+                           help="Feature alias; defaults to canonical feature")
+    resolve_p.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -3740,6 +3800,7 @@ def main() -> None:
         "ship": cmd_ship,
         "worktree-bootstrap": cmd_worktree_bootstrap,
         "pr-checks": cmd_pr_checks,
+        "resolve": cmd_resolve_thread,
     }
 
     if args.command == "feature":

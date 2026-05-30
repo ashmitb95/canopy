@@ -789,6 +789,35 @@ def conflicts(
 
 
 @mcp.tool()
+def resolve_thread(thread_id: str, feature: str | None = None) -> dict:
+    """Resolve a GitHub PR review thread and record the resolution locally.
+
+    Calls the GitHub GraphQL ``resolveReviewThread`` mutation and appends
+    an entry to ``.canopy/state/thread_resolutions.json`` so the resume
+    brief can distinguish threads closed by canopy from those resolved
+    directly on GitHub.
+
+    Args:
+        thread_id: The GitHub review thread node ID (must start with
+            ``PRRT_``).
+        feature: Feature to attribute the resolution to. Defaults to the
+            canonical feature if not supplied.
+    """
+    from ..actions.thread_actions import resolve_thread as _impl
+    from ..actions.errors import ActionError
+
+    ws = _get_workspace()
+    try:
+        feat = _historian_feature(feature)[1]
+    except ActionError as e:
+        return e.to_dict()
+    try:
+        return _impl(ws, thread_id, feature=feat)
+    except ActionError as e:
+        return e.to_dict()
+
+
+@mcp.tool()
 def drift(feature: str | None = None) -> dict:
     """Compare recorded HEAD state vs feature lane expectations.
 

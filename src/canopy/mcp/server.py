@@ -299,7 +299,8 @@ def slot_swap(slot_a: str, slot_b: str) -> dict:
 def commit(message: str = "", feature: str | None = None,
            repos: list[str] | None = None, paths: list[str] | None = None,
            no_hooks: bool = False, amend: bool = False,
-           address: str | None = None) -> dict:
+           address: str | None = None,
+           resolve_thread: bool | None = None) -> dict:
     """Commit across every repo in a feature lane with a single message (Wave 2.3).
 
     Defaults to the canonical feature when ``feature`` is omitted (reads
@@ -315,6 +316,11 @@ def commit(message: str = "", feature: str | None = None,
     and a resolution is recorded in ``.canopy/state/bot_resolutions.json``
     against the matching repo's commit SHA. Non-bot comments raise
     ``BlockerError(code='not_a_bot_comment')``.
+
+    ``resolve_thread`` (T4): when ``address`` is set, controls whether the
+    corresponding GitHub review thread is resolved after a successful commit.
+    ``True`` forces resolve; ``False`` forces skip; ``None`` (default) defers
+    to the workspace augment ``auto_resolve_threads_on_address``.
 
     Per-repo result statuses:
       - ``ok``           — committed; carries ``sha``, ``files_changed``.
@@ -334,6 +340,7 @@ def commit(message: str = "", feature: str | None = None,
             ws, message,
             feature=feature, repos=repos, paths=paths,
             no_hooks=no_hooks, amend=amend, address=address,
+            resolve_thread=resolve_thread,
         )
     except ActionError as e:
         return e.to_dict()

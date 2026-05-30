@@ -6,8 +6,12 @@ under ``[[repos]] augments = {...}``. Per-repo wins on key collision.
 
 Consumed by:
 - ``integrations/precommit.py`` — ``preflight_cmd`` overrides auto-detection.
-- (planned) ``actions/feature_state.py`` — ``review_bots`` filters bot-vs-human
+- ``actions/feature_state.py`` — ``review_bots`` filters bot-vs-human
   comment classification (M3 bot-tracking).
+- ``actions/commit.py`` — ``auto_resolve_threads_on_address`` (T4): when
+  ``true``, ``commit --address <id>`` automatically resolves the corresponding
+  GitHub review thread after a successful push. Overridden by CLI flags
+  ``--resolve-thread`` / ``--no-resolve-thread``.
 - (planned) future ``canopy test`` command — ``test_cmd`` per-repo.
 
 The resolver is intentionally lenient: missing keys return ``None`` / empty

@@ -721,3 +721,55 @@ class TestCurrentStatePopulation:
         assert "branch_position_per_repo" in brief["current_state"]
         assert "ci_summary_per_repo" in brief["current_state"]
         assert isinstance(brief["intent_hints"], list)
+
+    def test_resume_bot_unresolved_total_from_status(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """bot_unresolved_total sums unresolved counts per repo from bot_comments_status."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def fake_bot_comments_status(workspace, feature):
+            return {
+                "feature": feature,
+                "repos": {
+                    "repo-a": {"unresolved": 2, "resolved": 1, "total": 3},
+                    "repo-b": {"unresolved": 1, "resolved": 0, "total": 1},
+                },
+                "all_resolved": False,
+                "any_bot_comments": True,
+            }
+
+        monkeypatch.setattr(
+            "canopy.actions.bot_status.bot_comments_status",
+            fake_bot_comments_status,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        # Sum of unresolved: repo-a(2) + repo-b(1) = 3
+        assert brief["current_state"]["bot_unresolved_total"] == 3
+
+    def test_resume_bot_unresolved_total_zero_on_failure(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """bot_comments_status raises → bot_unresolved_total == 0, brief intact."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def boom(workspace, feature):
+            raise RuntimeError("simulated bot_status failure")
+
+        monkeypatch.setattr(
+            "canopy.actions.bot_status.bot_comments_status",
+            boom,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        # Error swallowed, defaults to 0.
+        assert brief["current_state"]["bot_unresolved_total"] == 0
+        # Rest of brief intact.
+        assert brief["feature"] == "auth-flow"
+        assert "branch_position_per_repo" in brief["current_state"]
+        assert isinstance(brief["intent_hints"], list)

@@ -283,6 +283,7 @@ def _populate_current(
     current["__feature_name__"] = feature
 
     from . import feature_state as fs
+    from . import bot_status as bs
     from ..git import repo as git
     from .aliases import repos_for_feature
 
@@ -300,6 +301,15 @@ def _populate_current(
         r: (info.get("status") or "no_checks")
         for r, info in ci_per_repo.items()
     }
+
+    # bot_unresolved_total ────────────────────────────────────────────────
+    try:
+        roll = bs.bot_comments_status(workspace, feature)
+    except Exception:
+        roll = {"repos": {}}
+    current["bot_unresolved_total"] = sum(
+        r.get("unresolved", 0) for r in (roll.get("repos") or {}).values()
+    )
 
     # branch_position_per_repo ────────────────────────────────────────────
     pos: dict[str, dict] = {}

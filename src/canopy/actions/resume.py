@@ -120,6 +120,19 @@ def _populate_since(
     since["threads_resolved_by_canopy"] = _resolutions_by_canopy_since(
         workspace, feature, last_visit_iso,
     )
+
+    # T11: draft_replies_pending — count of addressed-but-not-yet-posted drafts.
+    # Only populate when there's a prior anchor (not first visit).
+    from . import draft_replies as dr
+    try:
+        drafts = dr.draft_replies(workspace, feature)
+        since["draft_replies_pending"] = sum(
+            len(r.get("addressed") or [])
+            for r in (drafts.get("repos") or {}).values()
+        )
+    except Exception:
+        pass    # leaves the default 0
+
     return since
 
 
@@ -310,6 +323,18 @@ def _populate_current(
     current["bot_unresolved_total"] = sum(
         r.get("unresolved", 0) for r in (roll.get("repos") or {}).values()
     )
+
+    # draft_replies_summary ───────────────────────────────────────────────
+    # T11: Populate from draft_replies; swallow errors, use defaults.
+    from . import draft_replies as dr
+    try:
+        drafts = dr.draft_replies(workspace, feature)
+        current["draft_replies_summary"] = {
+            "addressed_total": drafts.get("addressed_total", 0),
+            "unaddressed_total": drafts.get("unaddressed_total", 0),
+        }
+    except Exception:
+        pass    # leaves the T6 default {addressed_total: 0, unaddressed_total: 0}
 
     # branch_position_per_repo ────────────────────────────────────────────
     pos: dict[str, dict] = {}

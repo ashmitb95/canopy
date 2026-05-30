@@ -773,3 +773,156 @@ class TestCurrentStatePopulation:
         assert brief["feature"] == "auth-flow"
         assert "branch_position_per_repo" in brief["current_state"]
         assert isinstance(brief["intent_hints"], list)
+
+
+class TestDraftRepliesSummary:
+    """Tests for T11: draft_replies_summary and draft_replies_pending."""
+
+    def test_resume_draft_replies_summary_in_current(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """T11: draft_replies_summary populated from draft_replies call."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def fake_drafts(workspace, feature, **kwargs):
+            return {
+                "alias": feature,
+                "addressed_total": 3,
+                "unaddressed_total": 1,
+                "repos": {
+                    "repo-a": {
+                        "pr_number": 42,
+                        "pr_url": "https://github.com/a/pr/42",
+                        "addressed": [{"comment_id": 1}, {"comment_id": 2}],
+                        "unaddressed": [{"comment_id": 3}],
+                    },
+                    "repo-b": {
+                        "pr_number": 43,
+                        "pr_url": "https://github.com/b/pr/43",
+                        "addressed": [{"comment_id": 4}],
+                        "unaddressed": [],
+                    },
+                },
+            }
+
+        monkeypatch.setattr(
+            "canopy.actions.draft_replies.draft_replies",
+            fake_drafts,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["current_state"]["draft_replies_summary"] == {
+            "addressed_total": 3,
+            "unaddressed_total": 1,
+        }
+
+    def test_resume_post_drafts_hint_fires_when_addressed_total_gt_0(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """T11: post_drafts intent hint fires when addressed_total > 0."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def fake_drafts(workspace, feature, **kwargs):
+            return {
+                "alias": feature,
+                "addressed_total": 2,
+                "unaddressed_total": 0,
+                "repos": {
+                    "repo-a": {
+                        "pr_number": 42,
+                        "pr_url": "https://github.com/a/pr/42",
+                        "addressed": [{"comment_id": 1}, {"comment_id": 2}],
+                        "unaddressed": [],
+                    },
+                },
+            }
+
+        monkeypatch.setattr(
+            "canopy.actions.draft_replies.draft_replies",
+            fake_drafts,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        # Check that post_drafts hint is in the list.
+        post_drafts_hints = [h for h in brief["intent_hints"] if h["kind"] == "post_drafts"]
+        assert len(post_drafts_hints) == 1
+        hint = post_drafts_hints[0]
+        assert hint["summary"] == "2 draft replies ready"
+        assert hint["suggested_tool"] == "draft_replies"
+        assert hint["priority"] == 3
+
+    def test_resume_draft_replies_pending_only_when_anchor(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """T11: draft_replies_pending only when prior anchor exists (not first visit)."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def fake_drafts(workspace, feature, **kwargs):
+            return {
+                "alias": feature,
+                "addressed_total": 2,
+                "unaddressed_total": 0,
+                "repos": {
+                    "repo-a": {
+                        "pr_number": 42,
+                        "pr_url": "https://github.com/a/pr/42",
+                        "addressed": [{"comment_id": 1}, {"comment_id": 2}],
+                        "unaddressed": [],
+                    },
+                    "repo-b": {
+                        "pr_number": 43,
+                        "pr_url": "https://github.com/b/pr/43",
+                        "addressed": [],
+                        "unaddressed": [],
+                    },
+                },
+            }
+
+        monkeypatch.setattr(
+            "canopy.actions.draft_replies.draft_replies",
+            fake_drafts,
+        )
+
+        # First visit (no anchor): draft_replies_pending should be 0.
+        brief1 = feature_resume(ws, "auth-flow")
+        assert brief1["first_visit"] is True
+        assert brief1["since_last_visit"]["draft_replies_pending"] == 0
+
+        # After seeding a visit, resume again (now has anchor).
+        lv.mark_visited(ws, "auth-flow")
+        brief2 = feature_resume(ws, "auth-flow")
+        assert brief2["first_visit"] is False
+        # Sum of addressed per repo: repo-a(2) + repo-b(0) = 2.
+        assert brief2["since_last_visit"]["draft_replies_pending"] == 2
+
+    def test_resume_draft_replies_summary_zero_on_failure(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """T11: draft_replies failure → summary defaults, brief intact."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def boom(workspace, feature, **kwargs):
+            raise RuntimeError("simulated draft_replies failure")
+
+        monkeypatch.setattr(
+            "canopy.actions.draft_replies.draft_replies",
+            boom,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        # Error swallowed, defaults to zero totals.
+        assert brief["current_state"]["draft_replies_summary"] == {
+            "addressed_total": 0,
+            "unaddressed_total": 0,
+        }
+        # Rest of brief intact.
+        assert brief["feature"] == "auth-flow"
+        assert "branch_position_per_repo" in brief["current_state"]
+        assert isinstance(brief["intent_hints"], list)

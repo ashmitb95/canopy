@@ -666,22 +666,222 @@ def _normalize_pr(data: dict) -> dict:
     }
 
 
+def _graphql_via_mcp(workspace_root: Path, query: str, vars: dict) -> dict:
+    """Run a GraphQL call via the configured GitHub MCP server.
+
+    Most GitHub MCP servers don't expose raw GraphQL, so this is best-effort.
+    Raises McpClientError (or any exception) on failure so callers fall through.
+    """
+    config = _get_github_config(workspace_root)
+    result = call_tool(
+        config, "graphql",
+        {"query": query, "variables": vars},
+        timeout=15.0, server_name="github",
+    )
+    parsed = _parse_mcp_result(result)
+    if parsed is None:
+        raise McpClientError("graphql tool returned no data")
+    return parsed
+
+
+def _graphql_via_gh_cli(query: str, vars: dict) -> dict:
+    """Run a GraphQL call via ``gh api graphql``.
+
+    Variables are passed as ``-F name=value`` (typed integers stay integers).
+    Returns the parsed JSON response body.
+    """
+    args = ["gh", "api", "graphql", "-f", f"query={query}"]
+    for k, v in vars.items():
+        args.extend(["-F", f"{k}={v}"])
+    proc = subprocess.run(args, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise GitHubNotConfiguredError(
+            f"gh api graphql failed: {proc.stderr.strip()}"
+        )
+    return json.loads(proc.stdout)
+
+
+def _graphql(workspace_root: Path, query: str, **vars) -> dict:
+    """Run a GraphQL call via MCP if configured, otherwise via gh CLI.
+
+    Returns the parsed JSON response body.
+    MCP failure falls through silently to gh CLI.
+    """
+    if is_mcp_configured(workspace_root, "github"):
+        try:
+            return _graphql_via_mcp(workspace_root, query, vars)
+        except Exception:
+            pass  # fall through to gh CLI
+    return _graphql_via_gh_cli(query, vars)
+
+
+def list_review_threads(
+    workspace_root: Path,
+    owner: str,
+    repo: str,
+    pr_number: int,
+) -> list[dict]:
+    """Return every review thread on the PR with node IDs and resolution state.
+
+    GraphQL because REST /pulls/<n>/comments doesn't surface thread IDs.
+
+    Returns:
+        [{thread_id, is_resolved, resolved_at, comments: [{
+            comment_id, path, line, body, author, created_at, url
+        }]}, ...]
+    """
+    query = """
+    query($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              resolvedAt
+              comments(first: 20) {
+                nodes {
+                  databaseId path line body createdAt url
+                  author { login }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    data = _graphql(workspace_root, query, owner=owner, repo=repo, number=pr_number)
+    nodes = (
+        data.get("data", {})
+            .get("repository", {})
+            .get("pullRequest", {})
+            .get("reviewThreads", {})
+            .get("nodes") or []
+    )
+    out: list[dict] = []
+    for n in nodes:
+        comments = [
+            {
+                "comment_id": c.get("databaseId"),
+                "path": c.get("path"),
+                "line": c.get("line"),
+                "body": c.get("body"),
+                "created_at": c.get("createdAt"),
+                "url": c.get("url"),
+                "author": (c.get("author") or {}).get("login", ""),
+            }
+            for c in (n.get("comments") or {}).get("nodes", [])
+        ]
+        out.append({
+            "thread_id": n["id"],
+            "is_resolved": bool(n.get("isResolved")),
+            "resolved_at": n.get("resolvedAt"),
+            "comments": comments,
+        })
+    return out
+
+
+def resolve_thread(workspace_root: Path, thread_id: str) -> dict:
+    """Resolve a GitHub PR review thread by its node ID."""
+    query = (
+        "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id})"
+        " { thread { id isResolved } } }"
+    )
+    data = _graphql(workspace_root, query, id=thread_id)
+    thread = data.get("data", {}).get("resolveReviewThread", {}).get("thread") or {}
+    return {"thread_id": thread.get("id"), "is_resolved": bool(thread.get("isResolved"))}
+
+
+def unresolve_thread(workspace_root: Path, thread_id: str) -> dict:
+    """Unresolve a GitHub PR review thread by its node ID."""
+    query = (
+        "mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id})"
+        " { thread { id isResolved } } }"
+    )
+    data = _graphql(workspace_root, query, id=thread_id)
+    thread = data.get("data", {}).get("unresolveReviewThread", {}).get("thread") or {}
+    return {"thread_id": thread.get("id"), "is_resolved": bool(thread.get("isResolved"))}
+
+
+def reply_to_thread(workspace_root: Path, thread_id: str, body: str) -> dict:
+    """Post a reply to a GitHub PR review thread."""
+    query = (
+        "mutation($id: ID!, $body: String!) {"
+        " addPullRequestReviewThreadReply("
+        " input: {pullRequestReviewThreadId: $id, body: $body}) {"
+        " comment { id url } } }"
+    )
+    data = _graphql(workspace_root, query, id=thread_id, body=body)
+    comment = (
+        data.get("data", {})
+            .get("addPullRequestReviewThreadReply", {})
+            .get("comment") or {}
+    )
+    return {"comment_id": comment.get("id"), "url": comment.get("url", "")}
+
+
+def _build_comments_from_threads(threads: list[dict]) -> tuple[list[dict], int]:
+    """Build a normalized comment list from list_review_threads output.
+
+    Threads where is_resolved is True contribute to resolved_count and their
+    comments are excluded (matching the existing _normalize_comments behavior).
+    Each comment dict carries thread_id plus the standard normalized fields.
+    """
+    comments: list[dict] = []
+    resolved_count = 0
+    for t in threads:
+        if t["is_resolved"]:
+            resolved_count += len(t["comments"])
+            continue
+        for c in t["comments"]:
+            comments.append({
+                "id": c["comment_id"],
+                "path": c["path"] or "",
+                "line": c["line"] or 0,
+                "body": c["body"] or "",
+                "author": c["author"],
+                "author_type": "",
+                "state": "",
+                "created_at": c["created_at"] or "",
+                "url": c["url"] or "",
+                "in_reply_to_id": None,
+                "commit_id": "",
+                "thread_id": t["thread_id"],
+            })
+    return comments, resolved_count
+
+
 def get_review_comments(
     workspace_root: Path,
     owner: str,
     repo: str,
     pr_number: int,
 ) -> tuple[list[dict], int]:
-    """Fetch review comments for a PR. MCP first; gh CLI fallback.
+    """Fetch review comments for a PR. GraphQL first; MCP/gh CLI fallback.
 
     Returns ``(comments, resolved_count)``: comments are normalized with
     fields ``path, line, body, author, author_type, state, created_at,
-    url, in_reply_to_id``. ``resolved_count`` is the number of threads
-    excluded because GitHub flagged them resolved.
+    url, in_reply_to_id, commit_id, thread_id``. ``resolved_count`` is the
+    number of threads excluded because GitHub flagged them resolved.
+
+    When GraphQL succeeds it is the sole source of truth (one round-trip,
+    thread_id on every comment). When GraphQL fails, falls back to the MCP
+    three-tool ladder and gh CLI REST path; those comments get thread_id="".
 
     Bot threads are kept (the temporal classifier downstream handles
     staleness). If neither path is available, returns ``([], 0)``.
     """
+    # Try GraphQL first — gets threads + comments + thread_id in one shot.
+    if is_github_configured(workspace_root):
+        try:
+            threads = list_review_threads(workspace_root, owner, repo, pr_number)
+            return _build_comments_from_threads(threads)
+        except Exception:
+            pass  # fall through to legacy path — never crash on GraphQL failure
+
+    # Legacy fallback: MCP three-tool ladder then gh CLI REST.
+    # Decorate each comment with thread_id="" so callers always have the key.
     if is_mcp_configured(workspace_root, "github"):
         config = _get_github_config(workspace_root)
         for tool_name, args in [
@@ -693,7 +893,10 @@ def get_review_comments(
                 result = call_tool(config, tool_name, args, timeout=15.0, server_name="github")
                 parsed = _parse_mcp_result(result)
                 if parsed is not None:
-                    return _normalize_comments(parsed)
+                    comments, resolved_count = _normalize_comments(parsed)
+                    for c in comments:
+                        c.setdefault("thread_id", "")
+                    return comments, resolved_count
             except McpClientError:
                 continue
         return [], 0
@@ -705,7 +908,10 @@ def get_review_comments(
                 "--paginate",
             ])
             data = json.loads(output) if output.strip() else []
-            return _normalize_comments(data)
+            comments, resolved_count = _normalize_comments(data)
+            for c in comments:
+                c.setdefault("thread_id", "")
+            return comments, resolved_count
         except (GitHubNotConfiguredError, json.JSONDecodeError):
             return [], 0
 

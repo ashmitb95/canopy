@@ -13,6 +13,33 @@ The single biggest agent failure mode in multi-repo work is path mistakes — `c
 
 Canopy also returns **pre-classified state**: review comments are temporally filtered into `actionable_threads` vs `likely_resolved_threads`, features have computed states like `ready_to_commit` / `drifted` / `awaiting_review`, and every action returns structured `next_actions` you can follow without re-deriving the rules.
 
+## Session start — call `feature_resume` first
+
+When the user opens a chat and references a feature alias (a Linear ID like `DOC-2226`, a feature name, a slot id like `worktree-1`, or a PR URL/`<repo>#<n>`), call `mcp__canopy__feature_resume(<alias>)` *before* acting on whatever intent they've stated. This is a compound action: it resolves the alias, switches the canonical slot if it's not already there, refreshes from GitHub + Linear, and returns a structured brief with `intent_hints` for the most likely next actions.
+
+Patterns that trigger this:
+- A bare alias as the first non-trivial token: `"DOC-2226"`, `"DOC-2226, let's address comments"`, `"jump into auth-flow"`.
+- Explicit return: `"I am back on DOC-2226"`, `"resuming auth-flow"`.
+- Topic-shift to another feature mid-session.
+
+Once you have the brief, look at `intent_hints` (sorted by `priority`) and pair the top hint with what the user said. Examples:
+
+| User says | Top hints | Your move |
+|---|---|---|
+| "address PR comments" | `address_comments`, `post_drafts` | call `review_comments` with the alias from `intent_hints[0].suggested_args`, then walk through actionable threads |
+| "align with dev" | `align_with_default` | inspect `current_state.branch_position_per_repo`, propose rebase or merge per repo |
+| (nothing specific) | (read top 3 hints) | summarize the brief + hints in 3–5 lines, ask the user which to pursue |
+
+Do **not** call `feature_resume` more than once per session per feature unless you've done work that materially changes state (e.g. pushed, resolved a thread, posted replies). The brief is fresh-per-call (refreshes GH/Linear) so repeated calls are wasteful, not stale.
+
+`feature_resume` supersedes `mcp__canopy__switch` as the session-start primitive — it does the switch internally plus the full brief. Use `switch` directly only when you want to focus a slot without the overhead of a fresh brief (e.g. mid-session slot rotation).
+
+### Closing out review threads
+
+When you finish reviewing a thread:
+- If your commit addresses it: `commit --address <comment_id> --resolve-thread` (or post-process with `mcp__canopy__resolve_thread`).
+- If the comment is wrong: `mcp__canopy__reply_to_thread <thread_id> <body>` with concrete evidence. Pass `resolve_after=true` when the pushback closes the discussion.
+
 ## Tool selection — what to use when
 
 | What you want to do | Canopy tool | Don't use |

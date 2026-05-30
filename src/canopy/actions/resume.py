@@ -357,7 +357,55 @@ def _populate_current(
             continue
     current["branch_position_per_repo"] = pos
 
+    # linear_issue / linear_url — lifted from FeatureLane ─────────────────
+    try:
+        from ..features.coordinator import FeatureCoordinator
+        coord = FeatureCoordinator(workspace)
+        lane = coord.status(feature)
+        current["linear_issue"] = getattr(lane, "linear_issue", None) or None
+        current["linear_url"] = getattr(lane, "linear_url", None) or None
+    except Exception:
+        pass    # leaves the defaults (None) from initialization
+
+    # open_thread_count — rolled up from list_review_threads per PR ───────
+    current["open_thread_count"] = _open_thread_count(workspace, feature)
+
     return current
+
+
+# ── Helpers for current_state ─────────────────────────────────────────────────
+
+def _open_thread_count(workspace: Workspace, feature: str) -> int:
+    """Total unresolved review threads across all repos+PRs for the feature.
+
+    Calls list_review_threads per-repo+PR using the same coords that
+    _threads_delta uses. On any exception, returns 0 and swallows.
+
+    # TODO: cache list_review_threads per resume call to avoid 2x round-trips
+    # when _threads_delta already ran in _populate_since (milestone-3 item).
+    """
+    from ..integrations import github as gh
+
+    try:
+        pr_coords = _pr_coords_per_repo(workspace, feature)
+    except Exception:
+        return 0
+
+    total = 0
+    for repo_name, coords in pr_coords.items():
+        if not coords:
+            continue
+        try:
+            threads = gh.list_review_threads(
+                workspace.config.root,
+                coords["owner"],
+                coords["repo_slug"],
+                coords["pr_number"],
+            )
+        except Exception:
+            continue
+        total += sum(1 for t in threads if not t.get("is_resolved", False))
+    return total
 
 
 # ── Intent hints ──────────────────────────────────────────────────────────────

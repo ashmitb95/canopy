@@ -926,3 +926,281 @@ class TestDraftRepliesSummary:
         assert brief["feature"] == "auth-flow"
         assert "branch_position_per_repo" in brief["current_state"]
         assert isinstance(brief["intent_hints"], list)
+
+
+class TestLinearFromLane:
+    """Tests for Fix #1: linear_issue + linear_url populated from FeatureLane."""
+
+    def test_resume_populates_linear_from_lane(self, canopy_toml_for_workspace, monkeypatch):
+        """Brief surfaces lane.linear_issue and lane.linear_url."""
+        import canopy.actions.resume as resume_mod
+        from canopy.features.coordinator import FeatureLane
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        fake_lane = FeatureLane(
+            name="auth-flow",
+            repos=["repo-a", "repo-b"],
+            linear_issue="DOC-42",
+            linear_url="https://linear.app/team/issue/DOC-42",
+        )
+
+        import canopy.features.coordinator as coord_mod
+        original_status = coord_mod.FeatureCoordinator.status
+
+        def fake_status(self, name):
+            return fake_lane
+
+        monkeypatch.setattr(coord_mod.FeatureCoordinator, "status", fake_status)
+
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["current_state"]["linear_issue"] == "DOC-42"
+        assert brief["current_state"]["linear_url"] == "https://linear.app/team/issue/DOC-42"
+
+    def test_resume_linear_none_when_lane_has_no_issue(self, canopy_toml_for_workspace):
+        """Implicit feature (no features.json entry) → linear_issue/url are None."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        # auth-flow is an implicit feature in the fixture (no features.json entry),
+        # so linear_issue defaults to "" on the lane → normalized to None.
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["current_state"]["linear_issue"] is None
+        assert brief["current_state"]["linear_url"] is None
+
+    def test_resume_linear_none_when_lane_lookup_fails(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """If FeatureLane lookup raises, linear_issue/url default to None and brief is intact."""
+        import canopy.features.coordinator as coord_mod
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def boom(self, name):
+            raise RuntimeError("simulated coordinator failure")
+
+        monkeypatch.setattr(coord_mod.FeatureCoordinator, "status", boom)
+
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["current_state"]["linear_issue"] is None
+        assert brief["current_state"]["linear_url"] is None
+        # Rest of brief intact.
+        assert brief["feature"] == "auth-flow"
+        assert isinstance(brief["intent_hints"], list)
+
+
+class TestOpenThreadCount:
+    """Tests for Fix #2: open_thread_count rolled up from list_review_threads."""
+
+    def test_resume_open_thread_count_rolled_up(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """open_thread_count sums unresolved threads across repos."""
+        import canopy.actions.resume as resume_mod
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        monkeypatch.setattr(
+            resume_mod,
+            "_pr_coords_per_repo",
+            lambda ws, f: {"repo-a": {"owner": "o", "repo_slug": "r", "pr_number": 1}},
+        )
+        monkeypatch.setattr(
+            "canopy.integrations.github.list_review_threads",
+            lambda *a, **k: [
+                {"thread_id": "PRRT_1", "is_resolved": False, "comments": []},
+                {"thread_id": "PRRT_2", "is_resolved": True, "comments": []},
+                {"thread_id": "PRRT_3", "is_resolved": False, "comments": []},
+            ],
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        assert brief["current_state"]["open_thread_count"] == 2
+
+    def test_resume_open_thread_count_zero_when_no_prs(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """When all PR coords are None, open_thread_count is 0."""
+        import canopy.actions.resume as resume_mod
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        monkeypatch.setattr(
+            resume_mod,
+            "_pr_coords_per_repo",
+            lambda ws, f: {"repo-a": None},
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+        assert brief["current_state"]["open_thread_count"] == 0
+
+    def test_resume_open_thread_count_zero_on_exception(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """If _pr_coords_per_repo raises, open_thread_count defaults to 0."""
+        import canopy.actions.resume as resume_mod
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        def boom(ws, f):
+            raise RuntimeError("simulated failure")
+
+        monkeypatch.setattr(resume_mod, "_pr_coords_per_repo", boom)
+
+        brief = feature_resume(ws, "auth-flow")
+        assert brief["current_state"]["open_thread_count"] == 0
+
+
+class TestHintCoverage:
+    """Tests for SHOULD FIX items: investigate_ci and read_issue hints."""
+
+    def test_resume_investigate_ci_hint_surfaces(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """When any repo CI is failing, investigate_ci hint fires at priority 1."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        monkeypatch.setattr(
+            "canopy.actions.feature_state.feature_state",
+            lambda ws, f: {
+                "state": "awaiting_ci",
+                "summary": {
+                    "ci_per_repo": {
+                        "repo-a": {"status": "failing"},
+                        "repo-b": {"status": "passing"},
+                    },
+                },
+            },
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        ci_hints = [h for h in brief["intent_hints"] if h["kind"] == "investigate_ci"]
+        assert len(ci_hints) == 1, f"Expected 1 investigate_ci hint, got {ci_hints}"
+        assert ci_hints[0]["priority"] == 1
+        assert "repo-a" in ci_hints[0]["summary"]
+
+    def test_resume_read_issue_hint_on_first_visit(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """First visit AND linear_issue set → read_issue hint fires at priority 1."""
+        import canopy.features.coordinator as coord_mod
+        from canopy.features.coordinator import FeatureLane
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        # No mark_visited() → first_visit=True
+
+        fake_lane = FeatureLane(
+            name="auth-flow",
+            repos=["repo-a", "repo-b"],
+            linear_issue="DOC-42",
+            linear_url="https://linear.app/team/issue/DOC-42",
+        )
+
+        monkeypatch.setattr(
+            coord_mod.FeatureCoordinator, "status", lambda self, name: fake_lane
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["first_visit"] is True
+        read_hints = [h for h in brief["intent_hints"] if h["kind"] == "read_issue"]
+        assert len(read_hints) == 1, (
+            f"Expected 1 read_issue hint on first visit with linear_issue set; "
+            f"hints={brief['intent_hints']}"
+        )
+        assert read_hints[0]["priority"] == 1
+        assert "DOC-42" in read_hints[0]["summary"]
+
+    def test_resume_read_issue_hint_not_on_second_visit(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """read_issue hint must NOT fire when first_visit=False, even with linear_issue set."""
+        import canopy.features.coordinator as coord_mod
+        from canopy.features.coordinator import FeatureLane
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        lv.mark_visited(ws, "auth-flow")   # second visit now
+
+        fake_lane = FeatureLane(
+            name="auth-flow",
+            repos=["repo-a", "repo-b"],
+            linear_issue="DOC-42",
+            linear_url="https://linear.app/team/issue/DOC-42",
+        )
+        monkeypatch.setattr(
+            coord_mod.FeatureCoordinator, "status", lambda self, name: fake_lane
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["first_visit"] is False
+        read_hints = [h for h in brief["intent_hints"] if h["kind"] == "read_issue"]
+        assert read_hints == [], "read_issue hint must not fire on second visit"
+
+
+class TestPrCoordsPerRepo:
+    """Direct tests for _pr_coords_per_repo."""
+
+    def test_pr_coords_per_repo_handles_unresolvable_remote(
+        self, canopy_toml_for_workspace
+    ):
+        """_pr_coords_per_repo returns repo -> None for unparseable (file://) remotes."""
+        from canopy.actions.resume import _pr_coords_per_repo
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        # The fixture uses file:// remotes which _extract_owner_repo cannot parse.
+        result = _pr_coords_per_repo(ws, "auth-flow")
+
+        assert isinstance(result, dict)
+        assert len(result) >= 1, "Expected at least one repo in result"
+        for repo_name, coords in result.items():
+            assert coords is None, (
+                f"{repo_name}: expected None for file:// remote, got {coords}"
+            )
+
+
+class TestFutureAnchor:
+    """Edge case: last_visit set to a future timestamp."""
+
+    def test_resume_future_anchor_returns_empty_sections(
+        self, canopy_toml_for_workspace
+    ):
+        """Anchor in the future → since_last_visit sections are empty, brief doesn't crash."""
+        from canopy.actions import last_visit as lv_mod
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        # Write a future timestamp directly.
+        lv_mod._save(
+            ws,
+            {"auth-flow": {"last_visit": "2099-01-01T00:00:00Z", "previous_visit": None}},
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        assert brief["first_visit"] is False
+        assert brief["last_visit"] == "2099-01-01T00:00:00Z"
+
+        # commits: all repos should have empty lists (no commits after 2099).
+        commits = brief["since_last_visit"]["commits"]
+        assert isinstance(commits, dict)
+        for repo_name, commit_list in commits.items():
+            assert commit_list == [], (
+                f"{repo_name}: expected no commits before 2099 anchor, got {commit_list}"
+            )
+
+        # thread sections should also be empty.
+        assert brief["since_last_visit"]["threads_new"] == []
+        assert brief["since_last_visit"]["threads_resolved_on_github"] == []

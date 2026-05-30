@@ -3246,6 +3246,185 @@ def cmd_resolve_thread(args: argparse.Namespace) -> None:
     console.print()
 
 
+def _render_resume_human(brief: dict, console) -> None:
+    """Paint the resume brief in a human-readable layout."""
+    from .ui import SYM_ARROW, separator
+
+    feature = brief.get("feature", "")
+    fstate = (brief.get("current_state") or {}).get("feature_state") or "unknown"
+    last_visit = brief.get("last_visit")
+    window_hours = brief.get("window_hours")
+    first_visit = brief.get("first_visit", False)
+    switch_performed = brief.get("switch_performed", False)
+    switch_summary = brief.get("switch_summary") or {}
+    since = brief.get("since_last_visit") or {}
+    current = brief.get("current_state") or {}
+    hints = brief.get("intent_hints") or []
+
+    console.print()
+    console.print(
+        f"  [feature]{feature}[/]  [muted]state: {fstate}[/]"
+    )
+
+    # Last visit line
+    if first_visit:
+        console.print(f"  [muted]first visit[/]")
+    else:
+        ago = f"  [muted]({window_hours:.0f}h ago)[/]" if window_hours is not None else ""
+        console.print(f"  [muted]last visit: {last_visit}{ago}[/]")
+
+    if switch_performed:
+        prev = switch_summary.get("previously_canonical") or ""
+        mode = switch_summary.get("mode", "active_rotation")
+        mode_label = {"active_rotation": "active_rotation", "wind_down": "wind_down"}.get(mode, mode)
+        arrow_str = f"{prev} {SYM_ARROW} {feature}" if prev else feature
+        console.print(f"  [muted]switch: {arrow_str}  [{mode_label}][/]")
+
+    # ── Since last visit ──────────────────────────────────────────────────
+    separator()
+    console.print(f"  [header]Since last visit[/]")
+
+    commits = since.get("commits") or {}
+    if commits:
+        parts = "  ".join(
+            f"[repo]{r}[/] {len(cs)}" for r, cs in commits.items() if cs
+        )
+        if parts:
+            console.print(f"    Commits         {parts}")
+
+    new_threads = since.get("threads_new") or []
+    resolved_gh = since.get("threads_resolved_on_github") or []
+    resolved_by_canopy = since.get("threads_resolved_by_canopy") or []
+    if new_threads:
+        repos_hit = {t.get("repo") for t in new_threads if t.get("repo")}
+        suffix = f"  [muted]({', '.join(sorted(repos_hit))})[/]" if repos_hit else ""
+        console.print(f"    New threads     {len(new_threads)}{suffix}")
+    if resolved_gh:
+        by_canopy = sum(1 for t in resolved_gh if t.get("by_canopy"))
+        canon_str = f"  [muted](by canopy: {by_canopy})[/]" if by_canopy else ""
+        console.print(f"    Resolved threads {len(resolved_gh)}{canon_str}")
+    elif resolved_by_canopy:
+        console.print(f"    Resolved by canopy {len(resolved_by_canopy)}")
+
+    drafts_pending = since.get("draft_replies_pending", 0)
+    if drafts_pending:
+        console.print(f"    Draft replies   {drafts_pending} pending")
+
+    historian_excerpt = since.get("historian_excerpt") or ""
+    if historian_excerpt:
+        first_line = historian_excerpt.splitlines()[0]
+        console.print(f"    Memory          [muted]{first_line}[/]")
+
+    if not any([commits, new_threads, resolved_gh, resolved_by_canopy, drafts_pending, historian_excerpt]):
+        console.print(f"    [muted]nothing new[/]")
+
+    # ── Current ───────────────────────────────────────────────────────────
+    separator()
+    console.print(f"  [header]Current[/]")
+
+    linear_issue = current.get("linear_issue")
+    linear_url = current.get("linear_url")
+    if linear_issue:
+        url_str = f"  [muted]{linear_url}[/]" if linear_url else ""
+        console.print(f"    Linear          [linear]{linear_issue}[/]{url_str}")
+
+    ci = current.get("ci_summary_per_repo") or {}
+    if ci:
+        ci_parts = []
+        for r, status in ci.items():
+            if status in ("passing", "success"):
+                ci_parts.append(f"[repo]{r}[/] [success]{status}[/]")
+            elif status in ("failing", "failure"):
+                ci_parts.append(f"[repo]{r}[/] [error]{status}[/]")
+            else:
+                ci_parts.append(f"[repo]{r}[/] [muted]{status}[/]")
+        console.print(f"    CI              {'  '.join(ci_parts)}")
+
+    open_threads = current.get("open_thread_count", 0)
+    if open_threads:
+        console.print(f"    Open threads    {open_threads}")
+
+    bot_unresolved = current.get("bot_unresolved_total", 0)
+    if bot_unresolved:
+        console.print(f"    Bot unresolved  {bot_unresolved}")
+
+    branch_pos = current.get("branch_position_per_repo") or {}
+    if branch_pos:
+        for repo_name, pos in branch_pos.items():
+            ahead = pos.get("ahead", 0)
+            behind = pos.get("behind", 0)
+            default = pos.get("default_branch", "main")
+            parts = []
+            if ahead:
+                parts.append(f"[ahead]+{ahead}[/]")
+            if behind:
+                parts.append(f"[behind]-{behind}[/]")
+            div_str = " ".join(parts) if parts else "[muted]up to date[/]"
+            console.print(
+                f"    Branch          [repo]{repo_name}[/] {div_str} [muted]from {default}[/]"
+            )
+
+    # ── Next actions ──────────────────────────────────────────────────────
+    if hints:
+        separator()
+        console.print(f"  [header]Next actions[/]")
+        for i, hint in enumerate(hints, 1):
+            kind = hint.get("kind", "")
+            summary = hint.get("summary", "")
+            tool = hint.get("suggested_tool", "")
+            tool_args = hint.get("suggested_args") or {}
+            args_str = ", ".join(f'{k}="{v}"' for k, v in tool_args.items() if v)
+            call_str = f"{tool}({args_str})" if tool else ""
+            console.print(f"    {i}. [info]{kind}[/]  [muted]{summary}[/]")
+            if call_str:
+                console.print(f"         [muted]{SYM_ARROW} {call_str}[/]")
+
+    console.print()
+
+
+def cmd_resume(args: argparse.Namespace) -> None:
+    """Show a fresh resume brief: what changed since last visit."""
+    from ..actions.resume import feature_resume
+    from ..actions.last_visit import reset_anchor
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    from .ui import console
+
+    workspace = _load_workspace()
+
+    if args.reset_anchor:
+        from ..actions.aliases import resolve_feature
+        try:
+            feature = resolve_feature(workspace, args.alias)
+        except ActionError as err:
+            if args.json:
+                _print_json(err.to_dict())
+            else:
+                render_blocker(err, action="resume")
+            sys.exit(1)
+        cleared = reset_anchor(workspace, feature)
+        if args.json:
+            _print_json({"feature": feature, "cleared": cleared})
+            return
+        console.print(f"  [success]Cleared last_visit for {feature}[/]")
+        return
+
+    try:
+        brief = feature_resume(workspace, args.alias)
+    except ActionError as err:
+        if args.json:
+            _print_json(err.to_dict())
+        else:
+            render_blocker(err, action="resume")
+        sys.exit(1)
+
+    if args.json:
+        _print_json(brief)
+        return
+
+    _render_resume_human(brief, console)
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     """Show detected canopy context for current directory (debug)."""
     from ..workspace.context import detect_context
@@ -3860,6 +4039,18 @@ def main() -> None:
                            help="Feature alias; defaults to canonical feature")
     resolve_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # resume
+    resume_p = subparsers.add_parser(
+        "resume",
+        help="Fresh brief: what changed since last visit",
+    )
+    resume_p.add_argument("alias", help="Feature alias (name, Linear ID, slot id, etc.)")
+    resume_p.add_argument("--json", action="store_true", help="Output as JSON")
+    resume_p.add_argument(
+        "--reset-anchor", action="store_true",
+        help="Clear last_visit so the next call is treated as a first visit",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -3907,6 +4098,7 @@ def main() -> None:
         "pr-checks": cmd_pr_checks,
         "resolve": cmd_resolve_thread,
         "reply": cmd_reply_thread,
+        "resume": cmd_resume,
     }
 
     if args.command == "feature":

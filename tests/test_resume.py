@@ -1552,3 +1552,88 @@ class TestResumeSummary:
         summary = resume_summary(ws, "auth-flow")
 
         assert summary["memory_present"] is False
+
+
+# ── CLI smoke tests ───────────────────────────────────────────────────────────
+
+
+class TestResumeCLI:
+    """Smoke tests for the cmd_resume CLI wiring."""
+
+    def test_resume_command_json(self, canopy_toml_for_workspace, monkeypatch, capsys):
+        """cmd_resume --json prints the structured brief."""
+        import argparse
+        import json as _json
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        monkeypatch.setattr("canopy.cli.main._load_workspace", lambda: ws)
+
+        from canopy.cli.main import cmd_resume
+        args = argparse.Namespace(alias="auth-flow", json=True, reset_anchor=False)
+        cmd_resume(args)
+
+        data = _json.loads(capsys.readouterr().out)
+        assert data["version"] == 1
+        assert data["feature"] == "auth-flow"
+        assert "since_last_visit" in data
+        assert "current_state" in data
+        assert "intent_hints" in data
+
+    def test_resume_command_human_renders_sections(
+        self, canopy_toml_for_workspace, monkeypatch, capsys
+    ):
+        """Human mode prints the feature name and at least one section header."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        monkeypatch.setattr("canopy.cli.main._load_workspace", lambda: ws)
+
+        import argparse
+        from canopy.cli.main import cmd_resume
+        args = argparse.Namespace(alias="auth-flow", json=False, reset_anchor=False)
+        cmd_resume(args)
+
+        out = capsys.readouterr().out
+        assert "auth-flow" in out
+
+    def test_resume_command_reset_anchor(
+        self, canopy_toml_for_workspace, monkeypatch, capsys
+    ):
+        """--reset-anchor drops the last_visit entry."""
+        from canopy.actions.last_visit import mark_visited, get_last_visit
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        mark_visited(ws, "auth-flow")
+        assert get_last_visit(ws, "auth-flow") is not None
+
+        monkeypatch.setattr("canopy.cli.main._load_workspace", lambda: ws)
+
+        import argparse
+        from canopy.cli.main import cmd_resume
+        args = argparse.Namespace(alias="auth-flow", json=False, reset_anchor=True)
+        cmd_resume(args)
+
+        assert get_last_visit(ws, "auth-flow") is None
+
+    def test_resume_command_reset_anchor_json(
+        self, canopy_toml_for_workspace, monkeypatch, capsys
+    ):
+        """--reset-anchor --json returns {feature, cleared} shape."""
+        import argparse
+        import json as _json
+
+        from canopy.actions.last_visit import mark_visited
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        mark_visited(ws, "auth-flow")
+        monkeypatch.setattr("canopy.cli.main._load_workspace", lambda: ws)
+
+        from canopy.cli.main import cmd_resume
+        args = argparse.Namespace(alias="auth-flow", json=True, reset_anchor=True)
+        cmd_resume(args)
+
+        data = _json.loads(capsys.readouterr().out)
+        assert data["feature"] == "auth-flow"
+        assert data["cleared"] is True

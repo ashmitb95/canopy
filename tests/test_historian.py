@@ -238,3 +238,85 @@ def test_compact_drops_old_sessions_keeps_structural(tmp_path, monkeypatch):
 
 def test_compact_noop_when_no_memory(tmp_path):
     assert compact(tmp_path, "ghost")["action"] == "noop"
+
+
+# ── format_for_agent_since ──────────────────────────────────────────────────
+
+
+def test_format_for_agent_since_filters_by_timestamp(tmp_path):
+    """Only entries with at > since_iso appear in the output."""
+    # Write entries with specific timestamps.
+    record_event(tmp_path, "auth-flow", summary="old event",
+                 at="2026-01-01T00:00:00Z")
+    record_event(tmp_path, "auth-flow", summary="new event",
+                 at="2026-05-26T00:00:00Z")
+    record_decision(tmp_path, "auth-flow", title="new decision",
+                    at="2026-05-25T12:00:00Z")
+
+    # Import format_for_agent_since
+    from canopy.actions.historian import format_for_agent_since
+
+    # Filter with a threshold between old and new.
+    md = format_for_agent_since(tmp_path, "auth-flow", "2026-05-01T00:00:00Z")
+
+    # Should include both entries newer than the threshold.
+    assert "new event" in md
+    assert "new decision" in md
+    # Should exclude the old entry.
+    assert "old event" not in md
+
+
+def test_format_for_agent_since_empty_when_all_older(tmp_path):
+    """Returns empty string when no entry beats the since_iso threshold."""
+    from canopy.actions.historian import format_for_agent_since
+
+    record_event(tmp_path, "auth-flow", summary="ancient",
+                 at="2026-01-01T00:00:00Z")
+    record_event(tmp_path, "auth-flow", summary="old",
+                 at="2026-02-01T00:00:00Z")
+
+    md = format_for_agent_since(tmp_path, "auth-flow", "2026-05-01T00:00:00Z")
+    assert md == ""
+
+
+def test_format_for_agent_since_empty_when_no_feature(tmp_path):
+    """Returns empty string when the feature has no history."""
+    from canopy.actions.historian import format_for_agent_since
+
+    md = format_for_agent_since(tmp_path, "ghost-feature", "2026-05-01T00:00:00Z")
+    assert md == ""
+
+
+def test_format_for_agent_since_includes_section_headers(tmp_path):
+    """Output is properly structured markdown with section headers."""
+    from canopy.actions.historian import format_for_agent_since
+
+    record_decision(tmp_path, "feat-1", title="library choice",
+                    at="2026-05-26T10:00:00Z")
+    record_comment_resolved(tmp_path, "feat-1", comment_id=5, commit_sha="abc123",
+                             at="2026-05-26T11:00:00Z")
+
+    md = format_for_agent_since(tmp_path, "feat-1", "2026-05-20T00:00:00Z")
+
+    # Should have feature header and all standard sections.
+    assert "# Feature: feat-1" in md
+    assert "## Resolutions log" in md
+    assert "## PR context" in md
+    assert "## Sessions (newest first)" in md
+
+
+def test_format_for_agent_since_boundary_exact_match(tmp_path):
+    """Entry at exactly since_iso is excluded (> comparison, not >=)."""
+    from canopy.actions.historian import format_for_agent_since
+
+    record_event(tmp_path, "feat-1", summary="at boundary",
+                 at="2026-05-26T12:00:00Z")
+    record_event(tmp_path, "feat-1", summary="after boundary",
+                 at="2026-05-26T12:00:01Z")
+
+    md = format_for_agent_since(tmp_path, "feat-1", "2026-05-26T12:00:00Z")
+
+    # Exact match should be excluded.
+    assert "at boundary" not in md
+    # After should be included.
+    assert "after boundary" in md

@@ -1204,3 +1204,162 @@ class TestFutureAnchor:
         # thread sections should also be empty.
         assert brief["since_last_visit"]["threads_new"] == []
         assert brief["since_last_visit"]["threads_resolved_on_github"] == []
+
+
+class TestHistorianExcerpt:
+    """Tests for T12: historian_excerpt in since_last_visit."""
+
+    def test_resume_historian_excerpt_populated_when_anchor_exists(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """When historian has entries past last_visit, the brief carries the excerpt."""
+        from canopy.actions import historian
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        # Mark first visit.
+        t_anchor = lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        # Record a historian entry after the anchor.
+        historian.record_event(
+            ws.config.root,
+            "auth-flow",
+            summary="reviewed PR comments",
+            at="2026-05-26T15:00:00Z",
+        )
+
+        # Mock format_for_agent_since to verify it's called with correct args.
+        calls = []
+        original_fn = historian.format_for_agent_since
+
+        def tracked_format(root, feature, since_iso):
+            calls.append((root, feature, since_iso))
+            return original_fn(root, feature, since_iso)
+
+        monkeypatch.setattr(
+            "canopy.actions.historian.format_for_agent_since",
+            tracked_format,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        # Verify the function was called with correct arguments.
+        assert len(calls) == 1, f"Expected 1 call, got {len(calls)}"
+        assert calls[0][0] == ws.config.root
+        assert calls[0][1] == "auth-flow"
+        assert calls[0][2] == t_anchor, "Must pass the prior anchor timestamp"
+
+        # The excerpt should be populated (non-empty when entry exists after anchor).
+        assert isinstance(brief["since_last_visit"]["historian_excerpt"], str)
+
+    def test_resume_historian_excerpt_empty_on_first_visit(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """On first visit (no prior anchor), historian_excerpt is '' (populator not called)."""
+        from canopy.actions import historian
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        # Pre-populate some historian entries (but we won't have an anchor).
+        historian.record_event(
+            ws.config.root,
+            "auth-flow",
+            summary="old event",
+            at="2026-01-01T00:00:00Z",
+        )
+
+        # Mock to ensure format_for_agent_since is NOT called on first visit.
+        calls = []
+
+        def tracked_format(root, feature, since_iso):
+            calls.append((root, feature, since_iso))
+            return ""
+
+        monkeypatch.setattr(
+            "canopy.actions.historian.format_for_agent_since",
+            tracked_format,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        # On first visit, _populate_since is NOT called (prior_iso is None).
+        # So format_for_agent_since should not be called.
+        assert len(calls) == 0, (
+            f"format_for_agent_since must not be called on first visit; "
+            f"got {len(calls)} calls"
+        )
+
+        # historian_excerpt should remain the default empty string.
+        assert brief["since_last_visit"]["historian_excerpt"] == ""
+        assert brief["first_visit"] is True
+
+    def test_resume_historian_excerpt_empty_string_on_failure(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """If format_for_agent_since raises, historian_excerpt defaults to ''."""
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+        lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        def boom(root, feature, since_iso):
+            raise RuntimeError("simulated historian failure")
+
+        monkeypatch.setattr(
+            "canopy.actions.historian.format_for_agent_since",
+            boom,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        # Error swallowed, defaults to empty string.
+        assert brief["since_last_visit"]["historian_excerpt"] == ""
+        # Rest of brief intact.
+        assert brief["feature"] == "auth-flow"
+        assert "commits" in brief["since_last_visit"]
+        assert isinstance(brief["intent_hints"], list)
+
+    def test_resume_historian_excerpt_filters_old_sessions(
+        self, canopy_toml_for_workspace, monkeypatch
+    ):
+        """historian_excerpt includes only entries newer than last_visit."""
+        from canopy.actions import historian
+        from datetime import datetime, timezone, timedelta
+
+        ws = _load_workspace(canopy_toml_for_workspace)
+        _make_canonical(ws, "auth-flow")
+
+        # Record old entry before anchor (1 hour ago).
+        now = datetime.now(timezone.utc)
+        old_time = (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        historian.record_event(
+            ws.config.root,
+            "auth-flow",
+            summary="old session work",
+            at=old_time,
+        )
+
+        t_anchor = lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
+
+        # Record new entry after anchor (current time, which is after the anchor).
+        new_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        historian.record_decision(
+            ws.config.root,
+            "auth-flow",
+            title="new library choice",
+            at=new_time,
+        )
+
+        brief = feature_resume(ws, "auth-flow")
+
+        excerpt = brief["since_last_visit"]["historian_excerpt"]
+        # New entry should appear.
+        assert "new library choice" in excerpt
+        # Old entry should not appear.
+        assert "old session work" not in excerpt
+        # Should still have markdown structure.
+        assert "# Feature: auth-flow" in excerpt

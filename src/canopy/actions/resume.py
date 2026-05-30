@@ -133,6 +133,15 @@ def _populate_since(
     except Exception:
         pass    # leaves the default 0
 
+    # T12: historian_excerpt — sessions/events/decisions since last_visit.
+    from . import historian
+    try:
+        since["historian_excerpt"] = historian.format_for_agent_since(
+            workspace.config.root, feature, last_visit_iso,
+        )
+    except Exception:
+        pass    # leaves the default ""
+
     return since
 
 

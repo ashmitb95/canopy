@@ -226,7 +226,7 @@ canopy doctor               # diagnose drift / staleness
   <img src="docs/cli-state.svg" alt="canopy state" width="720">
 </p>
 
-The CLI and MCP server are thin wrappers over the same actions — `canopy state X` and `mcp__canopy__feature_state(feature='X')` return identical bytes. There's also a [VSCode extension](https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy) reading the same state the agent reads.
+The CLI and MCP server are thin wrappers over the same actions — `canopy state X` and `mcp__canopy__feature_state(feature='X')` return identical bytes. There's also a [VSCode extension](https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy) (source at [`ashmitb95/canopy-dashboard`](https://github.com/ashmitb95/canopy-dashboard)) reading the same state the agent reads.
 
 Full CLI reference: [docs/commands.md](docs/commands.md).
 

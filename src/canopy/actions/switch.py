@@ -34,6 +34,17 @@ from .aliases import resolve_feature, repos_for_feature
 from .errors import BlockerError, FixAction
 
 
+# Precondition BlockerError codes raised by _do_repo_switch BEFORE any git
+# mutation in the failing repo. When one fires with no prior repo completed,
+# the workspace is NOT partially flipped, so no in_flight marker is warranted.
+_PRE_MUTATION_CODES = frozenset({
+    "no_free_slot",
+    "unknown_slot",
+    "evict_to_occupied",
+    "warm_worktree_dirty_on_promote",
+})
+
+
 def switch(
     workspace: Workspace,
     feature: str | None = None,
@@ -158,15 +169,20 @@ def switch(
                 evict_to=evict_to,
             )
         except BlockerError as e:
-            # Even a structured precondition failure (e.g. dirty warm
-            # worktree on the second repo) can leave disk partially
-            # mutated by earlier repos. Persist an in_flight marker so
-            # the next switch refuses to operate on a lie.
-            _persist_in_flight(
-                workspace, feature_name, previously_canonical,
-                failed_repo=repo_name, error_what=e.what or str(e),
-                completed_results=per_repo_results,
-            )
+            # A structured precondition failure raised BEFORE any git
+            # mutation (no_free_slot, dirty warm worktree, bad --evict-to)
+            # leaves disk untouched in this repo. Only stamp in_flight when
+            # something is actually half-flipped: an earlier repo already
+            # completed (per_repo_results non-empty), OR this was a mid-op
+            # failure (not one of the pre-mutation precondition codes).
+            # Otherwise a clean no-op failure would brick every future
+            # switch via slot_state_inconsistent.
+            if per_repo_results or e.code not in _PRE_MUTATION_CODES:
+                _persist_in_flight(
+                    workspace, feature_name, previously_canonical,
+                    failed_repo=repo_name, error_what=e.what or str(e),
+                    completed_results=per_repo_results,
+                )
             raise
         except Exception as e:
             # Mid-op failure with no rollback walker (yet). Surface enough
@@ -281,9 +297,14 @@ def _do_repo_switch(
                 per_repo_results.append(result)
                 return
             # Fall through: Y's slot entry exists but this repo's slot
-            # dir is missing (partial-scope drift). Treat as cold-Y.
+            # dir is missing (orphaned worktree / partial-scope drift).
+            # Y is still being promoted to canonical, so it vacates its
+            # slot regardless — X reclaims y_slot below instead of needing
+            # a brand-new allocation. Allocating blindly here would count
+            # Y's own about-to-be-freed slot against the cap and raise a
+            # bogus no_free_slot (the canopy-test billing-export lock-out).
 
-        # Cold-Y path: allocate a fresh slot for X
+        # Cold-Y path: allocate (or reclaim) the slot X will occupy.
         state = slots_mod.read_state(workspace) or slots_mod.SlotState(
             slot_count=workspace.config.slots,
         )
@@ -304,6 +325,10 @@ def _do_repo_switch(
                         details={"slot": evict_to, "occupant": existing},
                     )
             x_slot = evict_to
+        elif y_slot is not None:
+            # Y already owns y_slot and is leaving it (becoming canonical);
+            # X reclaims it. _post_switch_persist re-stamps the slot to X.
+            x_slot = y_slot
         else:
             x_slot = slots_mod.allocate_slot(state)
         if x_slot is None:

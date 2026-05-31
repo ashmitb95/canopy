@@ -331,3 +331,95 @@ def test_switch_summary_degraded_when_threads_fail(
     assert s["new_thread_count"] == 0
     # Switch itself must not have failed.
     assert result["feature"] == "Y"
+
+
+# ── orphaned-warm-worktree regression (canopy-test billing-export lock-out) ──
+
+
+def _orphan_repo_worktree(ws, feature, repo):
+    """Simulate a slot whose per-repo worktree dir vanished while the slot
+    entry survives in slots.json — the divergence that bricked canopy-test.
+
+    Deletes the repo subdir of ``feature``'s slot and prunes git's worktree
+    registration (matching the real state: `git worktree list` showed none),
+    but leaves the slot's top dir + other repo subdirs so read_state keeps
+    the slot entry.
+    """
+    import shutil
+    from canopy.actions import slots as sm
+
+    sid = sm.slot_for_feature(ws, feature)
+    assert sid is not None, f"{feature!r} must be warm to orphan it"
+    wt_repo = sm.slot_worktree_path(ws, sid, repo)
+    assert wt_repo.exists()
+    shutil.rmtree(wt_repo)
+    subprocess.run(
+        ["git", "worktree", "prune"], cwd=ws.config.root / repo, check=True,
+    )
+    return sid
+
+
+def test_switch_to_warm_feature_with_orphaned_repo_worktree_reclaims_slot(
+    workspace_with_full_slots,
+):
+    """Regression: Y is warm but one repo's worktree dir is missing.
+
+    switch(Y) must reclaim Y's vacated slot for the outgoing canonical X
+    rather than raising no_free_slot. Exactly the canopy-test failure where
+    `billing-export` was warm in worktree-1 but worktree-1/canopy-test-api
+    had no .git, so cold-Y allocation found both slots full.
+    """
+    ws = workspace_with_full_slots  # X canonical; A in wt-1, B in wt-2
+    from canopy.actions import slots as sm
+    from canopy.actions.switch import switch
+
+    sid = _orphan_repo_worktree(ws, "A", "repo-a")
+
+    # Must NOT raise no_free_slot.
+    result = switch(ws, "A")
+
+    assert result["feature"] == "A"
+    state = sm.read_state(ws)
+    assert state is not None
+    assert state.canonical is not None
+    assert state.canonical.feature == "A"
+    # X reclaimed A's vacated slot; both repo worktrees exist there again.
+    assert state.slots[sid].feature == "X"
+    assert (sm.slot_worktree_path(ws, sid, "repo-a") / ".git").exists()
+    assert (sm.slot_worktree_path(ws, sid, "repo-b") / ".git").exists()
+    # B is still warm in its (other) slot — untouched by the A↔X rotation.
+    warm = {e.feature: s for s, e in state.slots.items()}
+    assert "B" in warm and warm["B"] != sid
+    # Clean completion clears any in_flight.
+    assert state.in_flight is None
+
+
+def test_no_free_slot_on_first_repo_does_not_stamp_in_flight(
+    workspace_with_canonical_only, monkeypatch,
+):
+    """A pre-mutation no_free_slot on the first repo must NOT brick the
+    workspace with a false in_flight marker.
+
+    The failure happens before any git mutation (allocate_slot is pure), so
+    per_repo_completed would be empty — nothing is partially flipped. Stamping
+    in_flight there permanently locks out switching via slot_state_inconsistent.
+    """
+    ws = workspace_with_canonical_only  # X canonical, Y cold
+    from canopy.actions import slots as sm
+    from canopy.actions.errors import BlockerError
+    from canopy.actions.switch import switch
+
+    # Force the cold-Y allocator to fail on the first repo.
+    monkeypatch.setattr(
+        "canopy.actions.switch.slots_mod.allocate_slot", lambda state: None,
+    )
+
+    with pytest.raises(BlockerError) as e:
+        switch(ws, "Y")
+    assert e.value.code == "no_free_slot"
+
+    state = sm.read_state(ws)
+    assert state is not None
+    assert state.in_flight is None, (
+        "pre-mutation failure on the first repo must not stamp in_flight"
+    )

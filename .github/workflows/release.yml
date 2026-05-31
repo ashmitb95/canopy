@@ -1,13 +1,14 @@
-name: Release (tag from __version__)
+name: Release (build + publish + tag)
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # needed to push the tag
+  contents: write   # push tag
+  id-token: write   # OIDC for PyPI trusted publishing
 
 jobs:
-  tag:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +24,7 @@ jobs:
         run: |
           V=$(python -c "import re,pathlib; print(re.search(r'__version__\s*=\s*\"([^\"]+)\"', pathlib.Path('src/canopy/__init__.py').read_text()).group(1))")
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Will release v$V"
+          echo "Releasing v$V"
 
       - name: Refuse if tag already exists
         run: |
@@ -32,12 +33,18 @@ jobs:
             exit 1
           fi
 
-      - name: Configure git identity
+      - name: Build sdist + wheel
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Tag and push
         run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "v${{ steps.ver.outputs.version }}"
           git push origin "v${{ steps.ver.outputs.version }}"

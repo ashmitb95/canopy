@@ -732,6 +732,15 @@ def worktree_remove(repo_path: Path, worktree_path: Path, force: bool = False) -
     return _run(args, cwd=repo_path)
 
 
+def worktree_prune(repo_path: Path) -> str:
+    """Prune worktree registrations whose directories are gone.
+
+    Clears stale ``.git/worktrees/<name>`` entries so a subsequent
+    ``worktree add`` at the same path isn't rejected as already-registered.
+    """
+    return _run(["worktree", "prune"], cwd=repo_path)
+
+
 def worktree_move(main_repo: Path, old_path: Path, new_path: Path) -> None:
     """Run `git worktree move <old_path> <new_path>` from main_repo.
 

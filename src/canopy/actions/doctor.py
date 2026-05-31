@@ -222,7 +222,14 @@ def check_active_feature_path_missing(workspace: Workspace) -> list[Issue]:
 
 
 def check_worktree_orphan(workspace: Workspace) -> list[Issue]:
-    """Worktree directories under .canopy/worktrees/ not referenced by any feature."""
+    """Worktree directories under .canopy/worktrees/ not referenced by any feature.
+
+    Pre-3.0 layout only (``<feature>/<repo>``). The Wave-3.0 slot layout
+    (``worktree-N/<repo>``) is owned by the ``slot_*`` checks — skip those
+    dirs here, or this check would flag every warm slot as an orphan and
+    ``--fix`` would delete it.
+    """
+    import re
     wt_root = workspace.config.root / ".canopy" / "worktrees"
     if not wt_root.exists():
         return []
@@ -231,6 +238,8 @@ def check_worktree_orphan(workspace: Workspace) -> list[Issue]:
     for feat_dir in sorted(wt_root.iterdir()):
         if not feat_dir.is_dir():
             continue
+        if re.fullmatch(r"worktree-\d+", feat_dir.name):
+            continue  # slot dir — handled by check_slot_* functions
         feature_name = feat_dir.name
         feature_data = features.get(feature_name)
         feature_repos = (feature_data or {}).get("repos") or []
@@ -604,6 +613,66 @@ def check_slot_branch_mismatches(workspace: Workspace) -> list[Issue]:
     return issues
 
 
+def check_slot_repo_worktree_missing(workspace: Workspace) -> list[Issue]:
+    """A slot holds feature F, but one of F's repos has no worktree on disk.
+
+    This is the per-repo divergence the other slot checks can't see:
+    ``slot_entry_orphan`` only inspects the ``worktree-N/`` top dir (which
+    survives as long as ANY repo's subdir remains), and
+    ``slot_branch_mismatch`` ``continue``s past a non-existent per-repo path.
+    A half-materialized slot bricked canopy-test (``switch`` then tried to
+    allocate a fresh slot for an already-occupied feature → ``no_free_slot``).
+
+    Auto-fixable by recreating the worktree from the feature's branch —
+    unless the branch itself is gone, in which case ``branches_missing``
+    owns the deeper problem and this is advice-only.
+    """
+    from . import slots as slots_mod
+    from .aliases import repos_for_feature
+
+    state = slots_mod.read_state(workspace)
+    if state is None:
+        return []
+    issues: list[Issue] = []
+    for sid, entry in state.slots.items():
+        repo_branches = repos_for_feature(workspace, entry.feature) or {}
+        for repo_name, expected_branch in repo_branches.items():
+            slot_path = slots_mod.slot_worktree_path(workspace, sid, repo_name)
+            if (slot_path / ".git").exists():
+                continue
+            try:
+                rs = workspace.get_repo(repo_name)
+            except KeyError:
+                continue  # features_unknown_repo owns this
+            branch_ok = rs.abs_path.exists() and git.branch_exists(
+                rs.abs_path, expected_branch,
+            )
+            issues.append(Issue(
+                code="slot_repo_worktree_missing",
+                severity="error",
+                what=(
+                    f"slot '{sid}' is missing its '{repo_name}' worktree"
+                    f" (feature '{entry.feature}', branch '{expected_branch}')"
+                ),
+                expected=str(slot_path),
+                actual="(no worktree on disk)",
+                repo=repo_name,
+                feature=entry.feature,
+                fix_action=(
+                    f"recreate: git worktree add {slot_path} {expected_branch}"
+                    if branch_ok else
+                    f"branch '{expected_branch}' is gone in {repo_name} —"
+                    f" restore it (see branches_missing) before recreating"
+                ),
+                auto_fixable=branch_ok,
+                details={
+                    "slot": sid, "feature": entry.feature, "repo": repo_name,
+                    "branch": expected_branch, "slot_path": str(slot_path),
+                },
+            ))
+    return issues
+
+
 # ── Install-staleness checks ─────────────────────────────────────────────
 
 
@@ -895,6 +964,7 @@ _CHECKS: dict[str, tuple[str, Any]] = {
     "vsix_duplicates": ("vsix", check_vsix_duplicates),
     "slot_dir_orphan": ("slots", check_slot_dir_orphans),
     "slot_entry_orphan": ("slots", check_slot_entry_orphans),
+    "slot_repo_worktree_missing": ("slots", check_slot_repo_worktree_missing),
     "slot_branch_mismatch": ("slots", check_slot_branch_mismatches),
     # slot_detached_head shares its check function with slot_branch_mismatch
     # (one walker emits both codes). The registry entry uses a sentinel
@@ -1276,6 +1346,43 @@ def repair_slot_entry_orphan(workspace: Workspace, issue: Issue) -> RepairResult
                         action_taken=f"dropped slots.json entry for '{sid}'")
 
 
+def repair_slot_repo_worktree_missing(workspace: Workspace, issue: Issue) -> RepairResult:
+    """Recreate the missing per-repo worktree from the feature's branch.
+
+    Restores the slot invariant rather than dropping the slot entry —
+    dropping it would orphan the slot's surviving repos. Idempotent: a no-op
+    if the worktree reappeared.
+    """
+    d = issue.details or {}
+    repo_name, branch, slot_path_s = d.get("repo"), d.get("branch"), d.get("slot_path")
+    if not (repo_name and branch and slot_path_s):
+        return RepairResult(code=issue.code, success=False, action_taken="",
+                            error="missing repo/branch/slot_path on issue")
+    slot_path = Path(slot_path_s)
+    if (slot_path / ".git").exists():
+        return RepairResult(code=issue.code, success=True, repo=repo_name,
+                            feature=issue.feature,
+                            action_taken="worktree already present")
+    try:
+        rs = workspace.get_repo(repo_name)
+    except KeyError as e:
+        return RepairResult(code=issue.code, success=False, action_taken="",
+                            error=str(e), repo=repo_name)
+    repo_root = git.worktree_main_path(rs.abs_path) or rs.abs_path
+    slot_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # Prune first so a stale registration for this path doesn't block add.
+        git.worktree_prune(repo_root)
+        git.worktree_add(repo_root, slot_path, branch, create_branch=False)
+    except git.GitError as e:
+        return RepairResult(code=issue.code, success=False, repo=repo_name,
+                            feature=issue.feature, action_taken="",
+                            error=str(e))
+    return RepairResult(code=issue.code, success=True, repo=repo_name,
+                        feature=issue.feature,
+                        action_taken=f"git worktree add {slot_path} {branch}")
+
+
 _REPAIRS: dict[str, Any] = {
     "heads_stale": repair_heads_stale,
     "active_feature_orphan": repair_active_feature_orphan,
@@ -1291,6 +1398,7 @@ _REPAIRS: dict[str, Any] = {
     "mcp_orphans": repair_mcp_orphans,
     "vsix_duplicates": repair_vsix_duplicates,
     "slot_entry_orphan": repair_slot_entry_orphan,
+    "slot_repo_worktree_missing": repair_slot_repo_worktree_missing,
     # cli_stale, mcp_stale, features_unknown_repo, branches_missing,
     # slot_dir_orphan, slot_branch_mismatch have no auto-fix —
     # repair returns surfaced advice via the issue's `fix_action` instead.

@@ -894,3 +894,81 @@ def test_doctor_flags_detached_head_separately(workspace_with_slots):
         and f.get("details", {}).get("repo") == "repo-a"
     ]
     assert not mismatches, "detached HEAD should not double-fire as mismatch"
+
+
+def _orphan_one_repo_worktree(root, slot, repo):
+    """Delete ONE repo's worktree from a slot (leaving the slot's other
+    repos + top dir), prune git's registration. Reproduces the per-repo
+    divergence that bricked canopy-test: worktree-N/ exists, but
+    worktree-N/<repo>/.git is gone."""
+    import shutil, subprocess
+    wt_repo = root / ".canopy/worktrees" / slot / repo
+    shutil.rmtree(wt_repo)
+    subprocess.run(["git", "worktree", "prune"], cwd=root / repo, check=True)
+
+
+def test_doctor_finds_slot_repo_worktree_missing(workspace_with_slots):
+    """A slot entry whose per-repo worktree dir is gone — while the slot's
+    OTHER repos survive — fires slot_repo_worktree_missing.
+
+    This is the divergence the slot-level checks miss: slot_entry_orphan
+    only inspects the worktree-N/ top dir (still present here), and
+    slot_branch_mismatch skips repos whose path doesn't exist.
+    """
+    root = workspace_with_slots.config.root
+    _orphan_one_repo_worktree(root, "worktree-1", "repo-a")
+
+    result = doctor(workspace_with_slots)
+    findings = [f for f in result["issues"] if f["code"] == "slot_repo_worktree_missing"]
+    assert findings, "expected slot_repo_worktree_missing finding"
+    f = findings[0]
+    assert f["repo"] == "repo-a"
+    assert f["feature"] == "Y"
+    assert f["severity"] == "error"
+    assert f["auto_fixable"] is True
+    # The top-dir-based check must NOT fire — worktree-1/ still exists.
+    assert not [i for i in result["issues"] if i["code"] == "slot_entry_orphan"]
+
+
+def test_doctor_repairs_slot_repo_worktree_missing(workspace_with_slots):
+    """--fix recreates the missing per-repo worktree on the feature's branch."""
+    from canopy.git import repo as git
+    root = workspace_with_slots.config.root
+    _orphan_one_repo_worktree(root, "worktree-1", "repo-a")
+
+    result = doctor(workspace_with_slots, fix=True)
+
+    fixed = [r for r in result["fixed"] if r["code"] == "slot_repo_worktree_missing"]
+    assert fixed and fixed[0]["success"]
+    wt_repo_a = root / ".canopy/worktrees/worktree-1/repo-a"
+    assert (wt_repo_a / ".git").exists()
+    assert git.current_branch(wt_repo_a) == "Y"
+    # Re-running doctor is clean.
+    again = doctor(workspace_with_slots)
+    assert not [i for i in again["issues"] if i["code"] == "slot_repo_worktree_missing"]
+
+
+def test_doctor_slot_repo_worktree_missing_not_autofixable_when_branch_gone(
+    workspace_with_slots,
+):
+    """If the feature's branch is also gone, the worktree can't be recreated —
+    flag it but defer to branches_missing rather than offering a bad auto-fix."""
+    import json as _json
+    import subprocess
+    root = workspace_with_slots.config.root
+    # Declare Y in features.json so repos_for_feature keeps listing repo-a
+    # even after its branch is deleted (real features aren't branch-derived).
+    (root / ".canopy" / "features.json").write_text(_json.dumps({
+        "Y": {"repos": ["repo-a", "repo-b"], "status": "active"},
+    }))
+    _orphan_one_repo_worktree(root, "worktree-1", "repo-a")
+    # Delete branch Y in repo-a so recreation is impossible.
+    subprocess.run(["git", "branch", "-D", "Y"], cwd=root / "repo-a", check=True)
+
+    result = doctor(workspace_with_slots)
+    findings = [
+        f for f in result["issues"]
+        if f["code"] == "slot_repo_worktree_missing" and f["repo"] == "repo-a"
+    ]
+    assert findings
+    assert findings[0]["auto_fixable"] is False

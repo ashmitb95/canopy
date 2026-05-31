@@ -1,0 +1,43 @@
+name: Release (tag from __version__)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # needed to push the tag
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Read __version__
+        id: ver
+        run: |
+          V=$(python -c "import re,pathlib; print(re.search(r'__version__\s*=\s*\"([^\"]+)\"', pathlib.Path('src/canopy/__init__.py').read_text()).group(1))")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Will release v$V"
+
+      - name: Refuse if tag already exists
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${{ steps.ver.outputs.version }}" >/dev/null; then
+            echo "::error::Tag v${{ steps.ver.outputs.version }} already exists. Bump __version__ first."
+            exit 1
+          fi
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Tag and push
+        run: |
+          git tag "v${{ steps.ver.outputs.version }}"
+          git push origin "v${{ steps.ver.outputs.version }}"

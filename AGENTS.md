@@ -1,102 +1,228 @@
-# Canopy — Agent Guidelines
+# Canopy — Contributor Guide for AI Agents
 
-## For AI Agents Working on This Codebase
+This file is the "how to extend canopy without breaking module boundaries" guide.
+It is CLAUDE.md's sibling, not its replacement:
 
-### Before You Start
+- `CLAUDE.md` — what canopy is, architecture overview, key conventions, MCP tool list
+- `docs/concepts.md` — the four conceptual pillars (action framework, context contract, state machine, slot model, resume brief)
+- `docs/architecture.md` — formal module reference
 
-1. Read `CLAUDE.md` for architecture and conventions.
-2. Run `pytest tests/ -v` to verify the baseline (159 tests, ~2s).
+## Before You Start
 
-### Module Boundaries
+1. Read `CLAUDE.md`. It has the architecture diagram, slot model explanation, and all key conventions.
+2. Read `docs/concepts.md` if you need the vocabulary for the state machine or action framework.
+3. Run the test suite to confirm your baseline: `pytest tests/ -v` (857 tests, ~225s).
+4. If you are adding to the slot model or switch flow, read `actions/slots.py` and `actions/switch.py` first.
 
-**Do not break these boundaries:**
+## Module Boundaries
 
-- `git/repo.py` is the **only** file that calls `subprocess.run(["git", ...])`. If you need a new git operation, add it there.
-- `git/multi.py` calls `git/repo.py` functions across multiple repos. Cross-repo logic goes here.
-- `features/coordinator.py` manages feature lane lifecycle. It calls `git/multi.py` for the actual git work, and `git/repo.py` for worktree operations.
-- `workspace/workspace.py` holds the `Workspace` class. It reads git state via `git/repo.py` but does not do cross-repo coordination.
-- `workspace/context.py` detects where canopy is running from. It reads filesystem paths and calls `git/repo.py` for branch info.
-- `cli/main.py` is a thin layer that parses args and calls the modules above. Keep business logic out of the CLI.
-- `mcp/server.py` wraps the same modules as the CLI. Every tool calls the same functions — the MCP server should never have its own logic.
-- `mcp/client.py` is the MCP client — it spawns external MCP servers and calls their tools. All external integrations go through this.
-- `integrations/linear.py` fetches Linear issue data via `mcp/client.py`. It never calls the Linear API directly.
-- `integrations/github.py` finds PRs for a branch and fetches unresolved review comments via `mcp/client.py`. It never calls the GitHub API directly.
-- `integrations/precommit.py` detects and runs pre-commit hooks. It checks for `.pre-commit-config.yaml` (framework) and `.git/hooks/pre-commit` (raw git hooks). It does not go through MCP — it runs hooks locally via subprocess.
+These are hard rules. Do not break them.
 
-### Adding a New CLI Command
+- **`git/repo.py` is the only file that calls `subprocess.run(["git", ...])`.**
+  New git operations belong here. Everything else calls functions from this module.
 
-1. Add the command function in `cli/main.py` following the `cmd_*` pattern.
-2. Add argparse config in `main()`.
-3. Always support `--json` output via `_print_json()`.
-4. The human-readable output should be concise, indented with 2 spaces, and use `─` for separators.
-5. If the command is useful for AI agents, add a matching tool in `mcp/server.py`.
+- **`git/multi.py` handles cross-repo git operations.** It calls `git/repo.py` functions;
+  it does not shell out to git directly.
 
-### Adding a New MCP Tool
+- **`mcp/server.py` and `cli/main.py` are thin wrappers.**
+  Business logic lives in `actions/`, `features/coordinator.py`, `git/multi.py`,
+  and `workspace/`. Neither the MCP server nor the CLI should own logic.
 
-1. Add a `@mcp.tool()` function in `mcp/server.py`.
-2. Use `_get_workspace()` to load the workspace.
-3. Call existing module functions — don't put logic in the server.
-4. Return dicts/lists (FastMCP handles JSON serialization).
-5. Write clear docstrings — they become the tool descriptions AI agents see.
+- **All actions live in `actions/`.** This is the most-modified directory. Each action
+  module owns one concern: `switch.py` owns slot focus, `slots.py` owns slot state
+  reads/writes, `drift.py` owns drift detection, `resume.py` owns the resume brief, etc.
 
-### Adding a New Git Operation
+- **Actions raise `BlockerError` for precondition failures.**
+  Shape: `BlockerError(code, what, expected, actual, fix_actions, details)`.
+  CLI renders via `cli/render.py`. MCP returns `to_dict()`. Same shape, two consumers.
+
+- **Universal aliases — every read tool accepts multiple forms.**
+  Feature name, Linear ID, `<repo>#<n>`, PR URL, `<repo>:<branch>`, or slot id
+  (`worktree-N` → slot's current occupant). Always resolve via
+  `actions/aliases.py:resolve_feature`. Never reimplement alias resolution inline.
+
+- **Per-repo branches map — never assume branch == feature name.**
+  Use `lane.branch_for(repo)` or `repos_for_feature(workspace, feature)`.
+  `FeatureLane.repos` alone does not give you branch names for legacy features.
+
+- **All integrations go through `mcp/client.py` or the `gh` CLI fallback.**
+  Integration modules in `integrations/` never call external APIs directly.
+  `integrations/github.py` falls back to `gh api` / `gh pr` when no MCP server
+  is configured. If neither is available, raise `BlockerError(code='github_not_configured')`.
+
+- **`integrations/precommit.py` is the one exception to the MCP-only rule.**
+  It runs local hooks via subprocess. This is intentional — hooks run locally.
+
+## State Files
+
+All state is under `.canopy/state/`. OAuth tokens at `~/.canopy/mcp-tokens/`.
+
+| File | Owner | Notes |
+|---|---|---|
+| `heads.json` | `git/hooks.py` + post-checkout hook | Written by hook; read by `drift.py`, `historian.py` |
+| `slots.json` | `actions/slots.py` | Canonical + warm slot occupancy, `last_touched` LRU, `in_flight` marker |
+| `preflight.json` | `actions/preflight_state.py` | Records preflight result per feature |
+| `visits.json` | `actions/last_visit.py` | Per-feature `last_visit` / `previous_visit` ISO timestamps |
+| `thread_resolutions.json` | `actions/thread_resolutions.py` | Resolved GitHub review threads |
+| `bot_resolutions.json` | `actions/bot_resolutions.py` | Bot-comment resolutions addressed via `commit --address` |
+
+All state writes use atomic temp+rename (`tmp.replace(path)`) to prevent corruption
+from concurrent agents. See `actions/slots.py` for the canonical pattern.
+
+## Adding a New Action
+
+This is the most common change.
+
+1. Create `src/canopy/actions/<name>.py`. Raise `BlockerError` for preconditions.
+   Use existing fixtures and patterns; don't re-invent error shapes.
+
+2. Expose via CLI in `cli/main.py`:
+   - Add `cmd_<name>(args: argparse.Namespace) -> None`
+   - Add a subparser in `main()`
+   - Dispatch via the `commands` dict
+   - Support `--json` via `_print_json()`
+
+3. Expose via MCP in `mcp/server.py`:
+   - Add `@mcp.tool()` wrapper that calls the action function
+   - Write a clear docstring — it becomes the tool description agents see
+
+4. Add tests in `tests/test_<name>.py` using the `workspace_with_feature` fixture
+   (or another fixture from `tests/conftest.py`).
+
+5. If the action is user-facing:
+   - Update `docs/commands.md`
+   - Update `docs/mcp.md`
+   - Update the architecture box and MCP-tool-group listing in `CLAUDE.md`
+
+6. If agents need to know when to prefer the new tool, update
+   `~/.claude/skills/using-canopy/SKILL.md` and
+   `src/canopy/agent_setup/skills/using-canopy/SKILL.md`.
+
+## Adding a New CLI Command Only
+
+When a new subcommand wraps existing actions without needing a new action module:
+
+1. Add `cmd_<name>(args)` in `cli/main.py` calling existing action functions.
+2. Add subparser in `main()`, dispatch in the `commands` dict.
+3. Support `--json` via `_print_json()`.
+4. Human-readable output: 2-space indent, `─` for separators.
+5. Update `docs/commands.md`.
+
+## Adding a New MCP Tool Only
+
+When the action already exists and you just need to expose it:
+
+1. Add `@mcp.tool()` in `mcp/server.py`. Call the existing action function directly.
+2. Return dicts/lists (FastMCP handles JSON serialization).
+3. Write a docstring — it is the tool description.
+4. Update `docs/mcp.md` and the tool-group listing in `CLAUDE.md`.
+
+## Adding a New Git Operation
 
 1. Add the function to `git/repo.py` using `_run()` or `_run_ok()`.
-2. Write a test in `tests/test_repo.py` or `tests/test_new_commands.py`.
-3. Be careful with `_run_ok()` — it returns empty string on failure, which is correct for query operations but dangerous for writes.
+   Prefer `_run()` (raises on failure) for write operations.
+   `_run_ok()` (returns empty string on failure) is only safe for reads.
+2. Write a test in `tests/test_repo.py`.
+3. Do not call `subprocess.run(["git", ...])` anywhere else.
 
-### Testing Conventions
+## Adding a New State File
 
-- All tests use real temporary Git repos, not mocks. This catches real git behavior differences.
-- Fixtures are in `tests/conftest.py`. Reuse them.
-- Test file naming: `test_<module>.py` or `test_<feature_area>.py`.
-- Run tests from the `canopy/` directory: `pytest tests/ -v`.
-- Worktree tests should clean up with `git worktree remove` when done.
+1. Create `actions/<name>.py` with a module docstring naming the path
+   (e.g., `State file: .canopy/state/<name>.json`).
+2. Use the atomic temp+rename pattern from `actions/slots.py` or
+   `actions/thread_resolutions.py`:
+   ```python
+   tmp = path.with_suffix(".tmp")
+   tmp.write_text(json.dumps(data))
+   tmp.replace(path)
+   ```
+3. Update the state-files table in this file.
+4. Update the state-files line in `CLAUDE.md`.
+5. Update the state-files table in `docs/architecture.md` and
+   the state-files section in `docs/workspace.md`.
 
-### JSON Output Contract
+## Adding a New Integration
 
-Every `--json` command and MCP tool returns structured data. Key shapes:
-
-- `workspace_status` → `WorkspaceStatus` (see `workspace.py:Workspace.to_dict()`)
-- `feature_list` → `list[FeatureLane.to_dict()]`
-- `feature_status` → `FeatureLane.to_dict()` (includes `repo_states` with `worktree_path`)
-- `feature_diff` → dict with `repos`, `summary`, `type_overlaps`
-- `workspace_context` → `CanopyContext.to_dict()` (context_type, feature, repo_names, repo_paths)
-- `worktree_info` → `{features: {name: {repos: {name: {path, branch, dirty, ahead, behind}}}}, repos: {name: {main_path, worktrees: [...]}}}`
-- `worktree_create` → `FeatureLane.to_dict()` + `worktree_paths` (optional `linear_issue`, `linear_title`, `linear_url`)
-- `review_status` → `{feature, repos: [{name, branch, pr: {number, url, state, title}, has_unresolved_comments}], precommit: {available, passed, errors}}`
-- `review_comments` → `{feature, repos: [{name, pr_number, comments: [{path, line, body, author, resolved}]}]}`
-- `review_prep` → `{feature, ready, blockers: [str], repos: [{name, merge_readiness, pr_status, unresolved_comment_count, precommit_passed}]}`
-
-### Integration Conventions
-
-- **All integrations go through MCP.** Canopy never calls external APIs directly. It spawns the relevant MCP server via `mcp/client.py` and calls tools.
-- **MCP server configs live in `.canopy/mcps.json`.** Each key is a server name (e.g. `"linear"`) with `command`, `args`, and `env`.
-- **Graceful degradation.** If an MCP server isn't configured, the feature still works — just without enrichment (e.g. Linear issue title won't be fetched, but the issue ID is still stored).
-
-### Adding a New Integration
-
-1. Add a module in `integrations/` (e.g. `integrations/github.py`).
-2. Use `mcp.client.get_mcp_config()` to check if the server is configured.
-3. Use `mcp.client.call_tool()` to call the server's tools.
-4. Handle `McpClientError` gracefully — never fail the whole operation because an integration is down.
-5. Store any linked metadata in `features.json` via `FeatureLane` fields.
+1. Add a module in `integrations/`.
+2. Use `mcp/client.py` to call the MCP server, or `gh` CLI as fallback.
+3. Check for server presence via `mcp.client.get_mcp_config()` before calling.
+4. Handle `McpClientError` gracefully — never fail the whole operation because
+   an integration is unavailable.
+5. If the integration is Linear or GitHub, link metadata into `features.json`
+   via `FeatureLane` fields rather than a separate sidecar file.
 6. Write tests that mock the MCP call but test the data flow end-to-end.
 
-### IDE Launcher Conventions
+## Adding a New Bundled Skill
 
-- `canopy code/cursor` generates `.code-workspace` files in `.canopy/` for multi-root workspaces.
-- `canopy fork` opens each repo separately (Fork doesn't support multi-root).
-- On macOS, `fork` CLI is preferred; fallback is `open -a Fork`.
-- These commands use `FeatureCoordinator.resolve_paths()` to find the right directories.
+1. Create `src/canopy/agent_setup/skills/<name>/SKILL.md`.
+2. Default skills (always installed on `canopy setup-agent`) must be declared
+   in `agent_setup/__init__.py`.
+3. Opt-in skills install via `canopy setup-agent --skill <name>`.
+4. Document the new skill in `docs/agents.md` under the skills section.
+5. Foreign skills at the same install path are not overwritten without `--reinstall`.
 
-### Context Detection
+## Adding a New Augment Key
 
-`workspace/context.py` detects four context types based on cwd:
+1. Update `src/canopy/actions/augments.py`.
+   The resolver is intentionally lenient — unknown keys are silently preserved,
+   so adding a new key is backward-compatible.
+2. Consume the new key in whichever action or integration needs it via
+   `repo_augments(workspace, repo_name).get("<key>")`.
+3. Document the key in the recognized-keys table in
+   `src/canopy/agent_setup/skills/augment-canopy/SKILL.md`.
+4. Add a `canopy doctor` check if misconfiguration has a clear error form.
 
-1. `feature_dir` — inside `.canopy/worktrees/<feature>/` (all repos in scope)
-2. `repo_worktree` — inside `.canopy/worktrees/<feature>/<repo>/` (single repo)
+## Testing Conventions
+
+- All tests use real temporary Git repos, not mocks. This catches real git behavior.
+- Fixtures are in `tests/conftest.py`. Key fixtures:
+  - `workspace_dir` — bare workspace with `api/` and `ui/` repos on main
+  - `workspace_with_feature` — workspace with `auth-flow` branches + commits in both repos
+  - `canopy_toml` — workspace with a canopy.toml already written
+- Test file naming: `test_<module>.py` or `test_<feature_area>.py`.
+- Worktree tests must clean up with `git worktree remove` when done.
+- Run: `pytest tests/ -v` from the `canopy/` directory.
+
+## JSON Output Contract
+
+Every `--json` command and MCP tool returns structured data. The shape is the contract
+and is defined in each action's docstring. CLI and MCP return identical bytes.
+
+Key shapes:
+
+| Tool / command | Root shape |
+|---|---|
+| `workspace_status` | `WorkspaceStatus` (see `Workspace.to_dict()`) |
+| `feature_list` | `list[FeatureLane.to_dict()]` |
+| `feature_status` | `FeatureLane.to_dict()` with `repo_states` |
+| `feature_state` | 9-state machine result + `summary` + `next_actions` |
+| `feature_resume` | `version: 1`, `since_last_visit`, `current_state`, `intent_hints` |
+| `slots(rich=True)` | `canonical` + per-slot enriched dashboard payload |
+| `triage` | priority-tiered cross-repo PR enumeration |
+
+## Context Detection
+
+`workspace/context.py` distinguishes four context types based on cwd:
+
+1. `feature_dir` — inside `.canopy/worktrees/worktree-N/` (slot root; all repos in scope)
+2. `repo_worktree` — inside `.canopy/worktrees/worktree-N/<repo>/` (single repo)
 3. `repo` — inside a normal workspace repo (feature = current branch if non-default)
 4. `workspace_root` — at the canopy.toml level (all repos in scope)
 
-`canopy stage` uses this to know which repos to commit to without explicit arguments.
+Used by `canopy stage` and other context-sensitive commands.
+
+## Version Handshake
+
+When shipping a milestone:
+
+1. Bump `__version__` in `src/canopy/__init__.py`.
+2. Add a section to `CHANGELOG.md`.
+3. Doctor's `cli_stale` / `mcp_stale` checks compare against this version —
+   the handshake is only useful if the number actually moves.
+
+## Hooks Safety
+
+`git/templates/post-checkout.py` uses `fcntl.flock` and atomic rename so concurrent
+fires across repos in the same workspace don't race. It chains any pre-existing user
+hooks and is installed by `canopy init` (or `canopy hooks install`). Worktrees inherit
+hooks via the git `commondir` mechanism.

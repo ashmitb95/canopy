@@ -1,7 +1,7 @@
 # Provider Injection — Issue Providers
 
-> **Status:** v1 design reference. Code lands in M5 (see [`docs/plans/INDEX.md`](../plans/INDEX.md)).
-> **Plan:** [`docs/plans/archive/providers-arch.md`](../plans/archive/providers-arch.md) (the historical spec; this doc is the live artifact).
+> **Status:** Implemented in M5 (Linear + GitHub Issues providers; see CHANGELOG.md).
+> **Historical design:** The M0 design doc is archived. This doc is the live artifact.
 > **Scope:** issue providers only in v1. Other use cases named in §8 but not specified.
 
 Canopy's read tools today are tightly coupled to specific external services — `linear_get_issue`, `linear_my_issues`, etc. all call directly into [`src/canopy/integrations/linear.py`](../../src/canopy/integrations/linear.py). That works while we use exactly those services, but the moment we want GitHub Issues (or JIRA, or anything else) instead of Linear, every action that touches issue context has to branch on which integration to call. That branching ages badly and bleeds Linear-shaped assumptions into the contract.
@@ -357,7 +357,7 @@ class GitHubIssuesProvider:
 
 The following could adopt the same provider-injection shape if implementation drops in seamlessly. **None are scheduled here.** Effort cap on retrofitting any of them: < 5% of the M5 implementation effort. If retrofitting requires non-trivial refactor, leave the existing handling alone.
 
-- **Bot-author detection** — currently a hardcoded `author_type == "Bot"` substring check. Could become a `BotAuthorDetector` provider with per-team rules (CodeRabbit-style only, JIRA-bot, custom regex, etc.). M3 (bot-tracking) introduces `review_bots` augment as the v1 mechanism; provider-ifying is a future option.
+- **Bot-author detection** — M3 (bot-tracking, shipped) introduced `review_bots` augment in canopy.toml for per-team configuration. `author_type == "Bot"` checks are already provider-aware via GitHub Issues. Future: could extend to a full `BotAuthorDetector` provider with custom rules (regex, allowlist, etc.), but `review_bots` meets current needs.
 - **CI providers** (GitHub Actions, CircleCI, Buildkite) — deferred to the [ci-status plan](../plans/ci-status.md). Same shape would apply: a `CIProvider` protocol with `get_check_runs(pr)` etc. Don't build until that plan exists.
 - **Code-review platforms** (GitHub, GitLab, Bitbucket) — `gh` fallback works today via [`integrations/github.py`](../../src/canopy/integrations/github.py). A `ReviewPlatformProvider` could unify, but the existing gh-or-MCP pattern handles current needs.
 - **IDE workspace formats** (VS Code `.code-workspace`, JetBrains `.idea/`, Cursor) — [worktree-bootstrap plan](../plans/worktree-bootstrap.md) defers this. Could become an `IDEWorkspaceWriter` provider.

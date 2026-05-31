@@ -47,7 +47,7 @@ augments = { preflight_cmd = "uv run pytest tests/fast" }   # api-only override
 |---|---|---|---|
 | `preflight_cmd` | string | `canopy preflight` (and `review_prep` path inside `coordinator.py`) | Runs via `sh -c` so pipes / `&&` chains work |
 | `test_cmd` | string | future `canopy test` (not v1) | Schema-reserved; safe to set |
-| `review_bots` | list[string] | M3 bot-comment tracking (when shipped) | Workspace-level only; per-repo overrides ignored for this key |
+| `review_bots` | list[string] | M3 bot-comment tracking | Workspace-level only; per-repo overrides ignored for this key |
 | `auto_resolve_threads_on_address` | bool | `canopy commit --address <id>` | When true, `canopy commit --address <id>` auto-resolves the corresponding GH review thread after push. `--no-resolve-thread` overrides. Default: false. |
 
 Unknown keys are silently preserved by the parser — future augments don't require schema migration.
@@ -86,7 +86,7 @@ Agent should:
    > - `augments.preflight_cmd = "ruff check . && pyright"`
    > - `augments.review_bots = ["coderabbit", "korbit"]`
    >
-   > The next `canopy preflight` will run the new command. Bot-comment tracking will pick up the `review_bots` list once M3 ships.
+   > The next `canopy preflight` will run the new command. Bot-comment tracking uses the `review_bots` list.
 
 ## Per-repo override example
 
@@ -111,6 +111,6 @@ Atomic write, confirm:
 
 ## Don't
 
-- Don't add validation logic here — the parser is intentionally lenient. Validation (typo detection, unknown-key warnings) lives in `canopy doctor` (deferred).
+- Don't add validation logic here — the parser is intentionally lenient. Validation (typo detection, unknown-key warnings) lives in `canopy doctor`.
 - Don't introduce nested-key syntax via `canopy config augments.preflight_cmd` — that's a future refactor of `cmd_config`. v1 writes TOML directly.
 - Don't alter `[issue_provider]` or `[[repos]]` structural fields from this skill — those are different concerns.

@@ -8,8 +8,8 @@
 
 <p align="center">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-436%20passing-brightgreen?style=flat-square">
-  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-43-purple?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-857%20passing-brightgreen?style=flat-square">
+  <img alt="MCP Tools" src="https://img.shields.io/badge/MCP%20tools-67-purple?style=flat-square">
   <a href="https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy"><img alt="VSCode Extension" src="https://img.shields.io/badge/VSCode-extension-blue?style=flat-square&logo=visualstudiocode"></a>
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-gray?style=flat-square">
 </p>
@@ -25,28 +25,31 @@ If you work across multiple repos, you've felt this:
 - Your AI agent shells `cd /wrong/repo && command` because shell state doesn't persist between its tool calls.
 - PR review comments pile up across repos and the agent burns context re-deriving "is this still actionable?"
 
-Canopy was built around one constraint: an AI agent has to be able to drive multi-repo work safely — typed inputs, structured outputs, recoverable errors. Get that right, and you can hand the agent real authority over feature lifecycles. The CLI you get for free, because the same primitives work for human hands. The detail table is below — first, the verb that does the lifting.
+Canopy was built around one constraint: an AI agent has to be able to drive multi-repo work safely — typed inputs, structured outputs, recoverable errors. Get that right, and you can hand the agent real authority over feature lifecycles. The CLI you get for free, because the same primitives work for human hands. The detail table is below — first, the verbs that do the lifting.
 
 <p align="center">
   <img src="docs/cli-switch.svg" alt="canopy switch sin-7-empty-state" width="720">
 </p>
 
-**`canopy switch <feature>`** promotes a feature into the canonical slot — checks it out in your main directory across every repo it touches, parks the previously-focused feature to a warm worktree, preserves dirty work via stash. Multi-repo focus, one verb, no `cd`.
+**`canopy switch <feature>`** promotes a feature into the canonical slot — checks it out in your main directory across every repo it touches, parks the previously-focused feature to a warm slot, preserves dirty work via stash. Multi-repo focus, one verb, no `cd`.
 
-Everything else — preflight, status, triage, review, commit, push — is in service of that switch. Each command has a typed `mcp__canopy__*` equivalent returning the same JSON. **One primitive at the center, two surfaces.** The CLI is the surface humans like. The MCP server is the surface that makes canopy load-bearing.
+**`canopy resume <alias>`** is the session-start primitive. Hand it a Linear ID, feature name, PR URL, or `worktree-N` slot id and canopy does the rest: resolves the alias, switches to canonical if needed, refreshes GitHub + Linear state, returns a structured brief of what changed since you were last on this feature, plus `intent_hints` for the most likely next actions. One call gets you (or your agent) back in business.
+
+Everything else — preflight, status, triage, review, commit, push — is in service of those two. Each command has a typed `mcp__canopy__*` equivalent returning the same JSON. **Two primitives at the center, two surfaces.** The CLI is the surface humans like. The MCP server is the surface that makes canopy load-bearing.
 
 ## Why it's load-bearing
 
-Multi-repo work breaks in specific, predictable ways. `canopy switch` and its accessories close each:
+Multi-repo work breaks in specific, predictable ways. Canopy closes each:
 
 | Failure mode | Canopy's fix |
 |---|---|
 | You switch one repo's branch, forget the other; next push goes to the wrong place. | `canopy switch <feature>` is atomic across every participating repo. Drift in the meantime is detected in real time by a post-checkout hook and surfaced via `canopy drift` / `canopy state`. |
-| You're juggling 2–3 features at once; switching loses your in-progress work or buries it in a stash you forget. | `canopy switch` runs in **active rotation** by default — the previously-focused feature evacuates to a warm worktree (dirty work follows via stash → pop). Switching back is instant. |
-| You start using `git worktree add` to keep features parallel. By feature 4 you have a scatter of `~/work/auth-feature-api/` / `~/scratch/api-newauth/` dirs with no naming convention. Cleanup means remembering paths to `git worktree remove`, then `git branch -D` per repo. | Canopy enforces `.canopy/worktrees/<feature>/<repo>/` — predictable layout, one place to look. `canopy list` shows every feature with its worktree paths. `canopy done <feature>` removes every worktree and deletes every branch across all repos in one verb. |
-| You're on `dev` in main with two warm feature worktrees parked alongside. You want to commit, run preflight, or push on a feature without `cd`-ing into its worktree directory. Raw git makes you switch your shell's `cwd` first. | `canopy commit --feature <X>` / `canopy preflight --feature <X>` / `canopy push --feature <X>` operate against the warm worktree directly — your `cwd` doesn't move. Or `canopy switch <X>` to promote the warm feature into the canonical slot first (dev evacuates to its own worktree, dirty work follows via stash → pop). |
+| You're juggling 2–3 features at once; switching loses your in-progress work or buries it in a stash you forget. | `canopy switch` runs in **active rotation** by default — the previously-focused feature evacuates to a warm slot (dirty work follows via stash → pop). Switching back is instant. |
+| You start using `git worktree add` to keep features parallel. By feature 4 you have a scatter of directories with no naming convention. Cleanup means remembering paths to `git worktree remove`, then `git branch -D` per repo. | Canopy uses generic numbered slots: `.canopy/worktrees/worktree-N/<repo>/`. Slot identity is stable across feature swaps; feature occupancy is transient. `canopy list` shows every feature and its slot. `canopy done <feature>` clears every worktree and branch across all repos in one verb. |
+| You're on `dev` in main with warm feature slots parked alongside. You want to commit, run preflight, or push on a feature without `cd`-ing into its slot directory. | `canopy commit --feature <X>` / `canopy preflight --feature <X>` / `canopy push --feature <X>` operate against the warm slot directly — your `cwd` doesn't move. Or `canopy switch <X>` to promote the warm feature into the canonical slot first. |
+| You return to a feature after a day away and spend five minutes re-reading PRs, re-checking CI, re-classifying which threads are still open. | `canopy resume <alias>` compares current GitHub + Linear state against a last-visit anchor (`.canopy/state/visits.json`) and returns a structured brief: new commits, freshly opened threads, CI changes. Session-start in one call. |
 | Your AI agent shells `cd /wrong/repo && command` because shell state doesn't persist between tool calls. | Every canopy tool takes `feature` / `repo` as parameters; path resolution lives inside canopy. The agent has no surface area for the mistake. |
-| Your agent re-derives PR state on every run because nothing it learned in the previous turn persists. It re-parses `gh pr list`, re-walks `git status` per repo, re-classifies threads — burning context on bookkeeping. | `mcp__canopy__triage` and `mcp__canopy__feature_state` return cached structured data: PR numbers, review state, dirty counts, per-repo paths. Agent reads, doesn't re-derive. Same JSON across runs. |
+| Your agent re-derives PR state on every run because nothing it learned in the previous turn persists. | `mcp__canopy__triage` and `mcp__canopy__feature_state` return cached structured data: PR numbers, review state, dirty counts, per-repo paths. Agent reads, doesn't re-derive. Same JSON across runs. |
 | Drift happens silently *between* the agent's tool calls — it ran `git checkout X` in one repo, the next call assumes alignment, things go sideways. | Per-repo post-checkout hooks write `.canopy/state/heads.json` atomically (fcntl-locked). `mcp__canopy__drift` reads cached state in <50ms. The agent sees the misalignment that happened between calls — even when it didn't cause it. |
 | You and your agent see different views of workspace state. You're looking at `canopy status`; the agent's reading some other JSON it cached three turns ago. Decisions diverge. | The CLI and MCP server are thin wrappers over the same actions. `canopy state X` and `mcp__canopy__feature_state(feature='X')` return identical bytes. Single source of truth, two surfaces. |
 | PR review comments pile up across repos; the agent burns context re-deriving "is this still actionable?". | `canopy review <feature>` returns threads pre-classified as `actionable` vs `likely_resolved`. The temporal classifier filters out comments addressed in subsequent commits. |
@@ -57,13 +60,13 @@ Multi-repo work breaks in specific, predictable ways. `canopy switch` and its ac
 
 ## The agent contract
 
-Other multi-repo helpers — raw `git worktree add`, monorepo-specific bash wrappers, per-team scripts that wrap them — are built for humans at a terminal. Agents can't use them safely: shell state evaporates between tool calls, paths get constructed wrong, errors come back as stderr text the agent has to interpret.
+Other multi-repo helpers — raw `git worktree add`, monorepo-specific bash wrappers, per-team scripts — are built for humans at a terminal. Agents can't use them safely: shell state evaporates between tool calls, paths get constructed wrong, errors come back as stderr text the agent has to interpret.
 
-Canopy exposes **43 typed MCP tools**. Each takes `feature` / `repo` as parameters, returns JSON, fails with a structured `BlockerError(code, what, expected, actual, fix_actions)`. The agent never specifies a path, never parses stderr, never re-derives state.
+Canopy exposes **67 typed MCP tools**. Each takes `feature` / `repo` as parameters, returns JSON, fails with a structured `BlockerError(code, what, expected, actual, fix_actions)`. The agent never specifies a path, never parses stderr, never re-derives state.
 
 ```python
 # Brittle — agent constructs the path, parses stderr, hopes for the best:
-bash("cd /Users/me/projects/canopy-test/.canopy/worktrees/sin-7/test-api && git status")
+bash("cd /Users/me/projects/canopy-test/.canopy/worktrees/worktree-1/test-api && git status")
 
 # Path-safe — canopy owns resolution and returns structured data:
 mcp__canopy__feature_status(feature="sin-7-empty-state")
@@ -93,6 +96,7 @@ If you don't have pipx: `brew install pipx && pipx ensurepath`.
 ## What you do every day
 
 ```bash
+canopy resume <alias>       # session start — switch if needed + brief of what changed
 canopy switch <feature>     # focus — promote to the canonical slot
 canopy status               # where am I across repos?
 canopy preflight            # run per-repo hooks before committing
@@ -112,15 +116,39 @@ Every CLI command has an `mcp__canopy__*` equivalent for the agent side, returni
 
 `canopy switch` operates in two modes:
 
-- **Active rotation (default).** The previously-focused feature evacuates to a warm worktree at `.canopy/worktrees/<feature>/<repo>/`, with stash → checkout → pop. Switching back is one command and instant.
+- **Active rotation (default).** The previously-focused feature evacuates to a numbered warm slot at `.canopy/worktrees/worktree-N/<repo>/`, with stash → checkout → pop. Slot identity (`worktree-1`, `worktree-2`, ...) is stable across feature swaps — the slot keeps its id when a new feature moves in. Switching back is one command and instant.
 - **Wind-down (`--release-current`).** The previously-focused feature goes cold (just the branch + a feature-tagged stash for any dirty work). Use when you're parking it or done with it.
 
 ```bash
 canopy switch sin-7-empty-state                       # active rotation
 canopy switch sin-7-empty-state --release-current     # wind-down
+canopy switch sin-7-empty-state --to-slot worktree-2  # target a specific slot
+canopy switch sin-7-empty-state --evict-to worktree-1 # evict current to a specific slot
 ```
 
-`max_worktrees` (default 2) caps how many warm worktrees co-exist alongside the canonical slot. When the cap fires, `switch` returns a structured `BlockerError` with explicit fix actions — evict LRU to cold, switch in wind-down mode, finish a feature, or raise the cap. No silent eviction.
+`slots` (default 2) in `canopy.toml` caps how many warm slots co-exist alongside the canonical slot. When the cap fires, `switch` returns a structured `BlockerError` with explicit fix actions — evict LRU to cold, switch in wind-down mode, finish a feature, or raise the cap. No silent eviction. The old `max_worktrees` key now raises a `ConfigError` pointing at `canopy migrate-slots`.
+
+Beyond switch, the slot primitives are available directly:
+
+```bash
+canopy slot load <feature> --slot worktree-2    # load a feature into a specific slot
+canopy slot clear worktree-1                    # vacate a slot (stash + remove worktree)
+canopy slot swap worktree-1 worktree-2          # swap two slots' occupants
+```
+
+## Closing review threads
+
+Once you've addressed a comment in code, close the loop without leaving GitHub:
+
+```bash
+canopy resolve <thread_id>                                   # resolve + log
+canopy reply <thread_id> --body "Done in abc1234"           # reply (optionally with --resolve)
+canopy commit -m "fix: handle null" --address <comment_id> --resolve-thread
+```
+
+The `--address` flag records the bot comment as resolved against the commit SHA. `--resolve-thread` marks the corresponding GitHub review thread closed. Set `auto_resolve_threads_on_address = true` in `[augments]` to make `--resolve-thread` the default whenever `--address` is used.
+
+Resolved threads are logged to `.canopy/state/thread_resolutions.json` and surfaced in the `canopy resume` brief so nothing slips through.
 
 ## Triage and review
 
@@ -132,7 +160,7 @@ After you switch, canopy tells you what's worth your attention:
 
 `canopy triage` enumerates active features by review-state priority. `canopy review <feature>` shows actionable PR threads only.
 
-`canopy state <feature>` returns one of 8 states (`drifted`, `needs_work`, `in_progress`, `ready_to_commit`, `ready_to_push`, `awaiting_review`, `approved`, `no_prs`) plus a `next_actions` array. The agent reads the array; you read the colored output. Same JSON.
+`canopy state <feature>` returns one of 9 states (`drifted`, `needs_work`, `awaiting_bot_resolution`, `in_progress`, `ready_to_commit`, `ready_to_push`, `awaiting_review`, `approved`, `no_prs`) plus a `next_actions` array. The agent reads the array; you read the colored output. Same JSON.
 
 <p align="center">
   <img src="docs/cli-state.svg" alt="canopy state" width="720">
@@ -148,11 +176,13 @@ After you switch, canopy tells you what's worth your attention:
 
 ## For your AI agent
 
-Canopy ships with a [`using-canopy`](src/canopy/agent_setup/skill.md) skill (installed by `canopy init`) and an MCP server with 43 tools. The skill teaches the agent: *use canopy MCP for path-safe multi-repo ops*. After install, an agent will:
+Canopy ships with a [`using-canopy`](src/canopy/agent_setup/skills/using-canopy/SKILL.md) skill (installed by `canopy init`) and an MCP server with 67 tools. The skill teaches the agent: *use canopy MCP for path-safe multi-repo ops*. After install, an agent will:
 
+- Call `mcp__canopy__feature_resume(alias='SIN-42')` at session start to get a brief of what changed and the likeliest next actions — no manual re-derivation.
 - Call `mcp__canopy__triage` instead of parsing `gh pr list` output across repos. Each result carries `is_canonical` + `physical_state` + per-repo `path` so the agent knows whether to switch first or just operate.
-- Call `mcp__canopy__switch(feature='SIN-42')` instead of `cd repo && git checkout` per repo. The previously-focused feature evacuates to a warm worktree, preserving work-in-progress.
+- Call `mcp__canopy__switch(feature='SIN-42')` instead of `cd repo && git checkout` per repo. The previously-focused feature evacuates to a warm slot, preserving work-in-progress.
 - Call `mcp__canopy__run(repo='backend', command='pytest tests/')` instead of `cd /path && pytest`.
+- Call `mcp__canopy__resolve_thread(thread_id='...')` or `mcp__canopy__reply_to_thread(...)` to close review threads without leaving the agent loop.
 - Read `mcp__canopy__feature_state(feature).next_actions` to know what to do next.
 
 Linear MCP works via OAuth (browser flow once, no API key). GitHub works via `gh` CLI fallback when MCP isn't configured. See [docs/agents.md](docs/agents.md) for the full integration story.
@@ -163,12 +193,13 @@ Same operations are also available via a [VSCode extension](https://marketplace.
 
 ## Docs
 
-- [Concepts](docs/concepts.md) — the action framework, agent context contract, 8-state machine
+- [Concepts](docs/concepts.md) — the action framework, agent context contract, 9-state machine
 - [Agents](docs/agents.md) — skill, `setup-agent`, integration recipes
 - [Commands](docs/commands.md) — full CLI reference, organized by workflow stage
 - [MCP](docs/mcp.md) — server tool list, client transports (stdio + HTTP/OAuth), gh fallback
 - [Workspace](docs/workspace.md) — `canopy.toml`, `features.json`, state files, mcp.json
 - [Architecture](docs/architecture.md) — module boundaries and design rules
+- [Architecture / Providers](docs/architecture/providers.md) — provider injection and transport layer
 
 ## Develop
 
@@ -176,7 +207,7 @@ Same operations are also available via a [VSCode extension](https://marketplace.
 git clone https://github.com/ashmitb95/canopy.git ~/projects/canopy
 cd ~/projects/canopy
 pip install -e ".[dev]"
-pytest tests/ -v             # 436 tests, ~80s, all use real temporary Git repos
+pytest tests/ -v             # 857 tests, ~225s, all use real temporary Git repos
 ```
 
 ## License

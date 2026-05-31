@@ -6,11 +6,10 @@ threads into actionable / likely_resolved / resolved so the agent's
 context budget goes to comprehension, not to figuring out which feedback
 is current.
 
-Validated by the user against four real PRs (DOC-3008, DOC-3010,
-DOC-3029, DOC-2827) — every comment classified correctly using only
-timestamp + path matching, no NLP. Bot threads are NOT filtered by
-author here: a ``claude[bot]`` thread may carry the only actionable
-feedback, and the temporal heuristic handles staleness regardless.
+Uses timestamp + path matching only — no NLP. Bot threads are NOT
+filtered by author here: a ``claude[bot]`` thread may carry the only
+actionable feedback, and the temporal heuristic handles staleness
+regardless.
 """
 from __future__ import annotations
 

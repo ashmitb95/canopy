@@ -568,8 +568,8 @@ def github_get_pr(alias: str) -> dict:
     """Fetch PR data per repo for an alias.
 
     Accepts:
-      - Feature alias (e.g. 'DOC-3029') -> all PRs in the lane
-      - <repo>#<pr_number> (e.g. 'docsum-api#1287') -> specific PR
+      - Feature alias (e.g. 'TEAM-101') -> all PRs in the lane
+      - <repo>#<pr_number> (e.g. 'api#142') -> specific PR
       - GitHub PR URL -> specific PR
     """
     from ..actions.reads import github_get_pr as _impl

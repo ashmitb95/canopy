@@ -7,9 +7,9 @@ raises a ``BlockerError`` so any action that has alignment as a precondition
 can use the same primitive.
 
 v1 assumes ``expected_branch == feature_name`` per repo. Per-repo branch
-overrides (e.g., ``doc-3010-UI-fixes`` in api vs ``DOC-3010-UI-fixes-2``
-in ui) will be added when the feature lane schema gains per-repo branch
-mapping. For now, exact match against feature name.
+overrides (e.g., ``auth-flow`` in api vs ``auth-flow-v2`` in ui) will be
+added when the feature lane schema gains per-repo branch mapping. For
+now, exact match against feature name.
 """
 from __future__ import annotations
 
@@ -181,7 +181,7 @@ def _compute_feature_drift(lane, heads: dict) -> FeatureDrift:
 
     for repo_name in lane.repos:
         # Use lane.branch_for to honor per-repo branch overrides
-        # (handles cases like doc-3010-UI-fixes vs DOC-3010-UI-fixes-2).
+        # (handles cases like auth-flow vs auth-flow-v2 across repos).
         expected = lane.branch_for(repo_name)
         head = heads.get(repo_name)
         if head is None:

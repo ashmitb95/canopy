@@ -49,9 +49,9 @@ class FeatureLane:
     # Optional per-repo branch override. When unset, ``branch_for(repo)``
     # returns the feature name (the historical default). When set,
     # consumers should always go through ``branch_for`` to get the right
-    # branch name per repo. Used for cases like docsum's
-    # ``doc-3010-UI-fixes`` (api) vs ``DOC-3010-UI-fixes-2`` (ui) where
-    # the same feature has different branch names per repo.
+    # branch name per repo. Used for cases like ``auth-flow`` (api) vs
+    # ``auth-flow-v2`` (ui) where the same feature has different branch
+    # names per repo.
     branches: dict[str, str] = field(default_factory=dict)
 
     # Populated at query time (not persisted)

@@ -120,7 +120,7 @@ def _group_by_feature(
          branch matches the lane's expected branch *for that repo*
          (using the per-repo ``branches`` override map when set, else
          feature name). This is what groups
-         ``doc-1003-fixes`` (api) + ``DOC-1003-fixes-v2`` (ui) into one
+         ``auth-flow`` (api) + ``auth-flow-v2`` (ui) into one
          feature lane.
       3. Remaining (repo, branch) pairs that weren't consumed become
          implicit features: each branch becomes a feature, multi-repo

@@ -1,17 +1,17 @@
 """Alias resolution for read primitives.
 
-The agent (and humans) pass a single alias like ``DOC-3029`` to any read
+The agent (and humans) pass a single alias like ``TEAM-101`` to any read
 tool and canopy figures out what to fetch. Each tool also accepts its
 native specific form for direct lookups when the caller already has a
 concrete reference.
 
 Supported alias forms:
   - Feature alias: feature name (e.g. ``auth-flow``) or Linear issue ID
-    (e.g. ``DOC-3029``). Resolves via ``FeatureCoordinator._resolve_name``
+    (e.g. ``TEAM-101``). Resolves via ``FeatureCoordinator._resolve_name``
     + ``features.json`` ``linear_issue`` field.
-  - PR specific: ``<repo>#<pr_number>`` (e.g. ``docsum-api#1287``) or
-    a GitHub PR URL.
-  - Branch specific: ``<repo>:<branch>`` (e.g. ``docsum-api:doc-3029``).
+  - PR specific: ``<repo>#<pr_number>`` (e.g. ``api#142``) or a GitHub PR
+    URL.
+  - Branch specific: ``<repo>:<branch>`` (e.g. ``api:auth-flow``).
   - **Slot id:** ``worktree-N`` resolves to the feature currently in that
     slot. ``BlockerError(empty_slot)`` when the slot is empty;
     ``BlockerError(unknown_slot)`` when N is out of range.
@@ -59,7 +59,7 @@ def resolve_feature(workspace: Workspace, alias: str) -> str:
 
     Step 4 lets single-repo features resolve without an explicit
     features.json entry. Without it, queries like ``canopy comments
-    doc-1002-api-only`` fail when only one repo carries the branch.
+    auth-flow-api-only`` fail when only one repo carries the branch.
     """
     # Step 0: slot-id alias form — must come before _resolve_name, which
     # treats unknown strings as implicit feature names.

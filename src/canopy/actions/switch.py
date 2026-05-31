@@ -646,7 +646,7 @@ def _branch_for_in_repo(
     """Return the branch name for ``feature`` in ``repo_name``.
 
     Honors the lane's ``branches`` map for per-repo branch overrides
-    (e.g. doc-3010 in api vs DOC-3010-v2 in ui)."""
+    (e.g. auth-flow in api vs auth-flow-v2 in ui)."""
     from ..features.coordinator import FeatureCoordinator
     coord = FeatureCoordinator(workspace)
     try:

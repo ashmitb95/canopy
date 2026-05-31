@@ -15,11 +15,11 @@ Canopy also returns **pre-classified state**: review comments are temporally fil
 
 ## Session start — call `feature_resume` first
 
-When the user opens a chat and references a feature alias (a Linear ID like `DOC-2226`, a feature name, a slot id like `worktree-1`, or a PR URL/`<repo>#<n>`), call `mcp__canopy__feature_resume(<alias>)` *before* acting on whatever intent they've stated. This is a compound action: it resolves the alias, switches the canonical slot if it's not already there, refreshes from GitHub + Linear, and returns a structured brief with `intent_hints` for the most likely next actions.
+When the user opens a chat and references a feature alias (a Linear issue ID like `TEAM-101`, a feature name, a slot id like `worktree-1`, or a PR URL/`<repo>#<n>`), call `mcp__canopy__feature_resume(<alias>)` *before* acting on whatever intent they've stated. This is a compound action: it resolves the alias, switches the canonical slot if it's not already there, refreshes from GitHub + Linear, and returns a structured brief with `intent_hints` for the most likely next actions.
 
 Patterns that trigger this:
-- A bare alias as the first non-trivial token: `"DOC-2226"`, `"DOC-2226, let's address comments"`, `"jump into auth-flow"`.
-- Explicit return: `"I am back on DOC-2226"`, `"resuming auth-flow"`.
+- A bare alias as the first non-trivial token: `"TEAM-101"`, `"TEAM-101, let's address comments"`, `"jump into auth-flow"`.
+- Explicit return: `"I am back on TEAM-101"`, `"resuming auth-flow"`.
 - Topic-shift to another feature mid-session.
 
 Once you have the brief, look at `intent_hints` (sorted by `priority`) and pair the top hint with what the user said. Examples:

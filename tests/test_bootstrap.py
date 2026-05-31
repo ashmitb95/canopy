@@ -208,3 +208,20 @@ def test_bootstrap_feature_blocks_when_no_worktrees(workspace_with_bootstrap_con
     with pytest.raises(BlockerError) as e:
         bootstrap_feature(workspace_with_bootstrap_config, "auth-flow")
     assert e.value.code == "no_worktrees"
+
+
+def test_resolve_worktree_paths_uses_slots_json_for_warm_feature(workspace_with_slots):
+    """Wave 3.0: a warm feature's worktree paths come from its SLOT, not the
+    legacy features.json worktree_paths cache (which is empty in 3.0). Before
+    this fix, bootstrap raised no_worktrees for every warm 3.0 feature."""
+    from canopy.actions.bootstrap import _resolve_worktree_paths
+    from canopy.actions import slots as sm
+
+    ws = workspace_with_slots  # Y warm in worktree-1 (repo-a + repo-b)
+    sid = sm.slot_for_feature(ws, "Y")
+    assert sid is not None
+
+    paths = _resolve_worktree_paths(ws, "Y")
+    assert set(paths) == {"repo-a", "repo-b"}
+    assert paths["repo-a"] == sm.slot_worktree_path(ws, sid, "repo-a")
+    assert (paths["repo-a"] / ".git").exists()

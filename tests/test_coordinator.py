@@ -86,6 +86,53 @@ def test_feature_status(canopy_toml, workspace_with_feature):
     assert lane.repo_states["repo-b"]["ahead"] >= 1
 
 
+def test_status_respects_per_repo_branch_override(canopy_toml):
+    """A feature whose branch differs from its name in one repo (per-repo
+    `branches` override) must be enriched against branch_for(repo), not the
+    bare feature name. Regression for the branch==feature-name coupling that
+    survived in coordinator internals after the alias layer was fixed.
+    """
+    import subprocess
+    root = canopy_toml
+    api, ui = root / "repo-a", root / "repo-b"
+
+    # repo-a uses a MISMATCHED branch name; repo-b matches the feature name.
+    subprocess.run(["git", "checkout", "-b", "auth-flow-v2"], cwd=api, check=True)
+    (api / "x.py").write_text("a\n")
+    subprocess.run(["git", "add", "."], cwd=api, check=True)
+    subprocess.run(["git", "commit", "-qm", "wip"], cwd=api, check=True)
+    subprocess.run(["git", "checkout", "-b", "auth-flow"], cwd=ui, check=True)
+    (ui / "y.ts").write_text("b\n")
+    subprocess.run(["git", "add", "."], cwd=ui, check=True)
+    subprocess.run(["git", "commit", "-qm", "wip"], cwd=ui, check=True)
+    # Park both repos back on main.
+    subprocess.run(["git", "checkout", "main"], cwd=api, check=True)
+    subprocess.run(["git", "checkout", "main"], cwd=ui, check=True)
+
+    (root / ".canopy").mkdir(exist_ok=True)
+    (root / ".canopy" / "features.json").write_text(json.dumps({
+        "auth-flow": {
+            "repos": ["repo-a", "repo-b"], "status": "active",
+            "branches": {"repo-a": "auth-flow-v2"},
+        },
+    }))
+
+    coord = FeatureCoordinator(Workspace(load_config(root)))
+    lane = coord.status("auth-flow")
+
+    # repo-a's real branch is auth-flow-v2 — detected via branch_for, not "auth-flow".
+    assert lane.repo_states["repo-a"]["has_branch"] is True
+    assert lane.repo_states["repo-a"]["ahead"] >= 1
+    assert lane.repo_states["repo-b"]["has_branch"] is True
+
+    # feature_changes must scan repo-a's override branch, not the feature name.
+    changes = coord.feature_changes("auth-flow")
+    assert changes["repos"]["repo-a"]["has_branch"] is True
+    assert any(
+        c["path"] == "x.py" for c in changes["repos"]["repo-a"]["changes"]
+    )
+
+
 def test_feature_diff(canopy_toml, workspace_with_feature):
     config = load_config(workspace_with_feature)
     ws = Workspace(config)

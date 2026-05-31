@@ -314,6 +314,7 @@ class FeatureCoordinator:
                 linear_issue=data.get("linear_issue", ""),
                 linear_title=data.get("linear_title", ""),
                 linear_url=data.get("linear_url", ""),
+                branches=dict(data.get("branches") or {}),
             )
         else:
             # Implicit feature
@@ -438,7 +439,10 @@ class FeatureCoordinator:
                 continue
 
             try:
-                changes = git.changed_files_with_status(scan_path, name, base)
+                # Per-repo branch override: scan the lane's actual branch
+                # for this repo, not the bare feature name.
+                branch = lane.branch_for(repo_name)
+                changes = git.changed_files_with_status(scan_path, branch, base)
                 result[repo_name] = {
                     "has_branch": True,
                     "path": str(scan_path),
@@ -550,7 +554,12 @@ class FeatureCoordinator:
                 continue
 
             base = state.config.default_branch
-            has_branch = git.branch_exists(state.abs_path, lane.name)
+            # Honor per-repo branch overrides — the branch may differ from
+            # the feature name (FeatureLane.branches map). Using lane.name
+            # here would mis-report mismatched-naming features as having no
+            # branch / no changes.
+            branch = lane.branch_for(repo_name)
+            has_branch = git.branch_exists(state.abs_path, branch)
 
             if not has_branch:
                 lane.repo_states[repo_name] = {
@@ -564,10 +573,10 @@ class FeatureCoordinator:
 
             try:
                 ahead, behind = git.divergence(
-                    state.abs_path, lane.name, base
+                    state.abs_path, branch, base
                 )
-                files = git.changed_files(state.abs_path, lane.name, base)
-                dirty = state.is_dirty if state.current_branch == lane.name else False
+                files = git.changed_files(state.abs_path, branch, base)
+                dirty = state.is_dirty if state.current_branch == branch else False
 
                 repo_state: dict = {
                     "has_branch": True,
@@ -580,7 +589,7 @@ class FeatureCoordinator:
                 }
 
                 # Check if branch is checked out in a worktree
-                wt_path = git.worktree_for_branch(state.abs_path, lane.name)
+                wt_path = git.worktree_for_branch(state.abs_path, branch)
                 if wt_path:
                     repo_state["worktree_path"] = wt_path
 
@@ -1220,8 +1229,10 @@ class FeatureCoordinator:
                 try:
                     repo_name = repo_dir.name
                     state = self.workspace.get_repo(repo_name)
+                    # Per-repo branch override (else the feature name).
+                    branch = (meta.get("branches") or {}).get(repo_name, feat_name)
                     ahead, _ = git.divergence(
-                        repo_dir, feat_name, state.config.default_branch,
+                        repo_dir, branch, state.config.default_branch,
                     )
                     if ahead > 0:
                         all_merged = False

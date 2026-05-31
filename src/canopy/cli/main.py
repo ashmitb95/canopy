@@ -118,15 +118,10 @@ def cmd_init(args: argparse.Namespace) -> None:
     if args.json:
         all_dirs = [d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")]
         skipped = [d.name for d in all_dirs if not (d / ".git").exists()]
-        # Detect existing feature worktrees
-        worktrees_dir = root / ".canopy" / "worktrees"
-        active_worktrees = {}
-        if worktrees_dir.is_dir():
-            for feat_dir in worktrees_dir.iterdir():
-                if feat_dir.is_dir():
-                    active_worktrees[feat_dir.name] = sorted(
-                        d.name for d in feat_dir.iterdir() if d.is_dir()
-                    )
+        # Detect existing worktrees, keyed by FEATURE (slot dirs resolve their
+        # occupant via slots.json — not reported as if the slot id were a feature).
+        from ..workspace.discovery import summarize_worktree_dirs
+        active_worktrees = summarize_worktree_dirs(root)
         _print_json({
             "root": str(root),
             "repos": [{
@@ -203,22 +198,15 @@ def cmd_init(args: argparse.Namespace) -> None:
             console.print(f"  mcp     [muted]· {note}[/]")
         console.print(f"  [muted]Restart Claude Code to pick up the skill + MCP. Skip with --no-agent.[/]")
 
-    # Report existing feature worktrees under .canopy/
-    canopy_dir = root / ".canopy"
-    worktrees_dir = canopy_dir / "worktrees"
-    if worktrees_dir.is_dir():
-        features_with_wt = sorted(
-            d.name for d in worktrees_dir.iterdir() if d.is_dir()
-        )
-        if features_with_wt:
-            console.print()
-            console.print(f"  [header]Active worktrees ({len(features_with_wt)})[/]")
-            for feat in features_with_wt:
-                feat_dir = worktrees_dir / feat
-                wt_repos = sorted(
-                    d.name for d in feat_dir.iterdir() if d.is_dir()
-                )
-                console.print(f"  [feature]{feat}[/] [muted]{SYM_ARROW}[/] {', '.join(wt_repos)}")
+    # Report existing worktrees under .canopy/, keyed by feature (slot dirs
+    # resolve their occupant via slots.json — see summarize_worktree_dirs).
+    from ..workspace.discovery import summarize_worktree_dirs
+    worktrees = summarize_worktree_dirs(root)
+    if worktrees:
+        console.print()
+        console.print(f"  [header]Active worktrees ({len(worktrees)})[/]")
+        for feat, wt_repos in sorted(worktrees.items()):
+            console.print(f"  [feature]{feat}[/] [muted]{SYM_ARROW}[/] {', '.join(wt_repos)}")
     console.print()
 
 

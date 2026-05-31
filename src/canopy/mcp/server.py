@@ -1534,14 +1534,10 @@ def workspace_reinit(name: str | None = None, dry_run: bool = False) -> dict:
         d for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")
     ]
     skipped = [d.name for d in all_dirs if not (d / ".git").exists()]
-    worktrees_dir = root / ".canopy" / "worktrees"
-    active_worktrees: dict[str, list[str]] = {}
-    if worktrees_dir.is_dir():
-        for feat_dir in worktrees_dir.iterdir():
-            if feat_dir.is_dir():
-                active_worktrees[feat_dir.name] = sorted(
-                    d.name for d in feat_dir.iterdir() if d.is_dir()
-                )
+    # Keyed by FEATURE — slot dirs resolve their occupant via slots.json
+    # rather than being reported as if the slot id were a feature name.
+    from ..workspace.discovery import summarize_worktree_dirs
+    active_worktrees: dict[str, list[str]] = summarize_worktree_dirs(root)
 
     return {
         "root": str(root),

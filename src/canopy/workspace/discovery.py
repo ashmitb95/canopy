@@ -195,3 +195,44 @@ def _guess_role(name: str, lang: str) -> str:
         return "frontend"
 
     return ""
+
+
+def summarize_worktree_dirs(root: Path) -> dict[str, list[str]]:
+    """Map feature name → repo subdirs present in its worktree slot.
+
+    Used by ``canopy init`` / ``workspace_reinit`` to report existing
+    worktrees. Wave 3.0 worktree dirs are generic numbered SLOTS
+    (``worktree-N``) whose occupant feature lives in slots.json — so a slot
+    id must be resolved to its feature, not reported AS the feature. Pre-3.0
+    dirs are feature-named and map directly. An orphan slot (dir present, no
+    occupant in slots.json) falls back to the slot id as the key.
+    """
+    import json
+    import re
+
+    wt_root = root / ".canopy" / "worktrees"
+    if not wt_root.is_dir():
+        return {}
+
+    slot_feature: dict[str, str | None] = {}
+    state_path = root / ".canopy" / "state" / "slots.json"
+    if state_path.exists():
+        try:
+            data = json.loads(state_path.read_text())
+            for sid, entry in (data.get("slots") or {}).items():
+                if isinstance(entry, dict):
+                    slot_feature[sid] = entry.get("feature")
+        except (OSError, ValueError):
+            pass
+
+    out: dict[str, list[str]] = {}
+    for d in sorted(wt_root.iterdir()):
+        if not d.is_dir():
+            continue
+        repos = sorted(r.name for r in d.iterdir() if r.is_dir())
+        if re.fullmatch(r"worktree-\d+", d.name):
+            key = slot_feature.get(d.name) or d.name  # feature, else slot id
+        else:
+            key = d.name  # pre-3.0 feature-named dir
+        out[key] = repos
+    return out

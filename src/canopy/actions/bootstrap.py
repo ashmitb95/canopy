@@ -63,7 +63,10 @@ def bootstrap_feature(
     if not worktree_paths:
         raise BlockerError(
             code="no_worktrees",
-            what=f"feature '{feature_name}' has no worktree paths recorded",
+            what=(
+                f"feature '{feature_name}' is not warm in any slot "
+                f"(nothing to bootstrap) — `canopy switch {feature_name}` first"
+            ),
         )
 
     results: dict[str, dict[str, Any]] = {}
@@ -235,7 +238,28 @@ def _validate_steps(steps: Iterable[str] | None) -> set[str]:
 def _resolve_worktree_paths(
     workspace: Workspace, feature_name: str,
 ) -> dict[str, Path]:
-    """Pull recorded worktree paths from features.json."""
+    """Resolve each repo's warm worktree dir for ``feature_name``.
+
+    Wave 3.0: the authoritative source is slots.json — a warm feature's
+    per-repo worktrees live under its slot at
+    ``.canopy/worktrees/worktree-N/<repo>``. Falls back to the legacy
+    ``features.json`` ``worktree_paths`` cache for pre-3.0 workspaces (no
+    slots.json). The old code read only the legacy cache, which is empty in
+    3.0 — so bootstrap raised ``no_worktrees`` for every warm feature.
+    """
+    from . import slots as slots_mod
+    from .aliases import repos_for_feature
+
+    slot_id = slots_mod.slot_for_feature(workspace, feature_name)
+    if slot_id is not None:
+        out: dict[str, Path] = {}
+        for repo_name in repos_for_feature(workspace, feature_name):
+            p = slots_mod.slot_worktree_path(workspace, slot_id, repo_name)
+            if (p / ".git").exists():
+                out[repo_name] = p
+        return out
+
+    # Legacy pre-3.0 fallback: features.json worktree_paths cache.
     import json
     path = workspace.config.root / ".canopy" / "features.json"
     if not path.exists():

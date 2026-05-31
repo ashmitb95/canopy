@@ -4,6 +4,14 @@ Tracks the Python side (CLI + MCP server). The VSCode extension has its own [vsc
 
 Versions follow semver. Pre-1.0 — minor bumps may add features or break behavior; the README is the source-of-truth contract.
 
+## 3.1.1 — 2026-05-31
+
+### Fixed
+- `canopy-mcp --help` / `-h` now prints usage and exits instead of starting the
+  stdio server and crashing on an empty stdin read. The MCP entry point is not
+  meant to be invoked interactively; the help text says so and points at
+  `canopy setup-agent`.
+
 ## 3.1.0 — 2026-05-30 (Plan 2 — Feature Resume)
 
 ### Added

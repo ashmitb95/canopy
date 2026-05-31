@@ -1790,6 +1790,22 @@ def main():
         from .. import __version__
         print(f"canopy-mcp {__version__}")
         return
+    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
+        print(
+            "canopy-mcp — Canopy MCP server (stdio JSON-RPC)\n"
+            "\n"
+            "This is a Model Context Protocol server. It is not run interactively;\n"
+            "your MCP-aware client (Claude Code, Claude Desktop, etc.) launches it\n"
+            "and communicates with it over stdio.\n"
+            "\n"
+            "To register canopy with Claude Code, run:\n"
+            "    canopy setup-agent\n"
+            "\n"
+            "Options:\n"
+            "  -V, --version    Print version and exit\n"
+            "  -h, --help       Print this message and exit"
+        )
+        return
     mcp.run(transport="stdio")
 
 

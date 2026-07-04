@@ -66,7 +66,7 @@ def _compute_advisories(workspace: Workspace, active_feature):
 
 def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:
     """Merge live PR data into per-repo entries; cache fallback if offline."""
-    from . import triage as triage_mod
+    from . import pr_map
     from . import prs_cache
     from .aliases import _resolve_owner_slug
     from ..git import repo as git
@@ -76,7 +76,7 @@ def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:
     stale = False
     fetched_at = None
     try:
-        prs_by_repo = triage_mod._fetch_open_prs(workspace, repo_names, author)
+        prs_by_repo = pr_map._fetch_open_prs(workspace, repo_names, author)
         idx: dict[tuple[str, str], dict] = {}
         for repo_name, prs in prs_by_repo.items():
             for pr in prs:

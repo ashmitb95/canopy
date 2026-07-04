@@ -33,8 +33,8 @@ def test_local_tier_reports_workspace_and_repos(canopy_toml_for_workspace):
 
 def test_local_tier_makes_no_network_call(canopy_toml_for_workspace, monkeypatch):
     from canopy.actions import registry
-    import canopy.actions.triage as triage
-    monkeypatch.setattr(triage, "_fetch_open_prs",
+    import canopy.actions.pr_map as pr_map
+    monkeypatch.setattr(pr_map, "_fetch_open_prs",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("network in tier 1")))
     registry.context(_ws(canopy_toml_for_workspace))  # must not raise
 
@@ -75,8 +75,8 @@ def test_remote_overlay_merges_pr(canopy_toml_for_workspace, monkeypatch):
     from canopy.actions import registry
     root = canopy_toml_for_workspace
     _register(root, "auth-flow", ["repo-a", "repo-b"])
-    import canopy.actions.triage as triage
-    monkeypatch.setattr(triage, "_fetch_open_prs", lambda ws, repos, author: {
+    import canopy.actions.pr_map as pr_map
+    monkeypatch.setattr(pr_map, "_fetch_open_prs", lambda ws, repos, author: {
         "repo-a": [{"head_branch": "auth-flow", "number": 7, "url": "u",
                     "state": "open", "review_decision": "APPROVED"}],
         "repo-b": [],
@@ -90,8 +90,8 @@ def test_remote_overlay_adds_checks_summary(canopy_toml_for_workspace, monkeypat
     from canopy.actions import registry
     root = canopy_toml_for_workspace
     _register(root, "auth-flow", ["repo-a", "repo-b"])
-    import canopy.actions.triage as triage
-    monkeypatch.setattr(triage, "_fetch_open_prs", lambda ws, repos, author: {
+    import canopy.actions.pr_map as pr_map
+    monkeypatch.setattr(pr_map, "_fetch_open_prs", lambda ws, repos, author: {
         "repo-a": [{"head_branch": "auth-flow", "number": 7, "url": "u",
                     "state": "open", "review_decision": "APPROVED"}],
         "repo-b": [],
@@ -110,13 +110,13 @@ def test_remote_reclaims_freed_slot_before_slots_snapshot(workspace_with_slots, 
     """FIX F: context(remote=True) must reclaim merged slots BEFORE building
     the slots snapshot, so a freed slot doesn't linger in the output."""
     from canopy.actions import registry, prs_cache
-    import canopy.actions.triage as triage
+    import canopy.actions.pr_map as pr_map
     ws = workspace_with_slots                  # Y warm in worktree-1 (clean)
     prs_cache.write(ws, {"Y": {"repos": {"repo-a": {"number": 1, "state": "merged"},
                                          "repo-b": {"number": 2, "state": "merged"}}}})
     # Offline → overlay uses the cache we wrote (doesn't clobber it), so
     # reclaim sees Y as merged and frees worktree-1.
-    monkeypatch.setattr(triage, "_fetch_open_prs",
+    monkeypatch.setattr(pr_map, "_fetch_open_prs",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")))
     ctx = registry.context(ws, remote=True)
     assert "worktree-1" not in ctx["slots"]    # freed slot is gone
@@ -128,8 +128,8 @@ def test_remote_overlay_falls_back_to_cache_when_offline(canopy_toml_for_workspa
     _register(root, "auth-flow", ["repo-a", "repo-b"])
     ws = _ws(root)
     prs_cache.write(ws, {"auth-flow": {"repos": {"repo-a": {"number": 9, "state": "open"}}}})
-    import canopy.actions.triage as triage
-    monkeypatch.setattr(triage, "_fetch_open_prs",
+    import canopy.actions.pr_map as pr_map
+    monkeypatch.setattr(pr_map, "_fetch_open_prs",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")))
     ctx = registry.context(ws, remote=True)
     assert ctx["remote"]["stale"] is True

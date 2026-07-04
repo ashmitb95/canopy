@@ -3450,28 +3450,61 @@ def cmd_resume(args: argparse.Namespace) -> None:
 
 
 def cmd_context(args: argparse.Namespace) -> None:
-    """Show detected canopy context for current directory (debug)."""
-    from ..workspace.context import detect_context
-
-    ctx = detect_context()
-
+    """Show the registry (feature ↔ repo ↔ branch ↔ path ↔ state)."""
+    from ..actions.registry import context
+    ws = _load_workspace()
+    ctx = context(ws, cwd=Path.cwd(),
+                  remote=getattr(args, "remote", False))
     if args.json:
-        _print_json(ctx.to_dict())
+        _print_json(ctx)
         return
+    from .ui import console
+    w = ctx["workspace"]
+    console.print()
+    console.print(f"  [header]{w['name']}[/]  active: [feature]{w['active_feature'] or '(none)'}[/]")
+    for fname, fdata in ctx["features"].items():
+        console.print(f"  [feature]{fname}[/]")
+        for repo, r in fdata["repos"].items():
+            pr = f"  PR #{r['pr']['number']} {r['pr'].get('review_decision','')}" if r.get("pr") else ""
+            console.print(f"    {repo} → {r.get('current_branch', r['branch'])} "
+                          f"({'dirty' if r.get('dirty') else 'clean'}){pr}")
+    for adv in ctx.get("advisories", []):
+        console.print(f"  [warning]⚠ {adv['message']}[/]")
+    console.print()
 
-    print(f"\n  Context type: {ctx.context_type}")
-    print(f"  Working dir:  {ctx.cwd}")
-    if ctx.workspace_root:
-        print(f"  Workspace:    {ctx.workspace_root}")
-    if ctx.feature:
-        print(f"  Feature:      {ctx.feature}")
-    if ctx.branch:
-        print(f"  Branch:       {ctx.branch}")
-    if ctx.repo_names:
-        print(f"  Repos:        {', '.join(ctx.repo_names)}")
-        for name, path in zip(ctx.repo_names, ctx.repo_paths):
-            print(f"    {name}: {path}")
-    print()
+
+def cmd_start(args: argparse.Namespace) -> None:
+    """Begin new work on a feature (lazy)."""
+    from ..actions.start import start
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    ws = _load_workspace()
+    try:
+        result = start(ws, args.alias, repos=args.repos)
+    except ActionError as e:
+        render_blocker(e); sys.exit(1)
+    if args.json:
+        _print_json(result); return
+    from .ui import console, print_success
+    print_success(f"{result['status']}: {result['feature']}")
+    if result.get("degraded"):
+        console.print("  [muted]· Linear unreachable — created with id only[/]")
+
+
+def cmd_join(args: argparse.Namespace) -> None:
+    """Join a repo to the active feature (create + register its branch)."""
+    from ..actions.join import join
+    from ..actions.errors import ActionError
+    from .render import render_blocker
+    ws = _load_workspace()
+    try:
+        result = join(ws, args.repo)
+    except ActionError as e:
+        render_blocker(e); sys.exit(1)
+    if args.json:
+        _print_json(result); return
+    from .ui import print_success
+    print_success(f"{result['status']}: {result['repo']} → {result['branch']}")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────
@@ -3689,6 +3722,20 @@ def main() -> None:
     # context (debug)
     ctx_p = subparsers.add_parser("context", help="Show detected canopy context (debug)")
     ctx_p.add_argument("--json", action="store_true", help="Output as JSON")
+    ctx_p.add_argument("--remote", action="store_true",
+                       help="Include the live PR + CI overlay (network)")
+
+    # start (begin new work on a feature — lazy)
+    start_p = subparsers.add_parser("start", help="Begin new work on a feature (lazy)")
+    start_p.add_argument("alias", help="Feature name or issue id (e.g. DOC-3029)")
+    start_p.add_argument("--repos", nargs="*", default=None,
+                         help="Declare repos up front (default: none, lazy)")
+    start_p.add_argument("--json", action="store_true")
+
+    # join (join a repo to the active feature)
+    join_p = subparsers.add_parser("join", help="Join a repo to the active feature")
+    join_p.add_argument("repo", help="Repo name to join")
+    join_p.add_argument("--json", action="store_true")
 
     # commit (feature-scoped multi-repo commit — Wave 2.3)
     commit_p = subparsers.add_parser(
@@ -4099,6 +4146,8 @@ def main() -> None:
         "done": cmd_done,
         "config": cmd_config,
         "context": cmd_context,
+        "start": cmd_start,
+        "join": cmd_join,
         "hooks": cmd_hooks,
         "drift": cmd_drift,
         "run": cmd_run,

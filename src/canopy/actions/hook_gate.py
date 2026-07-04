@@ -349,3 +349,47 @@ def _check_branch(workspace, repo_root: Path, repo_name: str,
             f"`git checkout {expected}` in this worktree, or `canopy doctor`."
         ),
     )
+
+
+import re as _re
+
+_GIT_WORD = _re.compile(r"\bgit\b")
+
+
+def _load_workspace_from(start: Path):
+    """Walk up from ``start`` to find canopy.toml; None if not in a workspace."""
+    from ..workspace.config import load_config
+    from ..workspace.workspace import Workspace
+
+    cur = Path(start).resolve()
+    for candidate in (cur, *cur.parents):
+        if (candidate / "canopy.toml").exists():
+            return Workspace(load_config(candidate))
+    return None
+
+
+def run_gate(payload: dict[str, Any]) -> tuple[int, str]:
+    """Full PreToolUse decision from the raw hook payload.
+
+    Returns (exit_code, stderr_message): (0, "") allow, (2, reason) block.
+    NEVER raises — the CLI shim trusts this completely.
+    """
+    import os
+    try:
+        if os.environ.get("CANOPY_HOOKS_DISABLED") == "1":
+            return 0, ""
+        if payload.get("tool_name") != "Bash":
+            return 0, ""
+        command = (payload.get("tool_input") or {}).get("command") or ""
+        if not _GIT_WORD.search(command):
+            return 0, ""                     # fast path: skip workspace load
+        cwd = payload.get("cwd") or "."
+        workspace = _load_workspace_from(Path(cwd))
+        if workspace is None:
+            return 0, ""
+        decision = gate_command(workspace, command, Path(cwd))
+        if decision.allow:
+            return 0, ""
+        return 2, decision.reason
+    except Exception:
+        return 0, ""                          # fail open, always

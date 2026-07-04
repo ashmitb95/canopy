@@ -242,3 +242,62 @@ def test_gate_allows_push_options_and_head(workspace_with_canonical_only):
                         cwd=_root(ws) / "repo-a").allow is True
     assert gate_command(ws, "git push origin --delete X",
                         cwd=_root(ws) / "repo-a").allow is True
+
+
+# ── run_gate: payload wrapper ───────────────────────────────────────────
+
+def _payload(command, cwd, tool="Bash"):
+    return {"hook_event_name": "PreToolUse", "tool_name": tool,
+            "cwd": str(cwd), "tool_input": {"command": command}}
+
+
+def test_run_gate_blocks_and_explains(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import run_gate
+    ws = workspace_with_canonical_only
+    code, msg = run_gate(_payload('git commit -m "x"', _root(ws)))
+    assert code == 2
+    assert "not inside a workspace repo" in msg
+
+
+def test_run_gate_allows_inside_repo(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import run_gate
+    ws = workspace_with_canonical_only
+    code, msg = run_gate(_payload("git add -A", _root(ws) / "repo-a"))
+    assert (code, msg) == (0, "")
+
+
+def test_run_gate_ignores_non_bash_tools(workspace_with_canonical_only):
+    ws = workspace_with_canonical_only
+    from canopy.actions.hook_gate import run_gate
+    code, _ = run_gate(_payload("git push", _root(ws), tool="Edit"))
+    assert code == 0
+
+
+def test_run_gate_fast_path_no_git(workspace_with_canonical_only, monkeypatch):
+    from canopy.actions import hook_gate
+    # fast path must not even try to load a workspace
+    monkeypatch.setattr(hook_gate, "_load_workspace_from",
+                        lambda p: (_ for _ in ()).throw(AssertionError("loaded")))
+    code, _ = hook_gate.run_gate(_payload("pytest tests/ -v",
+                                          _root(workspace_with_canonical_only)))
+    assert code == 0
+
+
+def test_run_gate_outside_any_workspace(tmp_path):
+    from canopy.actions.hook_gate import run_gate
+    code, _ = run_gate(_payload("git push", tmp_path))
+    assert code == 0                    # no canopy.toml above → not our problem
+
+
+def test_run_gate_fails_open_on_garbage():
+    from canopy.actions.hook_gate import run_gate
+    assert run_gate({})[0] == 0
+    assert run_gate({"tool_name": "Bash", "tool_input": {}})[0] == 0
+
+
+def test_run_gate_respects_disable_env(workspace_with_canonical_only, monkeypatch):
+    from canopy.actions.hook_gate import run_gate
+    ws = workspace_with_canonical_only
+    monkeypatch.setenv("CANOPY_HOOKS_DISABLED", "1")
+    code, _ = run_gate(_payload('git commit -m "x"', _root(ws)))
+    assert code == 0     # would block without the escape hatch

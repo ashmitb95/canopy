@@ -4,6 +4,38 @@ Tracks the Python side (CLI + MCP server). The VSCode extension has its own [vsc
 
 Versions follow semver. Pre-1.0 — minor bumps may add features or break behavior; the README is the source-of-truth contract.
 
+## 3.1.2 — 2026-07-04
+
+Slot-model consistency fixes from canopy-test dogfooding.
+
+### Fixed
+- `switch`: on the cold-Y fall-through (Y has a slots.json entry but this
+  repo's slot dir is missing), the vacating feature's slot is reclaimed for
+  the outgoing feature instead of allocating a fresh one — previously the
+  about-to-be-freed slot counted against the cap and raised a bogus
+  `no_free_slot`.
+- `switch`: precondition failures raised before any git mutation
+  (`no_free_slot`, `unknown_slot`, `evict_to_occupied`,
+  `warm_worktree_dirty_on_promote`) no longer stamp the `in_flight` marker
+  when no repo has been touched — a clean no-op failure used to brick every
+  subsequent switch via `slot_state_inconsistent`.
+- `doctor`: new `slot_repo_worktree_missing` check (+ auto-repair via
+  `git worktree prune` + `worktree add`) catches half-materialized slots
+  where a slot holds a feature but one repo's worktree is gone.
+- `doctor`: the pre-3.0 `worktree_orphan` check now skips `worktree-N` slot
+  dirs — `doctor --fix` no longer deletes warm slots.
+- `worktree_bootstrap`: resolves worktree paths via slots.json (the 3.0
+  source of truth) instead of the legacy `features.json` cache, which is
+  empty in 3.0 — bootstrap raised `no_worktrees` for every warm feature.
+  Falls back to the legacy cache for pre-3.0 workspaces.
+- `canopy init` / `workspace_reinit`: existing worktrees are reported by
+  occupant feature (resolved via slots.json) instead of listing slot ids
+  (`worktree-N`) as if they were feature names.
+- `coordinator.status()` / `feature_changes`: honor the per-repo `branches`
+  map (`lane.branch_for`) instead of assuming branch == feature name —
+  mismatched-naming features no longer mis-report as having no branch or no
+  changes.
+
 ## 3.1.1 — 2026-05-31
 
 ### Fixed

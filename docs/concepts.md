@@ -141,67 +141,111 @@ Auto-capture wires existing canopy actions: `commit --address` mirrors the bot r
 
 Every feature in canopy lives in exactly one of three states:
 
-- **canonical** — checked out in the main repo. There's exactly one canonical feature at a time, across all repos. This is what your IDE, git GUI, default `git status`, blame, and log all naturally reflect. **Canonical is the only place to run code.** Worktrees are passive branch storage — never `cd` into them to launch the app or run tests.
-- **warm** — occupies a numbered **slot** at `.canopy/worktrees/worktree-N/<repo>/`. Slot identity (`worktree-1`, `worktree-2`, ...) is stable across feature swaps; feature occupancy is transient. A slot holds one feature at a time; that feature's repos sit as siblings inside the slot. Capped by `[workspace] slots = N` in canopy.toml (default **2** — so you keep at most 1 canonical + 2 warm = 3 simultaneous live trees).
+- **canonical (trunk)** — checked out in the main repo. There's exactly one canonical feature at a time, across all repos. This is what your IDE, git GUI, default `git status`, blame, and log all naturally reflect. **Canonical is the only place to run code full-stack** — boot the app, hit real ports, integration-test.
+- **warm** — occupies a numbered **slot** at `.canopy/worktrees/worktree-N/<repo>/`. Slot identity (`worktree-1`, `worktree-2`, ...) is stable across feature swaps; feature occupancy is transient. A slot holds one feature at a time; that feature's repos sit as siblings inside the slot. Capped by `[workspace] slots = N` in canopy.toml (default **2** — so you keep at most 1 canonical + 2 warm = 3 simultaneous live trees). **Warm slots are workable, not just parked** (4.0 phase 4): they're auto-bootstrapped on creation, so you can edit / commit / push / lint / unit-test right there without switching. What you can't do in a warm slot is run the project full-stack — that still needs trunk.
 - **cold** — branch exists, no slot, no checkout. Cheap, unlimited. Plus any feature-tagged stash that was preserved when it was last unloaded.
 
-`canopy switch <Y>` is the single primitive that moves features between these states. Two modes:
+### Intent-gated switch: worktree vs trunk (4.0 phase 4)
 
-- **Active rotation (default)** — when Y becomes canonical, the previous canonical X **evacuates into a warm slot** (with full stash → checkout → pop). Use when X still needs your attention soon — instant to switch back. When Y is *already warm*, the swap is a fast 5-op-per-repo dance: no `mv`, no `git worktree repair`, no slot renaming. The slot ids stay put; only the features inside them swap.
-- **Wind-down (`--release-current`)** — when Y becomes canonical, X goes **straight to cold** (with feature-tagged stash for any dirty work). Use when X is parked/finished.
+**Intent decides whether you switch — not the act of returning to a feature.** The two-tier model is: trunk is the RUN target, worktrees are the WORK target for review.
+
+- **"Address the review comments on DOC-Y"** → edit / commit / push **in DOC-Y's warm worktree**. No switch. `canopy context` gives you the path; the enforcement gate allows commits/pushes there. You never leave whatever's currently running in trunk.
+- **"Run DOC-Y full-stack / verify it in the app"** → `canopy switch DOC-Y` promotes it into trunk — the only place with ports, services, the full env.
+
+Routing is implicit and one-directional: canopy publishes the map (`context` gives feature ↔ repo ↔ path ↔ slot state), the enforcement gate keeps work honest wherever you are, and `run --feature X` resolves to X's current location (its warm worktree, or trunk if it's canonical) — there's no separate `work` verb to invoke. `switch` is the one control verb, and it means specifically "move X into trunk so it can run." This evolves, not breaks, the older "canonical is the only run target" rule — trunk is still the only run target; worktrees are now the work target for review instead of being purely passive storage.
+
+`canopy switch <Y>` is the primitive that moves features between {canonical, warm, cold}. What happens to the outgoing canonical feature X is no longer a mode you choose up front — it's a rule:
+
+### Warm-vs-cold rule (default, 4.0 phase 4)
+
+When X vacates trunk (because Y is switching in to run), X goes:
+
+- **warm** iff it has an **open PR** or **live/uncommitted WIP** — it's either being shepherded through review or mid-flight enough that you'll want it back instantly.
+- **cold** (with a feature-tagged stash for any dirty work) otherwise.
+
+`--release-current` forces cold regardless (explicit wind-down, for when you know X is parked/finished even if the rule above would keep it warm). `--evict <f>` / `--evict-to <slot-N>` remain as explicit overrides on which feature or slot is affected. When Y is *already warm*, the swap is a fast 5-op-per-repo dance: no `mv`, no `git worktree repair`, no slot renaming — the slot ids stay put, only the features inside them swap.
 
 ```
-        switch(Y, default)              switch(Y, --release-current)
-   ┌──────────────────────────┐      ┌──────────────────────────┐
-   │  before                   │      │  before                   │
-   │    canonical: X           │      │    canonical: X           │
-   │    worktree-1: A          │      │    worktree-1: A          │
-   │    worktree-2: B          │      │    worktree-2: B          │
-   │                           │      │                           │
-   │  after                    │      │  after                    │
-   │    canonical: Y           │      │    canonical: Y           │
-   │    worktree-1: A          │      │    worktree-1: A          │
-   │    worktree-2: B          │      │    worktree-2: B          │
-   │    (X needs a slot —      │      │    cold: X (+ stash)      │
-   │     cap=2 hit!)           │      │                           │
-   │                           │      │  no eviction needed       │
-   │  if cap=2 hit:            │      │                           │
-   │    BlockerError —         │      │                           │
-   │    pick wind-down or      │      │                           │
-   │    evict a specific slot  │      │                           │
-   └──────────────────────────┘      └──────────────────────────┘
+        switch(Y, default rule)                switch(Y, --release-current)
+   ┌──────────────────────────────┐      ┌──────────────────────────┐
+   │  before                       │      │  before                   │
+   │    canonical: X               │      │    canonical: X           │
+   │    worktree-1: A              │      │    worktree-1: A          │
+   │    worktree-2: B              │      │    worktree-2: B          │
+   │                               │      │                           │
+   │  after (X has open PR/WIP)    │      │  after                    │
+   │    canonical: Y               │      │    canonical: Y           │
+   │    worktree-1: A              │      │    worktree-1: A          │
+   │    worktree-2: B              │      │    worktree-2: B          │
+   │    (X needs a slot —          │      │    cold: X (+ stash)      │
+   │     cap=2 hit!)               │      │                           │
+   │                               │      │  no eviction needed       │
+   │  after (X has no PR/WIP)      │      │                           │
+   │    cold: X (+ stash)          │      │                           │
+   │    no cap pressure            │      │                           │
+   └──────────────────────────────┘      └──────────────────────────┘
 ```
 
-When the cap is hit in active-rotation mode, canopy **does not silently evict**. It returns a `BlockerError(code='worktree_cap_reached')` with explicit `fix_actions`: wind-down the current focus instead, evict a specific slot to cold (with auto-stash), or raise the cap. The user (or agent on their behalf) picks intent — never a silent surprise.
+When the warm-vs-cold rule wants X warm but the cap is already full, canopy **does not silently evict**. It returns `BlockerError(code='worktree_cap_reached')` with three explicit `fix_actions`, surfaced to the agent as a question:
+
+1. **Raise the cap** (`slots = N+1`, persisted to canopy.toml) — keep everything warm.
+2. **Send X cold this time** (`--release-current`) — cold + stash, re-warms later if a slot frees.
+3. **Evict a specific warm PR** (`--evict <f>`) — canopy suggests the LRU candidate; the user picks which to park.
+
+The user (or agent on their behalf) picks intent — never a silent surprise.
+
+### Reclaim-as-vacate
+
+Slots are stable, reusable dirs — reclaim frees one, it doesn't destroy it. When a warm feature's PR merges:
+
+- **Clean worktree** → `git checkout <default_branch>` in the slot's worktree(s), drop the feature's `slots.json` entry. The slot returns to the pool — on base, ready for the next tenant, dir + warm deps (`node_modules`, etc.) persist for whoever lands there next.
+- **Dirty worktree** → left untouched; surfaced as an advisory (`reclaimable_but_dirty`) instead of auto-vacating. Resolve the dirty state first.
+- The merged local branch is kept by default — deleting it is separate opt-in cleanup (`branch delete`).
+
+Detection is **passive, not polled**: `canopy reclaim` runs it on demand; `canopy context --remote` also runs it as a side effect (any remote-aware read that already sees a merged PR reclaims eagerly); `doctor` flags stragglers too. There's no background poller watching PR state.
+
+### Auto-bootstrap on slot creation
+
+A slot arrives workable, not empty. Split by cost:
+
+- **Fast steps run synchronously** at slot creation: env-file copy, IDE workspace gen, and per-clone hook install (husky's `prepare` script, or pointing `core.hooksPath` at an existing `.husky/`). The worktree is immediately usable for edit / commit / push the moment `switch`/`worktree`/`slot load` returns.
+- **Deps install (`install_cmd`) runs detached in the background.** Status lives in `slots.json` per slot+repo and surfaces in `canopy context`: `installing` → `ready` → `failed` (failure is a loud state, never a silent "ready when it isn't" — stderr is captured to `.canopy/logs/`). A failed or still-installing slot names its own retry: `canopy worktree-bootstrap --deps <feature>`.
+- **Lockfile-unchanged short-circuits the install** — slot dirs are stable, so deps mostly install once per slot, not once per tenant.
+- **`--interactive`** runs the deps install in the foreground instead, for installs that need a prompt (auth, a pnpm build-script approval) the detached background attempt can't satisfy. **`--force`** bypasses the lockfile short-circuit / overwrites existing env files.
+
+This split (fast-sync / deps-background) is **provisional** — a working hypothesis being validated by dogfooding, not a settled contract. It's a manual command too: `canopy worktree-bootstrap <feature> [--step env|deps|ide] [--deps] [--interactive] [--force]`.
 
 ### Slot vocabulary
 
-Four verbs total, all with CLI + MCP parity:
+Five verbs total, all with CLI + MCP parity:
 
 | Verb | What it does |
 |---|---|
-| `switch <Y>` | Promote Y to canonical. Slot rotation handled automatically. `--evict-to <slot-N>` pins where the outgoing canonical goes; `--to-slot <slot-N>` promotes whatever feature already occupies that slot. |
+| `switch <Y>` | Promote Y to canonical (trunk) — the RUN verb. Vacating-feature rotation handled by the warm-vs-cold rule above. `--evict-to <slot-N>` pins where the outgoing canonical goes; `--to-slot <slot-N>` promotes whatever feature already occupies that slot. |
 | `slot load <Y> [<slot-N>]` | Warm a cold Y into a slot **without** touching canonical. Used for pre-warming or inspecting a feature before switching to it. |
 | `slot clear <slot-N>` | Evict that slot's occupant to cold (with feature-tagged stash if dirty). The slot itself remains; it's just empty. |
 | `slot swap <slot-A> <slot-B>` | Exchange the occupants of two warm slots. v1 requires identical repo scope on both features. |
+| `reclaim` | Free every warm slot whose feature's PR(s) merged/closed and whose worktree is clean — vacate to base, drop the slot entry, return it to the pool. Dirty merged slots are reported as advisories, not touched. |
 
 `worktree-N` is also a universal alias form — any tool that takes a feature alias also accepts a slot id (`feature_state worktree-2`, `pr worktree-1`, etc.) and resolves to the slot's current occupant.
 
 ### Why this model
 
-It matches a mental model where there's one feature **in focus** — open in the IDE, live at localhost, the thing your git GUI is staring at — while others are being worked on concurrently. `switch` makes managing that focus easier: one verb to promote whichever feature deserves the canonical slot right now, with the previously-focused one either parked in a warm slot (still close at hand) or wound down cold (preserved but out of the way) depending on how active it still is.
+It matches a mental model where there's one feature **running** — booted, live at localhost, the thing your git GUI is staring at — while others sit in workable warm slots getting review comments addressed, or cold and out of the way. `switch` makes managing *what's running* easier: one verb to promote whichever feature deserves trunk right now, with the previously-running one either parked warm (still open-PR-active, instant to switch back) or wound down cold (preserved but out of the way) depending on the warm-vs-cold rule.
 
 Decoupling slot identity from feature identity matters because:
 - The dashboard can render slots in stable order even as occupants change.
 - A "swap" is just a JSON edit + per-repo checkouts; no directory rename.
-- `worktree-N` is a stable shell PATH if you really do need to peek at a warm tree (read-only — don't run code there).
+- `worktree-N` is a stable shell PATH to a warm tree you can actually work in — edit, commit, push, lint, unit-test — just not run full-stack.
+- Reclaim can vacate a slot back to the pool without deleting the directory or its installed deps.
 - Migration from pre-3.0 layouts is a one-shot, idempotent operation (`canopy migrate-slots`).
 
 ### What `switch` is *not*
 
 - **Not branch-management.** `switch` doesn't create branches that don't exist (that's `feature_create`), doesn't open IDEs (that's `code`), doesn't commit/push (those are `commit`/`push`/`ship`). It only moves features between {canonical, warm, cold}.
-- **Not slot-allocation either.** Use `slot load` to warm a cold feature into a slot without changing canonical. Use `slot clear` to free a slot without bringing a new feature in. `switch` is specifically the "what's in focus" verb.
-- **Not unsafe.** Three layers of defense: a preflight catches predictable failures cheaply; a fast-path 5-op-per-repo swap when Y is already warm; a journaled rollback walker plus a `slots.json.in_flight` marker for the residual real-world failures (disk full, network blip, partial multi-repo failure). Either every repo finishes the switch or every repo rolls back to its pre-switch state.
+- **Not slot-allocation either.** Use `slot load` to warm a cold feature into a slot without changing canonical. Use `slot clear` to free a slot without bringing a new feature in. `switch` is specifically the "what's running" verb.
+- **Not the review-changes verb.** Addressing PR comments, small edits, lint/unit-test fixes — those happen in the feature's warm worktree with no `switch` at all (see the intent-gated section above). Reach for `switch` only when you need to actually run the feature.
+- **Not unsafe.** `switch` validates every in-scope repo before mutating any (branches exist, worktrees clean-or-stashable, target slot resolved or the cap-choice already made) — this closes the partial-mutation class behind two historical bricking bugs (a `no_free_slot` firing after some repos had already flipped; an `in_flight` stamp left on a clean no-op). A fast-path 5-op-per-repo swap covers the case where Y is already warm; a journaled rollback walker plus a `slots.json.in_flight` marker back up the residual real-world failures (disk full, network blip, partial multi-repo failure). Either every repo finishes the switch or every repo rolls back to its pre-switch state.
 
 ## 5. Returning to a feature — the resume brief
 

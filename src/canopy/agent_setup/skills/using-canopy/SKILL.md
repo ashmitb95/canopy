@@ -208,3 +208,14 @@ Use raw `Bash`, `Read`, `Edit` etc. as normal for:
 - `canopy join <repo>` when you're ready to work in a repo — it creates the
   branch AND registers the repo so the enforcement gate recognizes it. A raw
   `git checkout -b` does NOT register; `context` will advise you to `join`.
+
+## Working a feature: worktree vs trunk
+
+- To make REVIEW changes on a feature (address PR comments, small edits): work
+  in its worktree. `context` gives you the path; the enforcement gate allows
+  commits/pushes there. Do NOT `switch` — switching is only for running.
+- To RUN a feature full-stack (boot the app, integration test): `canopy switch
+  <feature>` promotes it to trunk (the only place with the full env).
+- If `context` shows a slot's deps as `installing` or `failed`, wait or
+  `canopy worktree-bootstrap --deps <feature>` before linting/testing there.
+- `canopy reclaim` frees warm slots whose PRs merged (clean ones only).

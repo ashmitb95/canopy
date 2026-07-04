@@ -4,6 +4,33 @@ Tracks the Python side (CLI + MCP server). The VSCode extension has its own [vsc
 
 Versions follow semver. Pre-1.0 — minor bumps may add features or break behavior; the README is the source-of-truth contract.
 
+## 3.4.0 — 2026-07-04 (Slot lifecycle rework — 4.0 phase 4)
+
+### Changed
+- `switch` default flips to a warm-vs-cold policy: a feature vacating trunk
+  keeps a warm slot only if it has an open PR or live WIP, else goes cold with
+  a feature-tagged stash. `--release-current` / `--evict` / `--evict-to`
+  remain as explicit overrides.
+- `switch` now validates all repos before mutating any (aggregated preflight),
+  closing the partial-mutation class behind the two historical bricking bugs.
+- Warm slots are the workbench for PR-review changes (work in the worktree,
+  no switch); `switch`→trunk is now reserved for running a feature full-stack.
+
+### Added
+- Auto-bootstrap on slot creation: fast steps (env, IDE, per-clone husky
+  hooks) run synchronously; deps install runs in the background with status
+  (`installing`/`ready`/`failed`) surfaced in `context`; lockfile-unchanged
+  short-circuit; `--interactive`/`--force` escapes. (Timing is provisional —
+  see the design doc.)
+- `canopy reclaim` (+ MCP `reclaim`): free warm slots whose PR merged
+  (worktree → base, slot returned to the pool for reuse); clean-only, dirty
+  slots surfaced as advisories; also passive on `context --remote`.
+- Cap-full raises `worktree_cap_reached` with three choices — raise the cap,
+  send the vacating feature cold, or evict a specific warm PR — surfaced to
+  the agent as a question rather than silently auto-evicting.
+- `context` slots now carry per-repo bootstrap status; `run --feature` routes
+  to a warm feature's worktree (trunk for canonical).
+
 ## 3.3.0 — 2026-07-04 (Registry consolidation — 4.0 phase 3)
 
 ### Added

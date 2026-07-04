@@ -60,12 +60,8 @@ def _local_feature(workspace: Workspace, feature: str) -> dict[str, Any]:
 
 
 def _compute_advisories(workspace: Workspace, active_feature):
-    # Replaced in Task 5 by a direct import of advisories.compute_advisories.
-    try:
-        from .advisories import compute_advisories
-        return compute_advisories(workspace, active_feature)
-    except ImportError:
-        return []
+    from .advisories import compute_advisories
+    return compute_advisories(workspace, active_feature)
 
 
 def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:

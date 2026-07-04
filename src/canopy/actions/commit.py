@@ -21,15 +21,9 @@ Per-repo recipe::
 
 Per-repo failure does NOT cancel other repos. Result aggregates the
 per-repo outcome dict so the caller can act on partial success.
-
-The ``--address <comment-id>`` flag (M3) auto-formats the commit message
-with a bot comment's title + URL and records a resolution entry in
-``.canopy/state/bot_resolutions.json`` when the matching repo commits
-successfully.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -37,9 +31,7 @@ from ..git import repo as git
 from ..workspace.workspace import Workspace
 from . import slots as slots_mod
 from .aliases import repos_for_feature, resolve_feature
-from .bot_resolutions import record_resolution
 from .errors import BlockerError, FixAction
-from .feature_state import _per_repo_facts
 from .repo_paths import resolve_repo_paths
 
 
@@ -179,14 +171,12 @@ def commit(
     paths: list[str] | None = None,
     no_hooks: bool = False,
     amend: bool = False,
-    address: str | None = None,
-    resolve_thread: bool | None = None,
 ) -> dict[str, Any]:
     """Commit across every repo in a feature lane.
 
     Args:
         workspace: the workspace.
-        message: commit message (required unless ``amend`` or ``address``
+        message: commit message (required unless ``amend``
             supplies one). Empty messages should be rejected at the CLI
             parse layer before reaching here.
         feature: feature alias. If None, falls back to the canonical
@@ -198,29 +188,11 @@ def commit(
             If given, ``git add <paths>`` instead of ``git add -u``.
         no_hooks: skip pre-commit / commit-msg hooks (``--no-verify``).
         amend: amend HEAD instead of creating a new commit.
-        address: a bot review comment ID or its GitHub URL (M3). When
-            set, the commit message is auto-suffixed with the comment
-            title + URL, and on success the resolution is recorded in
-            ``.canopy/state/bot_resolutions.json``. Comment must belong
-            to one of the feature's actionable bot threads; a non-bot
-            comment raises ``BlockerError(code='not_a_bot_comment')``.
-        resolve_thread: when ``address`` is set, controls whether the
-            corresponding GitHub review thread is resolved after a
-            successful commit. ``True`` forces resolve; ``False`` forces
-            skip; ``None`` (default) defers to the workspace augment
-            ``auto_resolve_threads_on_address`` (which defaults to
-            ``False`` when absent). Thread resolution is a best-effort
-            step — failures are captured in ``result["thread_resolved"]``
-            as ``{"skipped": "<reason>"}`` rather than raising.
 
-    Returns ``{feature, results: {<repo>: {...}}, addressed?}``. The
+    Returns ``{feature, results: {<repo>: {...}}}``. The
     per-repo dict has shape ``{status, sha?, files_changed?, reason?,
     hook_output?, amended?}`` where ``status`` is one of
-    ``ok | nothing | hooks_failed | failed``. When ``--address`` is given
-    and a resolution was recorded, ``addressed`` carries
-    ``{comment_id, repo, sha, title, url}``.  When thread resolution was
-    attempted, ``addressed`` also carries ``thread_resolved`` (a dict
-    with the GH result or a ``{"skipped": "<reason>"}`` entry).
+    ``ok | nothing | hooks_failed | failed``.
     """
     feature_name = _resolve_feature_name(workspace, feature)
     repo_branches = repos_for_feature(workspace, feature_name)
@@ -244,45 +216,6 @@ def commit(
             )
 
     repo_paths, _has_wt = resolve_repo_paths(workspace, feature_name, repo_branches)
-
-    # ── --address: locate the bot comment and rewrite the message ───────
-    addressed_info: dict[str, Any] | None = None
-    if address is not None:
-        comment_id = _parse_comment_id(address)
-        bot_comment, owning_repo, _owner, _repo_slug, _pr_number = (
-            _find_actionable_bot_comment(
-                workspace, feature_name, repo_branches, repo_paths, comment_id,
-            )
-        )
-        if bot_comment is None:
-            raise BlockerError(
-                code="not_a_bot_comment",
-                what=(
-                    f"comment {comment_id} is not in any actionable bot thread for "
-                    f"feature '{feature_name}'"
-                ),
-                details={
-                    "feature": feature_name,
-                    "comment_id": comment_id,
-                    "hint": (
-                        "verify the id with `canopy bot-status --feature "
-                        f"{feature_name}` and pass either the numeric id or "
-                        "the comment URL"
-                    ),
-                },
-            )
-        title = _comment_title(bot_comment.get("body", ""))
-        url = bot_comment.get("url", "")
-        message = _format_address_message(message or "", title, url)
-        addressed_info = {
-            "comment_id": comment_id,
-            "repo": owning_repo,
-            "title": title,
-            "url": url,
-            "_owner": _owner,
-            "_repo_slug": _repo_slug,
-            "_pr_number": _pr_number,
-        }
 
     if not message and not amend:
         # CLI argparse should catch this, but guard for direct callers.
@@ -309,204 +242,4 @@ def commit(
             amend=amend,
         )
 
-    out: dict[str, Any] = {"feature": feature_name, "results": results}
-
-    # Record the resolution iff the owning repo committed successfully.
-    if addressed_info is not None:
-        owning = addressed_info["repo"]
-        owning_result = results.get(owning, {})
-        if owning_result.get("status") == "ok":
-            sha = owning_result["sha"]
-            record_resolution(
-                workspace.config.root,
-                comment_id=addressed_info["comment_id"],
-                feature=feature_name,
-                repo=owning,
-                commit_sha=sha,
-                comment_title=addressed_info["title"],
-                comment_url=addressed_info["url"],
-            )
-            # Mirror the resolution into historian (M4) so the per-feature
-            # memory file's Resolutions log stays current. Non-fatal if
-            # the historian write fails — the canonical state is still in
-            # bot_resolutions.json.
-            try:
-                from . import historian
-                historian.record_comment_resolved(
-                    workspace.config.root, feature_name,
-                    comment_id=addressed_info["comment_id"],
-                    commit_sha=sha,
-                    gist=addressed_info["title"],
-                    url=addressed_info["url"],
-                )
-            except Exception:
-                pass
-            addressed_info["sha"] = sha
-            addressed_info["recorded"] = True
-
-            # ── Optional: resolve the GH review thread (T4) ─────────────
-            # Determine effective resolve flag: explicit flag > augment default.
-            # Note: this fires on local commit success. The thread will be
-            # resolved before the commit reaches GitHub — push your branch to
-            # make the linkage live on the remote.
-            from ..integrations import github as gh
-            from .thread_actions import resolve_thread as _resolve_thread_action
-
-            augment_default = bool(
-                (workspace.config.augments or {}).get(
-                    "auto_resolve_threads_on_address", False,
-                )
-            )
-            effective_resolve = (
-                resolve_thread if resolve_thread is not None else augment_default
-            )
-
-            if effective_resolve:
-                owner = addressed_info.get("_owner") or ""
-                repo_slug = addressed_info.get("_repo_slug") or ""
-                pr_number = addressed_info.get("_pr_number")
-                comment_id_val = addressed_info["comment_id"]
-
-                if not (owner and repo_slug and pr_number):
-                    addressed_info["thread_resolved"] = {
-                        "skipped": "pr_not_found",
-                        "comment_id": comment_id_val,
-                    }
-                else:
-                    try:
-                        threads = gh.list_review_threads(
-                            workspace.config.root, owner, repo_slug, pr_number,
-                        )
-                    except Exception as exc:
-                        addressed_info["thread_resolved"] = {
-                            "skipped": "gh_unreachable",
-                            "error": str(exc),
-                            "comment_id": comment_id_val,
-                        }
-                    else:
-                        # comment_id may be str or int; normalise to int for comparison.
-                        try:
-                            cid_int = int(comment_id_val)
-                        except (ValueError, TypeError):
-                            cid_int = None
-
-                        target_tid = next(
-                            (
-                                t["thread_id"]
-                                for t in threads
-                                if any(
-                                    c.get("comment_id") == cid_int
-                                    for c in t.get("comments", [])
-                                )
-                            ),
-                            None,
-                        )
-                        if target_tid is None:
-                            addressed_info["thread_resolved"] = {
-                                "skipped": "thread_not_found",
-                                "comment_id": comment_id_val,
-                            }
-                        else:
-                            try:
-                                from .errors import ActionError
-                                addressed_info["thread_resolved"] = _resolve_thread_action(
-                                    workspace,
-                                    target_tid,
-                                    feature=feature_name,
-                                    via_command="commit_address",
-                                    via_commit_sha=sha,
-                                )
-                            except ActionError as exc:
-                                addressed_info["thread_resolved"] = {
-                                    "skipped": "resolve_failed",
-                                    "error": exc.to_dict(),
-                                    "comment_id": comment_id_val,
-                                }
-        else:
-            addressed_info["recorded"] = False
-            addressed_info["reason"] = (
-                f"owning repo '{owning}' commit status: {owning_result.get('status', 'unknown')}"
-            )
-
-        # Strip internal PR-coordinate keys before returning.
-        addressed_info.pop("_owner", None)
-        addressed_info.pop("_repo_slug", None)
-        addressed_info.pop("_pr_number", None)
-        out["addressed"] = addressed_info
-
-    return out
-
-
-# ── --address helpers ────────────────────────────────────────────────────
-
-
-_TRAILING_DIGITS = re.compile(r"(\d+)\s*$")
-
-
-def _parse_comment_id(address: str) -> str:
-    """Accept a numeric id, a ``#123`` form, or a GitHub URL.
-
-    GitHub URLs end with ``#discussion_r<N>``, ``#issuecomment-<N>``, or
-    similar — we extract the trailing digit run as the canonical id.
-    """
-    raw = address.strip()
-    match = _TRAILING_DIGITS.search(raw)
-    if not match:
-        raise BlockerError(
-            code="invalid_comment_id",
-            what=f"could not parse a comment id from '{address}'",
-            details={"hint": "pass a numeric id (e.g. 123456) or the GitHub comment URL"},
-        )
-    return match.group(1)
-
-
-def _find_actionable_bot_comment(
-    workspace: Workspace,
-    feature_name: str,
-    repo_branches: dict[str, str],
-    repo_paths: dict[str, Path],
-    comment_id: str,
-) -> tuple[dict | None, str | None, str | None, str | None, int | None]:
-    """Walk per-repo bot threads for a matching comment id.
-
-    Returns ``(comment_dict, owning_repo, owner, repo_slug, pr_number)`` or
-    ``(None, None, None, None, None)`` when no actionable bot thread carries
-    the requested id.  The extra fields come from the same ``_per_repo_facts``
-    call so no second network round-trip is needed.
-    """
-    facts = _per_repo_facts(workspace, feature_name, repo_branches, repo_paths)
-    for repo_name, repo_facts in facts.items():
-        for thread in repo_facts.get("actionable_bot_threads", []):
-            if str(thread.get("id", "")) == comment_id:
-                pr = repo_facts.get("pr") or {}
-                return (
-                    thread,
-                    repo_name,
-                    repo_facts.get("owner"),
-                    repo_facts.get("repo_slug"),
-                    pr.get("number"),
-                )
-    return None, None, None, None, None
-
-
-def _comment_title(body: str, max_len: int = 80) -> str:
-    """First non-empty line of the comment, trimmed to ``max_len``."""
-    for line in (body or "").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if len(line) <= max_len:
-            return line
-        return line[:max_len].rstrip() + "…"
-    return ""
-
-
-def _format_address_message(user_message: str, title: str, url: str) -> str:
-    """Append the standard ``Addresses bot comment`` trailer."""
-    suffix_parts = [f'Addresses bot comment: "{title}"' if title else "Addresses bot comment"]
-    if url:
-        suffix_parts[-1] += f" ({url})"
-    suffix = "\n\n".join(suffix_parts)
-    if user_message.strip():
-        return f"{user_message.rstrip()}\n\n{suffix}"
-    return suffix
+    return {"feature": feature_name, "results": results}

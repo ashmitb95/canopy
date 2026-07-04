@@ -2437,8 +2437,6 @@ def cmd_commit(args: argparse.Namespace) -> None:
                 paths=args.paths or None,
                 no_hooks=args.no_hooks,
                 amend=args.amend,
-                address=getattr(args, "address", None),
-                resolve_thread=getattr(args, "resolve_thread", None),
             )
     except ActionError as err:
         if args.json:
@@ -2468,35 +2466,6 @@ def cmd_commit(args: argparse.Namespace) -> None:
                 console.print(f"        [muted]{line}[/]")
         else:  # failed
             console.print(f"    [error]✗[/] [repo]{repo}[/]  {r.get('reason', 'failed')}")
-    addressed = result.get("addressed")
-    if addressed:
-        cid = addressed["comment_id"]
-        if addressed.get("recorded"):
-            sha = (addressed.get("sha") or "")[:8]
-            console.print(
-                f"    [success]✓[/] addressed bot comment [muted]{cid}[/] "
-                f"(recorded against [repo]{addressed['repo']}[/] {sha})",
-            )
-        else:
-            console.print(
-                f"    [warning]·[/] bot comment [muted]{cid}[/] not recorded "
-                f"({addressed.get('reason', 'no successful commit in owning repo')})",
-            )
-        tr = addressed.get("thread_resolved")
-        if tr is not None:
-            if tr.get("skipped"):
-                console.print(
-                    f"    [muted]·[/] thread resolve skipped "
-                    f"([muted]{tr['skipped']}[/])",
-                )
-            elif tr.get("is_resolved"):
-                tid = tr.get("thread_id") or tr.get("logged", {}).get("thread_id", "")
-                console.print(
-                    f"    [success]✓[/] GH review thread resolved "
-                    f"([muted]{tid}[/])",
-                )
-            else:
-                console.print("    [warning]·[/] GH thread resolve returned unexpected result")
     console.print()
 
 
@@ -3795,19 +3764,6 @@ def main() -> None:
                             help="Pass --no-verify to skip pre-commit / commit-msg hooks")
     commit_p.add_argument("--amend", action="store_true",
                             help="Amend HEAD in each repo instead of creating new commits")
-    commit_p.add_argument("--address", default=None, metavar="COMMENT-ID",
-                            help="Address a bot review comment (numeric id or GitHub URL); "
-                                 "auto-suffixes the message with the comment title + URL "
-                                 "and records the resolution in .canopy/state/bot_resolutions.json")
-    _resolve_grp = commit_p.add_mutually_exclusive_group()
-    _resolve_grp.add_argument("--resolve-thread", action="store_true", default=None,
-                               dest="resolve_thread",
-                               help="After --address commit succeeds, resolve the GH review "
-                                    "thread (overrides augment auto_resolve_threads_on_address)")
-    _resolve_grp.add_argument("--no-resolve-thread", action="store_false",
-                               dest="resolve_thread",
-                               help="Do NOT resolve the GH review thread even if the augment "
-                                    "auto_resolve_threads_on_address is true")
     commit_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     # bot-status — per-feature bot-comment rollup (M3)

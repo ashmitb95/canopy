@@ -103,7 +103,7 @@ def test_validate_steps_rejects_unknown():
 
 
 def test_validate_steps_default_is_all():
-    assert _validate_steps(None) == {"env", "deps", "ide"}
+    assert _validate_steps(None) == {"env", "deps", "ide", "hooks"}
 
 
 # ── ide-workspace renderer ────────────────────────────────────────────
@@ -208,6 +208,36 @@ def test_bootstrap_feature_blocks_when_no_worktrees(workspace_with_bootstrap_con
     with pytest.raises(BlockerError) as e:
         bootstrap_feature(workspace_with_bootstrap_config, "auth-flow")
     assert e.value.code == "no_worktrees"
+
+
+def _ws(root):
+    from canopy.workspace.workspace import Workspace
+    from canopy.workspace.config import load_config
+    return Workspace(load_config(root))
+
+
+# ── hooks step (per-clone husky install) ───────────────────────────────
+
+def test_bootstrap_hooks_step_installs(canopy_toml_for_workspace, monkeypatch):
+    from canopy.actions import bootstrap
+    calls = []
+    monkeypatch.setattr(bootstrap, "_run_hook_install",
+                        lambda worktree_path, repo_cfg: calls.append(worktree_path) or
+                        {"status": "ok", "mechanism": "husky-prepare"})
+    root = canopy_toml_for_workspace
+    result = bootstrap.bootstrap_repo(
+        _ws(root), "auth-flow", "repo-a", root / "repo-a", steps=("hooks",))
+    assert result["hooks"]["status"] == "ok"
+    assert calls
+
+
+def test_bootstrap_hooks_skipped_when_no_husky(canopy_toml_for_workspace):
+    from canopy.actions import bootstrap
+    root = canopy_toml_for_workspace
+    # repo-a has no package.json prepare script and no .husky/ → skipped
+    result = bootstrap.bootstrap_repo(
+        _ws(root), "auth-flow", "repo-a", root / "repo-a", steps=("hooks",))
+    assert result["hooks"]["status"] == "skipped"
 
 
 def test_resolve_worktree_paths_uses_slots_json_for_warm_feature(workspace_with_slots):

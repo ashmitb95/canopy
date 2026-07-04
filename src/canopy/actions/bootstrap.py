@@ -30,7 +30,7 @@ from .aliases import resolve_feature
 from .errors import BlockerError
 from .ide_workspace import render_code_workspace
 
-ALLOWED_STEPS = ("env", "deps", "ide")
+ALLOWED_STEPS = ("env", "deps", "ide", "hooks")
 
 
 def bootstrap_feature(
@@ -121,7 +121,10 @@ def bootstrap_repo(
         else:
             deps_result = {"status": "skipped", "reason": "no install_cmd configured"}
 
-    return {"env": env_result, "deps": deps_result}
+    result: dict[str, Any] = {"env": env_result, "deps": deps_result}
+    if "hooks" in chosen:
+        result["hooks"] = _run_hook_install(worktree_path, repo_config)
+    return result
 
 
 # ── step 1: env-file copy ──────────────────────────────────────────────
@@ -196,6 +199,39 @@ def _run_install(install_cmd: str, worktree_path: Path) -> dict[str, Any]:
         tail = "\n".join(proc.stderr.splitlines()[-10:])
         out["stderr_tail"] = tail
     return out
+
+
+# ── step: per-clone hook install ───────────────────────────────────────
+
+def _run_hook_install(worktree_path: Path, repo_cfg) -> dict[str, Any]:
+    """Install per-clone git hooks (husky-style) in a worktree.
+
+    If package.json has a "prepare" script (husky's install hook), run it
+    via the repo's package manager (idempotent, fast — no full install).
+    Else if a .husky/ dir exists, point core.hooksPath at it. No-op
+    otherwise.
+    """
+    import json as _json
+    from ..git import repo as git
+    pkg = worktree_path / "package.json"
+    if pkg.exists():
+        try:
+            data = _json.loads(pkg.read_text())
+            if "prepare" in (data.get("scripts") or {}):
+                pm = "pnpm" if (worktree_path / "pnpm-lock.yaml").exists() else "npm"
+                cp = subprocess.run([pm, "run", "prepare"], cwd=str(worktree_path),
+                                    capture_output=True, text=True)
+                return {"status": "ok" if cp.returncode == 0 else "failed",
+                        "mechanism": f"{pm}-prepare", "exit_code": cp.returncode}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+    if (worktree_path / ".husky").is_dir():
+        try:
+            git.set_hooks_path(worktree_path, ".husky")
+            return {"status": "ok", "mechanism": "hooksPath"}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+    return {"status": "skipped", "reason": "no husky/prepare detected"}
 
 
 # ── step 3: IDE workspace file ─────────────────────────────────────────

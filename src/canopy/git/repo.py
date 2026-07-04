@@ -617,6 +617,13 @@ def all_branches(repo_path: Path) -> list[dict]:
     return entries
 
 
+# ── Config ─────────────────────────────────────────────────────────────────
+
+def set_hooks_path(repo_path: Path, rel: str) -> str:
+    """git config core.hooksPath <rel> (per-clone hook wiring)."""
+    return _run(["config", "core.hooksPath", rel], cwd=repo_path)
+
+
 # ── Worktree ──────────────────────────────────────────────────────────────
 
 def is_worktree(repo_path: Path) -> bool:

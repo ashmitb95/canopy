@@ -230,4 +230,78 @@ def gate_command(workspace, command: str, cwd: Path) -> GateDecision:
                     f"repo, e.g. `cd <repo> && git ...`, or use `canopy run`."
                 ),
             )
+        repo_root, repo_name, slot_id = hit
+        if seg.argv_after_globals[0] in _BRANCH_CHECK_SUBCOMMANDS:
+            deny = _check_branch(workspace, repo_root, repo_name, slot_id, seg)
+            if deny is not None:
+                return deny
     return GateDecision(allow=True)
+
+
+_BRANCH_CHECK_SUBCOMMANDS = frozenset({"commit", "push"})
+
+
+def _branch_owner_map(workspace) -> dict[tuple[str, str], str]:
+    """(repo_name, branch_name) → feature, for all registered features."""
+    from ..features.coordinator import FeatureCoordinator
+
+    out: dict[tuple[str, str], str] = {}
+    try:
+        features = FeatureCoordinator(workspace)._load_features()
+    except Exception:
+        return out
+    for feat, data in (features or {}).items():
+        branches = (data or {}).get("branches") or {}
+        for repo_name in (data or {}).get("repos") or []:
+            out[(repo_name, branches.get(repo_name, feat))] = feat
+    return out
+
+
+def _check_branch(workspace, repo_root: Path, repo_name: str,
+                  slot_id: str | None, seg: GitSegment) -> GateDecision | None:
+    """Return a deny decision if the location's branch is drifted, else None."""
+    from . import slots as slots_mod
+    from ..git import repo as git
+
+    try:
+        current = git.current_branch(repo_root)
+    except Exception:
+        return None                              # fail open
+    owners = _branch_owner_map(workspace)
+    owner = owners.get((repo_name, current))
+    state = slots_mod.read_state(workspace)
+
+    if slot_id is None:
+        # Trunk: allowed = default_branch, canonical feature's branch,
+        # or any unregistered branch.
+        canonical = state.canonical.feature if state and state.canonical else None
+        default = workspace.get_repo(repo_name).config.default_branch
+        if current == default or owner is None or owner == canonical:
+            return None
+        return GateDecision(
+            allow=False, code="trunk_branch_drift",
+            reason=(
+                f"canopy: blocked `git {seg.argv_after_globals[0]}` in trunk "
+                f"{repo_name} — it is on '{current}' (feature '{owner}') but "
+                f"the canonical feature is '{canonical}'. Run "
+                f"`canopy switch {owner}` to make '{owner}' official, or "
+                f"`canopy switch {canonical}` to restore the trunk branch."
+            ),
+        )
+    # Slot: current branch must be the occupant feature's branch for this repo.
+    entry = state.slots.get(slot_id) if state else None
+    if entry is None:
+        return None                              # doctor's problem, not the gate's
+    from .aliases import repos_for_feature
+    expected = (repos_for_feature(workspace, entry.feature) or {}).get(repo_name)
+    if expected is None or current == expected:
+        return None
+    return GateDecision(
+        allow=False, code="slot_branch_drift",
+        reason=(
+            f"canopy: blocked `git {seg.argv_after_globals[0]}` in {slot_id} "
+            f"({repo_name}) — it is on '{current}' but the slot belongs to "
+            f"feature '{entry.feature}' (branch '{expected}'). Run "
+            f"`git checkout {expected}` in this worktree, or `canopy doctor`."
+        ),
+    )

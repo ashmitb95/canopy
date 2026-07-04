@@ -148,3 +148,60 @@ def test_gate_allows_mutation_in_slot_worktree(workspace_with_slots):
     slot_dir = sm.slot_worktree_path(ws, "worktree-1", "repo-a")
     d = gate_command(ws, 'git commit -m "review fix"', cwd=slot_dir)
     assert d.allow is True
+
+
+# ── gate_command: branch drift ──────────────────────────────────────────
+
+def _write_features(ws, features: dict):
+    fpath = _root(ws) / ".canopy" / "features.json"
+    fpath.parent.mkdir(exist_ok=True)
+    fpath.write_text(json.dumps(
+        {name: {"repos": repos} for name, repos in features.items()}))
+
+
+def test_gate_blocks_commit_on_drifted_trunk(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only          # canonical = X
+    _write_features(ws, {"X": ["repo-a", "repo-b"], "Y": ["repo-a", "repo-b"]})
+    # manually drift trunk repo-a onto Y (as if a raw `git checkout Y` happened)
+    subprocess.run(["git", "checkout", "Y"], cwd=_root(ws) / "repo-a",
+                   check=True, capture_output=True)
+    d = gate_command(ws, 'git commit -m "x"', cwd=_root(ws) / "repo-a")
+    assert d.allow is False
+    assert d.code == "trunk_branch_drift"
+    assert "canopy switch" in d.reason
+
+
+def test_gate_allows_commit_on_default_branch(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    _write_features(ws, {"X": ["repo-a", "repo-b"]})
+    subprocess.run(["git", "checkout", "main"], cwd=_root(ws) / "repo-a",
+                   check=True, capture_output=True)
+    d = gate_command(ws, 'git commit -m "x"', cwd=_root(ws) / "repo-a")
+    assert d.allow is True
+
+
+def test_gate_allows_unregistered_branch(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    _write_features(ws, {"X": ["repo-a", "repo-b"]})
+    subprocess.run(["git", "checkout", "-b", "scratch-experiment"],
+                   cwd=_root(ws) / "repo-a", check=True, capture_output=True)
+    d = gate_command(ws, 'git commit -m "x"', cwd=_root(ws) / "repo-a")
+    assert d.allow is True
+
+
+def test_gate_blocks_wrong_branch_in_slot(workspace_with_slots):
+    from canopy.actions.hook_gate import gate_command
+    from canopy.actions import slots as sm
+    ws = workspace_with_slots                   # Y warm in worktree-1
+    _write_features(ws, {"X": ["repo-a", "repo-b"], "Y": ["repo-a", "repo-b"]})
+    slot_dir = sm.slot_worktree_path(ws, "worktree-1", "repo-a")
+    # drift the slot worktree onto a different branch
+    subprocess.run(["git", "checkout", "-b", "sneaky"], cwd=slot_dir,
+                   check=True, capture_output=True)
+    d = gate_command(ws, 'git commit -m "x"', cwd=slot_dir)
+    assert d.allow is False
+    assert d.code == "slot_branch_drift"
+    assert "Y" in d.reason                      # names the expected occupant

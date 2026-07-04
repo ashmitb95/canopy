@@ -141,3 +141,21 @@ def test_timeout_raises_failed(workspace_dir):
     assert err.details["timeout_seconds"] == 1
     # JSON-serializable
     json.dumps(err.to_dict())
+
+
+# ── Wave 3.0 slot-model routing ─────────────────────────────────────────
+
+def test_run_routes_warm_feature_to_worktree(workspace_with_slots):
+    from canopy.agent.runner import run_in_repo
+    from canopy.actions import slots as sm
+    ws = workspace_with_slots                # Y warm in worktree-1
+    wt = sm.slot_worktree_path(ws, "worktree-1", "repo-a")
+    r = run_in_repo(ws, "repo-a", "pwd", feature="Y")
+    assert str(wt) in r["cwd"]
+
+
+def test_run_routes_canonical_to_trunk(workspace_with_slots):
+    from canopy.agent.runner import run_in_repo
+    ws = workspace_with_slots                # X canonical (trunk)
+    r = run_in_repo(ws, "repo-a", "pwd", feature="X")
+    assert str(ws.get_repo("repo-a").abs_path) in r["cwd"]

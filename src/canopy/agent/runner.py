@@ -99,6 +99,17 @@ def _resolve_cwd(workspace: Workspace, repo: str, feature: str | None) -> Path:
             return Path(state.canonical.per_repo_paths[repo])
         return workspace.get_repo(repo).abs_path
 
+    from ..actions import slots as slots_mod
+    sid = slots_mod.slot_for_feature(workspace, feature)
+    if sid is not None:
+        wt = slots_mod.slot_worktree_path(workspace, sid, repo)
+        if (wt / ".git").exists():
+            return wt
+    state = slots_mod.read_state(workspace)
+    if (state and state.canonical and state.canonical.feature == feature
+            and repo in state.canonical.per_repo_paths):
+        return Path(state.canonical.per_repo_paths[repo])
+
     from ..features.coordinator import FeatureCoordinator
     coordinator = FeatureCoordinator(workspace)
     try:

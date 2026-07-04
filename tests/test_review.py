@@ -293,17 +293,16 @@ class TestReviewStatus:
         """review_status raises if neither GitHub MCP nor gh CLI is available."""
         from canopy.workspace.config import load_config
         from canopy.workspace.workspace import Workspace
-        from canopy.features.coordinator import FeatureCoordinator
+        from canopy.management import review_ops
 
         # Force both transports off.
         monkeypatch.setattr("canopy.integrations.github.have_gh_cli", lambda: False)
 
         config = load_config(canopy_toml)
         ws = Workspace(config)
-        coordinator = FeatureCoordinator(ws)
 
         with pytest.raises(GitHubNotConfiguredError):
-            coordinator.review_status("auth-flow")
+            review_ops.review_status(ws, "auth-flow")
 
 
 # ── Coordinator review_prep (real git, no MCP needed) ──────────────────
@@ -314,6 +313,7 @@ class TestReviewPrep:
         from canopy.workspace.config import load_config
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator
+        from canopy.management import review_ops
 
         config = load_config(canopy_toml)
         ws = Workspace(config)
@@ -327,7 +327,7 @@ class TestReviewPrep:
         wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / "repo-a"
         (wt_path / "new_file.py").write_text("# new file\n")
 
-        result = coordinator.review_prep("prep-test", message="fix: address review")
+        result = review_ops.review_prep(ws, "prep-test", message="fix: address review")
 
         assert result["feature"] == "prep-test"
         assert result["message"] == "fix: address review"
@@ -352,6 +352,7 @@ class TestReviewPrep:
         from canopy.workspace.config import load_config
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator
+        from canopy.management import review_ops
 
         config = load_config(canopy_toml)
         ws = Workspace(config)
@@ -361,7 +362,7 @@ class TestReviewPrep:
         lane = coordinator.create("clean-test", use_worktrees=True)
         slot_id = coordinator._load_features()["clean-test"]["slot_id"]
 
-        result = coordinator.review_prep("clean-test")
+        result = review_ops.review_prep(ws, "clean-test")
 
         assert result["all_passed"] is True
         for repo_name, info in result["repos"].items():
@@ -380,6 +381,7 @@ class TestReviewPrep:
         from canopy.workspace.config import load_config
         from canopy.workspace.workspace import Workspace
         from canopy.features.coordinator import FeatureCoordinator
+        from canopy.management import review_ops
 
         config = load_config(canopy_toml)
         ws = Workspace(config)
@@ -402,7 +404,7 @@ class TestReviewPrep:
         wt_path = canopy_toml / ".canopy" / "worktrees" / slot_id / "repo-a"
         (wt_path / "touched.py").write_text("# touched\n")
 
-        result = coordinator.review_prep("hook-test")
+        result = review_ops.review_prep(ws, "hook-test")
 
         api_result = result["repos"]["repo-a"]
         assert api_result["precommit"]["type"] == "git_hook"

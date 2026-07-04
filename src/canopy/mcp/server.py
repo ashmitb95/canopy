@@ -1476,8 +1476,8 @@ def review_status(feature: str) -> dict:
         review workflow cannot proceed without PRs.
     """
     ws = _get_workspace()
-    coordinator = FeatureCoordinator(ws)
-    return coordinator.review_status(feature)
+    from ..management.review_ops import review_status as review_status_op
+    return review_status_op(ws, feature)
 
 
 @mcp.tool()
@@ -1499,8 +1499,8 @@ def review_comments(feature: str) -> dict:
         total_comments gives the aggregate count across all repos.
     """
     ws = _get_workspace()
-    coordinator = FeatureCoordinator(ws)
-    return coordinator.review_comments(feature)
+    from ..management.review_ops import review_comments as review_comments_op
+    return review_comments_op(ws, feature)
 
 
 @mcp.tool()
@@ -1529,8 +1529,8 @@ def review_prep(
         all_passed is True only if every repo's hooks passed.
     """
     ws = _get_workspace()
-    coordinator = FeatureCoordinator(ws)
-    return coordinator.review_prep(feature, message=message)
+    from ..management.review_ops import review_prep as review_prep_op
+    return review_prep_op(ws, feature, message=message)
 
 
 # ── Workspace lifecycle ──────────────────────────────────────────────────

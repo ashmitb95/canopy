@@ -1194,13 +1194,12 @@ def cmd_fork(args: argparse.Namespace) -> None:
 
 def _cmd_preflight_feature(args: argparse.Namespace) -> None:
     """Feature-scoped preflight via coordinator.review_prep (records result)."""
-    from ..features.coordinator import FeatureCoordinator
+    from ..management.review_ops import review_prep as review_prep_op
     from .ui import console, separator, spinner, SYM_CHECK, SYM_DOT, SYM_CROSS
 
     workspace = _load_workspace()
-    coord = FeatureCoordinator(workspace)
     with spinner(f"Running preflight on {args.feature}…"):
-        result = coord.review_prep(args.feature)
+        result = review_prep_op(workspace, args.feature)
 
     if args.json:
         _print_json(result)
@@ -1417,15 +1416,18 @@ def cmd_review(args: argparse.Namespace) -> None:
     from ..integrations.github import GitHubNotConfiguredError, PullRequestNotFoundError
 
     workspace = _load_workspace()
-    from ..features.coordinator import FeatureCoordinator
+    from ..management.review_ops import (
+        review_status as review_status_op,
+        review_comments as review_comments_op,
+        review_prep as review_prep_op,
+    )
 
-    coordinator = FeatureCoordinator(workspace)
     feature = args.name
 
     # ── Step 1: Check PR status ──
     try:
         with spinner(f"Checking PRs for {feature}..."):
-            status = coordinator.review_status(feature)
+            status = review_status_op(workspace, feature)
     except GitHubNotConfiguredError as e:
         print_error(str(e))
         sys.exit(1)
@@ -1443,7 +1445,7 @@ def cmd_review(args: argparse.Namespace) -> None:
     # ── Step 2: Fetch comments ──
     try:
         with spinner(f"Fetching review comments..."):
-            comments_data = coordinator.review_comments(feature)
+            comments_data = review_comments_op(workspace, feature)
     except PullRequestNotFoundError as e:
         print_error(str(e))
         sys.exit(1)
@@ -1452,8 +1454,8 @@ def cmd_review(args: argparse.Namespace) -> None:
     prep_data = None
     if not args.comments_only:
         with spinner(f"Running pre-commit hooks..."):
-            prep_data = coordinator.review_prep(
-                feature, message=args.message or "",
+            prep_data = review_prep_op(
+                workspace, feature, message=args.message or "",
             )
 
     if args.json:

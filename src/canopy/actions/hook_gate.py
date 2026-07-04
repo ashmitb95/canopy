@@ -13,10 +13,13 @@ the wrong place. Exit codes at the CLI layer: 0 = allow, 2 = block
 """
 from __future__ import annotations
 
+import re as _re
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+_GIT_WORD = _re.compile(r"\bgit\b")
 
 
 def split_top_level(command: str) -> list[str]:
@@ -62,7 +65,7 @@ def split_top_level(command: str) -> list[str]:
                 buf = []
                 i += 2
                 continue
-            if ch in (";", "|") and two != "||":
+            if ch in (";", "|", "\n") and two != "||":
                 parts.append("".join(buf).strip())
                 buf = []
                 i += 1
@@ -106,7 +109,7 @@ _UNRESOLVABLE = ("$", "~", "`")   # vars/home/expansion → don't guess
 
 
 def _resolve_path(base: Path, raw: str) -> tuple[Path, bool]:
-    token = raw.strip().strip('"').strip("'")
+    token = raw.strip()
     if not token or any(m in token for m in _UNRESOLVABLE):
         return base, False
     p = Path(token)
@@ -132,10 +135,13 @@ def resolve_segments(command: str, cwd: Path) -> list[GitSegment]:
         if not argv:
             continue
         if argv[0] == "cd":
-            if len(argv) < 2 or argv[1] == "-":
+            rest = argv[1:]
+            while rest and rest[0] in ("-P", "-L", "-e", "--"):
+                rest = rest[1:]
+            if not rest or rest[0].startswith("-"):
                 known = False
                 continue
-            cur, known = _resolve_path(cur, argv[1])
+            cur, known = _resolve_path(cur, rest[0])
             continue
         if argv[0] != "git":
             continue
@@ -143,6 +149,9 @@ def resolve_segments(command: str, cwd: Path) -> list[GitSegment]:
         # git -C <path> (repeatable, cumulative per git semantics — apply in order)
         i = 1
         while i < len(argv) - 1:
+            if argv[i] == "-c":
+                i += 2
+                continue
             if argv[i] == "-C":
                 seg_dir, ok = _resolve_path(seg_dir, argv[i + 1])
                 seg_known = seg_known and ok
@@ -161,14 +170,24 @@ def resolve_segments(command: str, cwd: Path) -> list[GitSegment]:
 # the recovery action for wrong-branch states; blocking them traps the
 # agent. Branch safety is enforced on commit/push instead.
 MUTATION_SUBCOMMANDS = frozenset({
-    "commit", "push", "merge", "rebase", "stash", "reset",
+    "commit", "push", "merge", "rebase", "reset",
     "cherry-pick", "add", "rm", "mv", "am", "revert",
+})
+
+# ``stash`` alone is a mutation subcommand, but its own sub-verb decides:
+# push/pop/apply/drop/clear/save/branch mutate; list/show are reads.
+_STASH_MUTATING_SUBCOMMANDS = frozenset({
+    "push", "pop", "apply", "drop", "clear", "save", "branch",
 })
 
 
 def is_mutation(seg: GitSegment) -> bool:
     sub = seg.argv_after_globals
-    return bool(sub) and sub[0] in MUTATION_SUBCOMMANDS
+    if not sub:
+        return False
+    if sub[0] == "stash":
+        return len(sub) == 1 or sub[1] in _STASH_MUTATING_SUBCOMMANDS
+    return sub[0] in MUTATION_SUBCOMMANDS
 
 
 @dataclass
@@ -209,7 +228,10 @@ def _locate(dirs: dict[Path, tuple[str, str | None]], d: Path):
 
 
 def gate_command(workspace, command: str, cwd: Path) -> GateDecision:
-    """Decide allow/deny for one Bash command. Pure — no I/O beyond git reads."""
+    """Decide allow/deny for one Bash command.
+
+    No side effects; reads git + canopy state only (slots.json, features.json).
+    """
     segments = [s for s in resolve_segments(command, cwd) if is_mutation(s)]
     if not segments:
         return GateDecision(allow=True)
@@ -245,13 +267,36 @@ def gate_command(workspace, command: str, cwd: Path) -> GateDecision:
 _BRANCH_CHECK_SUBCOMMANDS = frozenset({"commit", "push"})
 
 
+_PUSH_VALUE_FLAGS = ("-o", "--push-option", "--repo", "--receive-pack", "--exec")
+
+
+def _push_positional_args(args: list[str]) -> list[str]:
+    """Positional (non-flag) tokens from a push argv, stopping at the first
+    redirect/background operator so shell trailers (``2>&1``, ``> log``,
+    ``&``) are never mistaken for a refspec."""
+    positional: list[str] = []
+    skip_next = False
+    for a in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if ">" in a or "<" in a or a == "&":
+            break                                 # redirect / background — stop
+        if a.startswith("-"):
+            if a in _PUSH_VALUE_FLAGS:
+                skip_next = True                  # value is the next token
+            continue
+        positional.append(a)
+    return positional
+
+
 def _check_push_refspec(workspace, repo_root: Path, repo_name: str,
                         seg: GitSegment) -> GateDecision | None:
     """Deny pushes of branch names that don't exist in the effective repo."""
     from ..git import repo as git
 
     args = seg.argv_after_globals[1:]           # after "push"
-    positional = [a for a in args if not a.startswith("-")]
+    positional = _push_positional_args(args)
     if len(positional) < 2:
         return None                              # bare push / push origin
     refspecs = positional[1:]                    # after the remote
@@ -259,6 +304,8 @@ def _check_push_refspec(workspace, repo_root: Path, repo_name: str,
         return None
     for spec in refspecs:
         src = spec.split(":", 1)[0].lstrip("+")
+        # «...» is the corpus miner's redaction placeholder for values it
+        # scrubbed — never a real branch name, so don't try to resolve it.
         if not src or src in ("HEAD",) or "/" in src or "«" in src:
             continue                             # HEAD/tags-with-path/redacted
         try:
@@ -322,16 +369,22 @@ def _check_branch(workspace, repo_root: Path, repo_name: str,
         default = workspace.get_repo(repo_name).config.default_branch
         if current == default or owner is None or owner == canonical:
             return None
-        return GateDecision(
-            allow=False, code="trunk_branch_drift",
-            reason=(
+        if canonical is None:
+            reason = (
+                f"canopy: blocked `git {seg.argv_after_globals[0]}` in trunk "
+                f"{repo_name} — it is on '{current}' (feature '{owner}') but "
+                f"no feature is canonical here. Run `canopy switch {owner}` "
+                f"to make '{owner}' official."
+            )
+        else:
+            reason = (
                 f"canopy: blocked `git {seg.argv_after_globals[0]}` in trunk "
                 f"{repo_name} — it is on '{current}' (feature '{owner}') but "
                 f"the canonical feature is '{canonical}'. Run "
                 f"`canopy switch {owner}` to make '{owner}' official, or "
                 f"`canopy switch {canonical}` to restore the trunk branch."
-            ),
-        )
+            )
+        return GateDecision(allow=False, code="trunk_branch_drift", reason=reason)
     # Slot: current branch must be the occupant feature's branch for this repo.
     entry = state.slots.get(slot_id) if state else None
     if entry is None:
@@ -349,11 +402,6 @@ def _check_branch(workspace, repo_root: Path, repo_name: str,
             f"`git checkout {expected}` in this worktree, or `canopy doctor`."
         ),
     )
-
-
-import re as _re
-
-_GIT_WORD = _re.compile(r"\bgit\b")
 
 
 def _load_workspace_from(start: Path):

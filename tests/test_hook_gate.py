@@ -39,6 +39,11 @@ def test_split_single_or_chain():
     assert split_top_level("git fetch || true") == ["git fetch", "true"]
 
 
+def test_split_on_newlines():
+    from canopy.actions.hook_gate import split_top_level
+    assert split_top_level("set -e\ngit push") == ["set -e", "git push"]
+
+
 # ── resolve_segments ────────────────────────────────────────────────────
 
 def test_cd_chain_updates_effective_dir(tmp_path):
@@ -57,6 +62,14 @@ def test_git_dash_c_overrides_dir(tmp_path):
     assert segs[0].argv_after_globals[0] == "commit"
 
 
+def test_git_dash_c_config_then_dash_C(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments
+    segs = resolve_segments(
+        f"git -c color.ui=false -C {tmp_path}/api commit -m 'x'", cwd=tmp_path)
+    assert segs[0].effective_dir == tmp_path / "api"
+    assert segs[0].argv_after_globals[0] == "commit"
+
+
 def test_absolute_cd(tmp_path):
     from canopy.actions.hook_gate import resolve_segments
     segs = resolve_segments(f"cd {tmp_path}/api && git add -A && git commit -m 'x'",
@@ -69,6 +82,35 @@ def test_unresolvable_cd_marks_dir_unknown(tmp_path):
     from canopy.actions.hook_gate import resolve_segments
     segs = resolve_segments('cd "$PROJECT_DIR" && git push', cwd=tmp_path)
     assert segs[0].dir_known is False   # fail-open downstream
+
+
+def test_cd_with_flags(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments
+    segs = resolve_segments("cd -P api && git commit -m 'x'", cwd=tmp_path)
+    assert segs[0].effective_dir == tmp_path / "api"
+    assert segs[0].dir_known is True
+
+
+def test_newline_cd_chain(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments, is_mutation
+    segs = resolve_segments("cd api\ngit commit -m 'x'", cwd=tmp_path)
+    assert len(segs) == 1 and is_mutation(segs[0])
+    assert segs[0].effective_dir == tmp_path / "api"
+
+
+def test_heredoc_commit_parsed_and_gated(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments, is_mutation
+    cmd = (
+        'cd repo-a && git commit -m "$(cat <<\'EOF\'\n'
+        'fix: subject\n'
+        '\n'
+        'body\n'
+        'EOF\n'
+        ')"'
+    )
+    segs = resolve_segments(cmd, cwd=tmp_path)
+    assert len(segs) == 1 and is_mutation(segs[0])
+    assert segs[0].effective_dir == tmp_path / "repo-a"
 
 
 def test_non_git_segments_skipped(tmp_path):
@@ -93,6 +135,14 @@ def test_mutation_classification(tmp_path):
     flags = [(s.argv_after_globals[0], is_mutation(s)) for s in segs]
     assert flags == [("status", False), ("add", True),
                      ("checkout", False), ("push", True)]
+
+
+def test_stash_reads_not_gated(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments, is_mutation
+    segs = resolve_segments("git stash list && git stash show", cwd=tmp_path)
+    assert [is_mutation(s) for s in segs] == [False, False]
+    segs = resolve_segments("git stash && git stash pop", cwd=tmp_path)
+    assert [is_mutation(s) for s in segs] == [True, True]
 
 
 # ── gate_command: path check ────────────────────────────────────────────
@@ -192,6 +242,40 @@ def test_gate_allows_unregistered_branch(workspace_with_canonical_only):
     assert d.allow is True
 
 
+def test_trunk_drift_message_no_canonical(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    _write_features(ws, {"Y": ["repo-a", "repo-b"]})
+    (_root(ws) / ".canopy" / "state" / "slots.json").write_text(json.dumps(
+        {"slot_count": 2, "canonical": None, "slots": {}, "last_touched": {}}))
+    subprocess.run(["git", "checkout", "Y"], cwd=_root(ws) / "repo-a",
+                   check=True, capture_output=True)
+    d = gate_command(ws, 'git commit -m "x"', cwd=_root(ws) / "repo-a")
+    assert d.allow is False
+    assert d.code == "trunk_branch_drift"
+    assert "'None'" not in d.reason
+    assert "no feature is canonical" in d.reason
+    assert "canopy switch Y" in d.reason
+
+
+def test_branch_owner_respects_per_repo_branches_map(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only          # canonical = X
+    fpath = _root(ws) / ".canopy" / "features.json"
+    fpath.parent.mkdir(exist_ok=True)
+    fpath.write_text(json.dumps({
+        "X": {"repos": ["repo-a", "repo-b"]},
+        "Y": {"repos": ["repo-a", "repo-b"],
+              "branches": {"repo-a": "custom-branch-name"}},
+    }))
+    subprocess.run(["git", "checkout", "-b", "custom-branch-name"],
+                   cwd=_root(ws) / "repo-a", check=True, capture_output=True)
+    d = gate_command(ws, 'git commit -m "x"', cwd=_root(ws) / "repo-a")
+    assert d.allow is False
+    assert d.code == "trunk_branch_drift"
+    assert "Y" in d.reason
+
+
 def test_gate_blocks_wrong_branch_in_slot(workspace_with_slots):
     from canopy.actions.hook_gate import gate_command
     from canopy.actions import slots as sm
@@ -241,6 +325,24 @@ def test_gate_allows_push_options_and_head(workspace_with_canonical_only):
     assert gate_command(ws, "git push --force-with-lease origin HEAD",
                         cwd=_root(ws) / "repo-a").allow is True
     assert gate_command(ws, "git push origin --delete X",
+                        cwd=_root(ws) / "repo-a").allow is True
+
+
+def test_gate_allows_push_with_redirect(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    assert gate_command(ws, "git push -u origin X 2>&1",
+                        cwd=_root(ws) / "repo-a").allow is True
+    assert gate_command(ws, "git push origin X > /tmp/push.log",
+                        cwd=_root(ws) / "repo-a").allow is True
+    assert gate_command(ws, "git push origin X &",
+                        cwd=_root(ws) / "repo-a").allow is True
+
+
+def test_gate_allows_push_option_values(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    assert gate_command(ws, "git push -o ci.skip origin X",
                         cwd=_root(ws) / "repo-a").allow is True
 
 

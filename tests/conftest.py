@@ -11,6 +11,22 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _no_background_bootstrap():
+    """Tests must not spawn real detached bootstrap processes — they race
+    with git/state ops on the shared tmp repos and make CI flaky. The
+    background spawn's logic is covered in isolation (test_slot_bootstrap
+    monkeypatches _spawn_deps_background; test_slots_concurrency tests the
+    real multiprocess slots.json safety). See phase-4 CANOPY_NO_BG_BOOTSTRAP."""
+    prev = os.environ.get("CANOPY_NO_BG_BOOTSTRAP")
+    os.environ["CANOPY_NO_BG_BOOTSTRAP"] = "1"
+    yield
+    if prev is None:
+        os.environ.pop("CANOPY_NO_BG_BOOTSTRAP", None)
+    else:
+        os.environ["CANOPY_NO_BG_BOOTSTRAP"] = prev
+
+
 def _git(args: list[str], cwd: Path) -> str:
     """Run a git command in a directory."""
     result = subprocess.run(

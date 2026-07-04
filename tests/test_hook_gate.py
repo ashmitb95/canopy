@@ -44,6 +44,13 @@ def test_split_on_newlines():
     assert split_top_level("set -e\ngit push") == ["set -e", "git push"]
 
 
+def test_split_heredoc_body_not_split():
+    from canopy.actions.hook_gate import split_top_level
+    cmd = "cat <<'EOF' > f\ngit push\nEOF\ngit status"
+    assert split_top_level(cmd) == ["cat <<'EOF' > f\ngit push\nEOF",
+                                    "git status"]
+
+
 # ── resolve_segments ────────────────────────────────────────────────────
 
 def test_cd_chain_updates_effective_dir(tmp_path):
@@ -145,6 +152,17 @@ def test_stash_reads_not_gated(tmp_path):
     assert [is_mutation(s) for s in segs] == [True, True]
 
 
+def test_stash_flag_forms_are_mutations(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments, is_mutation
+    segs = resolve_segments("git stash -u && git stash --keep-index",
+                            cwd=tmp_path)
+    assert [is_mutation(s) for s in segs] == [True, True]
+    segs = resolve_segments("git stash --include-untracked", cwd=tmp_path)
+    assert is_mutation(segs[0]) is True
+    segs = resolve_segments("git stash list", cwd=tmp_path)
+    assert is_mutation(segs[0]) is False
+
+
 # ── gate_command: path check ────────────────────────────────────────────
 # Uses the slot-model fixtures from conftest.py:
 #   workspace_with_canonical_only — X canonical in trunk, Y cold, slots=2
@@ -189,6 +207,34 @@ def test_gate_fails_open_on_unknown_dir(workspace_with_canonical_only):
     ws = workspace_with_canonical_only
     d = gate_command(ws, 'cd "$SOMEWHERE" && git push', cwd=_root(ws))
     assert d.allow is True
+
+
+def test_unquoted_heredoc_body_not_split(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    # a doc that merely MENTIONS git must not be blocked
+    cmd = "cat <<'EOF' > notes.md\ngit push origin main\nEOF"
+    assert gate_command(ws, cmd, cwd=_root(ws)).allow is True
+
+
+def test_heredoc_body_cd_does_not_poison(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    # the body's `cd /somewhere` must not corrupt the tracked dir for the
+    # real commit that follows
+    cmd = "cat <<'EOF' > setup.sh\ncd /somewhere\nEOF\ngit commit -m 'x'"
+    assert gate_command(ws, cmd, cwd=_root(ws) / "repo-a").allow is True
+
+
+def test_command_after_heredoc_still_gated(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    # splitting must RESUME after the terminator — real mutations after a
+    # heredoc are still judged
+    cmd = 'cat <<\'EOF\' > x.md\nnothing\nEOF\ngit commit -m "real"'
+    d = gate_command(ws, cmd, cwd=_root(ws))
+    assert d.allow is False
+    assert d.code == "outside_repo"
 
 
 def test_gate_allows_mutation_in_slot_worktree(workspace_with_slots):

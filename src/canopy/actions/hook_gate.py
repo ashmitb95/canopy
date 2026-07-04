@@ -22,27 +22,77 @@ from typing import Any
 _GIT_WORD = _re.compile(r"\bgit\b")
 
 
+def _heredoc_delimiter(command: str, i: int) -> tuple[str, int] | None:
+    """If ``command[i:]`` starts a heredoc redirection (``<<``/``<<-`` plus
+    a delimiter word in any of the <<EOF / <<-EOF / <<'EOF' / <<"EOF"
+    forms), return (delimiter, index just past the delimiter token);
+    else None. ``<<<`` herestrings are not heredocs."""
+    n = len(command)
+    if command[i:i + 2] != "<<" or command[i + 2:i + 3] == "<":
+        return None
+    j = i + 2
+    if j < n and command[j] == "-":
+        j += 1
+    while j < n and command[j] in " \t":
+        j += 1
+    if j < n and command[j] in ("'", '"'):
+        k = command.find(command[j], j + 1)
+        if k == -1 or k == j + 1:
+            return None                   # unterminated/empty quoted delim
+        return command[j + 1:k], k + 1
+    k = j
+    while k < n and (command[k].isalnum() or command[k] == "_"):
+        k += 1
+    if k == j:
+        return None                       # no delimiter word
+    return command[j:k], k
+
+
 def split_top_level(command: str) -> list[str]:
-    """Split a shell command on top-level ``&&``, ``||``, ``;``, ``|``.
+    """Split a shell command on top-level ``&&``, ``||``, ``;``, ``|``,
+    and unquoted newlines.
 
     Quote- and subshell-aware: operators inside '...', "...", $(...),
-    backticks, or (...) do not split. Best-effort — this is a gate
-    heuristic, not a shell. Unbalanced input returns whatever was
-    accumulated (callers fail open on weirdness).
+    backticks, or (...) do not split. Heredoc-aware: after an unquoted
+    depth-0 ``<<DELIM``, all splitting is suppressed until the line whose
+    content equals DELIM; splitting resumes after that terminator line.
+    Best-effort — this is a gate heuristic, not a shell. Unbalanced input
+    returns whatever was accumulated (callers fail open on weirdness).
     """
     parts: list[str] = []
     buf: list[str] = []
     depth = 0          # () and $() nesting
     quote: str | None = None   # "'", '"', or '`'
+    heredoc: str | None = None  # pending heredoc terminator word
     i, n = 0, len(command)
     while i < n:
         ch = command[i]
+        if heredoc is not None:
+            # Inside a heredoc: copy verbatim — no quote/operator handling.
+            buf.append(ch)
+            if ch == "\n":
+                j = command.find("\n", i + 1)
+                end = j if j != -1 else n
+                if command[i + 1:end].strip() == heredoc:
+                    buf.append(command[i + 1:end])
+                    heredoc = None
+                    i = end       # the newline after the terminator splits
+                    continue
+            i += 1
+            continue
         if quote:
             buf.append(ch)
             if ch == quote and command[i - 1] != "\\":
                 quote = None
             i += 1
             continue
+        if depth == 0 and ch == "<":
+            hd = _heredoc_delimiter(command, i)
+            if hd is not None:
+                heredoc, end_tok = hd
+                buf.append(command[i:end_tok])
+                i = end_tok
+                continue
         if ch in ("'", '"', "`"):
             quote = ch
             buf.append(ch)
@@ -175,7 +225,9 @@ MUTATION_SUBCOMMANDS = frozenset({
 })
 
 # ``stash`` alone is a mutation subcommand, but its own sub-verb decides:
-# push/pop/apply/drop/clear/save/branch mutate; list/show are reads.
+# push/pop/apply/drop/clear/save/branch mutate; list/show are reads. A flag
+# right after ``stash`` (``stash -u``, ``stash --keep-index``) is an
+# implicit ``stash push`` — a mutation.
 _STASH_MUTATING_SUBCOMMANDS = frozenset({
     "push", "pop", "apply", "drop", "clear", "save", "branch",
 })
@@ -186,7 +238,8 @@ def is_mutation(seg: GitSegment) -> bool:
     if not sub:
         return False
     if sub[0] == "stash":
-        return len(sub) == 1 or sub[1] in _STASH_MUTATING_SUBCOMMANDS
+        return (len(sub) == 1 or sub[1].startswith("-")
+                or sub[1] in _STASH_MUTATING_SUBCOMMANDS)
     return sub[0] in MUTATION_SUBCOMMANDS
 
 

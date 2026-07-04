@@ -22,16 +22,22 @@ from typing import Any
 _GIT_WORD = _re.compile(r"\bgit\b")
 
 
-def _heredoc_delimiter(command: str, i: int) -> tuple[str, int] | None:
+def _heredoc_delimiter(command: str, i: int) -> tuple[str, int, bool] | None:
     """If ``command[i:]`` starts a heredoc redirection (``<<``/``<<-`` plus
-    a delimiter word in any of the <<EOF / <<-EOF / <<'EOF' / <<"EOF"
-    forms), return (delimiter, index just past the delimiter token);
-    else None. ``<<<`` herestrings are not heredocs."""
+    a delimiter word in any of the <<EOF / <<-EOF / <<'EOF' / <<"EOF" /
+    <<\\EOF forms), return (delimiter, index just past the delimiter
+    token, tab_indent_ok — True for ``<<-``); else None. ``<<<``
+    herestrings are not heredocs (guarded on both sides so the scan
+    cannot re-enter at the middle ``<``)."""
     n = len(command)
     if command[i:i + 2] != "<<" or command[i + 2:i + 3] == "<":
         return None
+    if i > 0 and command[i - 1] == "<":
+        return None                       # tail of a <<< herestring
     j = i + 2
+    tab_indent_ok = False
     if j < n and command[j] == "-":
+        tab_indent_ok = True
         j += 1
     while j < n and command[j] in " \t":
         j += 1
@@ -39,13 +45,15 @@ def _heredoc_delimiter(command: str, i: int) -> tuple[str, int] | None:
         k = command.find(command[j], j + 1)
         if k == -1 or k == j + 1:
             return None                   # unterminated/empty quoted delim
-        return command[j + 1:k], k + 1
+        return command[j + 1:k], k + 1, tab_indent_ok
+    if j < n and command[j] == "\\":
+        j += 1                            # <<\EOF — POSIX quoted form
     k = j
     while k < n and (command[k].isalnum() or command[k] == "_"):
         k += 1
     if k == j:
         return None                       # no delimiter word
-    return command[j:k], k
+    return command[j:k], k, tab_indent_ok
 
 
 def split_top_level(command: str) -> list[str]:
@@ -54,16 +62,18 @@ def split_top_level(command: str) -> list[str]:
 
     Quote- and subshell-aware: operators inside '...', "...", $(...),
     backticks, or (...) do not split. Heredoc-aware: after an unquoted
-    depth-0 ``<<DELIM``, all splitting is suppressed until the line whose
-    content equals DELIM; splitting resumes after that terminator line.
-    Best-effort — this is a gate heuristic, not a shell. Unbalanced input
-    returns whatever was accumulated (callers fail open on weirdness).
+    depth-0 ``<<DELIM``, all splitting is suppressed until the line that
+    equals DELIM exactly (``<<-`` also accepts leading tabs); splitting
+    resumes after that terminator line. Best-effort — this is a gate
+    heuristic, not a shell. Unbalanced input returns whatever was
+    accumulated (callers fail open on weirdness).
     """
     parts: list[str] = []
     buf: list[str] = []
     depth = 0          # () and $() nesting
     quote: str | None = None   # "'", '"', or '`'
     heredoc: str | None = None  # pending heredoc terminator word
+    heredoc_tabs = False        # <<- form: terminator may be tab-indented
     i, n = 0, len(command)
     while i < n:
         ch = command[i]
@@ -73,7 +83,10 @@ def split_top_level(command: str) -> list[str]:
             if ch == "\n":
                 j = command.find("\n", i + 1)
                 end = j if j != -1 else n
-                if command[i + 1:end].strip() == heredoc:
+                line = command[i + 1:end]
+                if heredoc_tabs:
+                    line = line.lstrip("\t")
+                if line == heredoc:
                     buf.append(command[i + 1:end])
                     heredoc = None
                     i = end       # the newline after the terminator splits
@@ -89,7 +102,7 @@ def split_top_level(command: str) -> list[str]:
         if depth == 0 and ch == "<":
             hd = _heredoc_delimiter(command, i)
             if hd is not None:
-                heredoc, end_tok = hd
+                heredoc, end_tok, heredoc_tabs = hd
                 buf.append(command[i:end_tok])
                 i = end_tok
                 continue

@@ -51,6 +51,24 @@ def test_split_heredoc_body_not_split():
                                     "git status"]
 
 
+def test_split_dash_heredoc_tab_indented_terminator():
+    from canopy.actions.hook_gate import split_top_level
+    # <<- allows tab-indented terminator lines
+    cmd = "cat <<-EOF > f\nbody\n\tEOF\ngit status"
+    assert split_top_level(cmd) == ["cat <<-EOF > f\nbody\n\tEOF",
+                                    "git status"]
+
+
+def test_herestring_not_heredoc(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments, is_mutation
+    # <<< is a herestring, not a heredoc — must not swallow what follows
+    segs = resolve_segments("grep x <<< 'git push' && git commit -m 'real'",
+                            cwd=tmp_path)
+    assert len(segs) == 1
+    assert segs[0].argv_after_globals[0] == "commit"
+    assert is_mutation(segs[0]) is True
+
+
 # ── resolve_segments ────────────────────────────────────────────────────
 
 def test_cd_chain_updates_effective_dir(tmp_path):
@@ -224,6 +242,23 @@ def test_heredoc_body_cd_does_not_poison(workspace_with_canonical_only):
     # real commit that follows
     cmd = "cat <<'EOF' > setup.sh\ncd /somewhere\nEOF\ngit commit -m 'x'"
     assert gate_command(ws, cmd, cwd=_root(ws) / "repo-a").allow is True
+
+
+def test_backslash_heredoc_delimiter(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    # <<\EOF is POSIX for a quoted delimiter — body must be swallowed
+    cmd = "cat <<\\EOF > f\ngit push origin main\nEOF"
+    assert gate_command(ws, cmd, cwd=_root(ws)).allow is True
+
+
+def test_indented_terminator_does_not_end_plain_heredoc(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    # plain << requires the terminator line to equal the delimiter EXACTLY;
+    # an indented `  EOF` inside the body must not end the heredoc early
+    cmd = "cat <<'EOF' > notes.md\n  EOF\ngit push origin main\nEOF"
+    assert gate_command(ws, cmd, cwd=_root(ws)).allow is True
 
 
 def test_command_after_heredoc_still_gated(workspace_with_canonical_only):

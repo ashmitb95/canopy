@@ -68,3 +68,22 @@ def test_release_current_still_forces_cold(workspace_with_canonical_only):
     switch(ws, "Y", release_current=True)       # explicit cold overrides policy
     state = sm.read_state(ws)
     assert all(e.feature != "X" for e in state.slots.values())
+
+
+def test_preflight_aggregates_all_repo_issues_before_mutation(
+        workspace_with_canonical_only):
+    from canopy.actions.errors import BlockerError
+    ws = workspace_with_canonical_only
+    # Hold an index.lock in repo-b so preflight must fail — and assert NO
+    # mutation happened (X still canonical, no in_flight).
+    lock = ws.config.root / "repo-b" / ".git" / "index.lock"
+    lock.write_text("")
+    try:
+        with pytest.raises(BlockerError) as e:
+            switch(ws, "Y")
+        assert "repo-b" in str(e.value.what) or "index_lock" in str(e.value.details)
+        state = sm.read_state(ws)
+        assert state.canonical.feature == "X"    # untouched
+        assert state.in_flight is None
+    finally:
+        lock.unlink(missing_ok=True)

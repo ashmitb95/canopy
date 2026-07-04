@@ -97,6 +97,18 @@ def preflight(
         if not git.branch_exists(repo_path, branch):
             branches_to_create.append((repo_name, branch))
 
+    # Validate-all-then-execute: aggregate every per-repo problem and raise
+    # BEFORE any slot-state read or mutation. A bad precondition must leave
+    # disk untouched (both historical bricking bugs were partial mutations
+    # where a precondition failed AFTER some repos had already changed).
+    if issues:
+        raise BlockerError(
+            code="switch_preflight_failed",
+            what="switch blocked — resolve these before switching: "
+                 + "; ".join(f"{i['repo']}: {i['what']}" for i in issues),
+            details={"issues": issues},
+        )
+
     # Read the slot state (3.0 layout). previously_canonical is the
     # canonical feature, if any, that differs from Y.
     state = slots_mod.read_state(workspace)
@@ -189,4 +201,5 @@ def preflight(
         "cap_will_fire": cap_will_fire,
         "lru_eviction_candidate": lru_eviction_candidate,
         "previously_canonical": previously_canonical,
+        "warm_features": sorted(already_warm),
     }

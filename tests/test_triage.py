@@ -328,6 +328,10 @@ def test_triage_marks_warm_feature_with_worktree_path(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
 
     from canopy.actions.switch import switch
+    from canopy.actions import prs_cache
+    # auth-flow (vacating) needs an open PR to evacuate warm under the
+    # Phase-4 default; it's the same PR this test asserts triage surfaces.
+    prs_cache.write(ws, {"auth-flow": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
     switch(ws, "auth-flow")    # canonical = auth-flow
     switch(ws, "feat-b")        # canonical = feat-b; auth-flow → warm
 

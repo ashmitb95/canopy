@@ -119,13 +119,24 @@ def switch(
     if previously_canonical:
         out["previously_canonical"] = previously_canonical
 
+    # Phase 4: the default now decides warm-vs-cold per the vacating
+    # feature's PR/WIP state. release_current (explicit cold) and the
+    # evict overrides still win. Only applies when a feature is vacating.
+    effective_release = release_current
+    if (not release_current and previously_canonical
+            and evict is None and evict_to is None and not no_evict):
+        from .slot_policy import warm_or_cold
+        if warm_or_cold(workspace, previously_canonical) == "cold":
+            effective_release = True
+    out["vacate_decision"] = "cold" if effective_release else "warm"
+
     # Step A: optional eviction (active-rotation cap fire) —
     # explicit ``evict=<feature>`` overrides preflight's LRU pick.
     # When ``evict_to`` is pinned to an occupied slot, evict that slot's
     # occupant first so X can land there.
     eviction_info: dict[str, Any] | None = None
     eviction_target: str | None = None
-    if not release_current:
+    if not effective_release:
         if evict:
             eviction_target = evict
         elif evict_to is not None:
@@ -162,7 +173,7 @@ def switch(
             _do_repo_switch(
                 workspace, feature_name, repo_name, target_branch,
                 repo_path=repo_path,
-                release_current=release_current,
+                release_current=effective_release,
                 previously_canonical=previously_canonical,
                 per_repo_results=per_repo_results,
                 new_canonical_paths=new_canonical_paths,
@@ -200,7 +211,7 @@ def switch(
 
     _post_switch_persist(
         workspace, feature_name, new_canonical_paths, previously_canonical,
-        out, release_current=release_current, per_repo_results=per_repo_results,
+        out, release_current=effective_release, per_repo_results=per_repo_results,
     )
 
     # M4: include the new feature's persistent memory so the agent picks

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from canopy.actions import prs_cache
 from canopy.actions import slots as slots_mod
 from canopy.actions.errors import BlockerError
 from canopy.actions.switch import switch
@@ -103,6 +104,9 @@ class TestActiveRotation:
         # Create a second feature so we can rotate
         _make_feature_branches(workspace_with_feature, "feat-b")
         ws = _ws(workspace_with_feature)
+        # auth-flow (vacating) needs an open PR to evacuate warm under the
+        # Phase-4 default; a clean, PR-less feature would go cold.
+        prs_cache.write(ws, {"auth-flow": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
 
         # First switch to auth-flow (becomes canonical)
         switch(ws, "auth-flow")
@@ -184,6 +188,9 @@ class TestCapReached:
         _make_feature_branches(workspace_with_feature, "feat-b")
         _make_feature_branches(workspace_with_feature, "feat-c")
         ws = _ws(workspace_with_feature, slots=1)
+        # auth-flow (vacating) needs an open PR to fill the warm cap under
+        # the Phase-4 default; else it goes cold and the cap never fires.
+        prs_cache.write(ws, {"auth-flow": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
 
         switch(ws, "auth-flow")               # canonical
         switch(ws, "feat-b")                   # auth-flow → warm (1 warm)
@@ -203,6 +210,12 @@ class TestCapReached:
         _make_feature_branches(workspace_with_feature, "feat-b")
         _make_feature_branches(workspace_with_feature, "feat-c")
         ws = _ws(workspace_with_feature, slots=1)
+        # Both vacating features need open PRs to stay warm under the
+        # Phase-4 default (clean, PR-less features go cold).
+        prs_cache.write(ws, {
+            "auth-flow": {"repos": {"repo-a": {"number": 1, "state": "open"}}},
+            "feat-b": {"repos": {"repo-a": {"number": 2, "state": "open"}}},
+        })
 
         switch(ws, "auth-flow")
         switch(ws, "feat-b")    # auth-flow → warm
@@ -224,6 +237,12 @@ class TestCapReached:
         _make_feature_branches(workspace_with_feature, "feat-b")
         _make_feature_branches(workspace_with_feature, "feat-c")
         ws = _ws(workspace_with_feature, slots=1)
+        # Both vacating features need open PRs to stay warm under the
+        # Phase-4 default (clean, PR-less features go cold).
+        prs_cache.write(ws, {
+            "auth-flow": {"repos": {"repo-a": {"number": 1, "state": "open"}}},
+            "feat-b": {"repos": {"repo-a": {"number": 2, "state": "open"}}},
+        })
 
         switch(ws, "auth-flow")
         switch(ws, "feat-b")
@@ -255,6 +274,12 @@ def test_switching_to_warm_feature_removes_its_worktree(workspace_with_feature):
     main can check out Y (git's one-checkout-per-branch rule)."""
     _make_feature_branches(workspace_with_feature, "feat-b")
     ws = _ws(workspace_with_feature)
+    # Both vacating features need open PRs to stay warm across the rotation
+    # under the Phase-4 default (clean, PR-less features go cold).
+    prs_cache.write(ws, {
+        "auth-flow": {"repos": {"repo-a": {"number": 1, "state": "open"}}},
+        "feat-b": {"repos": {"repo-a": {"number": 2, "state": "open"}}},
+    })
 
     switch(ws, "auth-flow")
     switch(ws, "feat-b")    # auth-flow → warm

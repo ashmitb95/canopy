@@ -22,7 +22,11 @@ def test_switch_fastpath_when_y_warm(workspace_with_slots):
     ws = workspace_with_slots
     from canopy.actions.switch import switch
     from canopy.actions import slots as sm
+    from canopy.actions import prs_cache
 
+    # X (the vacating feature) needs an open PR to stay warm under the
+    # Phase-4 default; otherwise a clean, PR-less X goes cold (wind_down).
+    prs_cache.write(ws, {"X": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
     result = switch(ws, "Y")
 
     assert result["mode"] == "active_rotation"
@@ -43,7 +47,11 @@ def test_switch_cold_y_allocates_lowest_free_slot(workspace_with_canonical_only)
     ws = workspace_with_canonical_only
     from canopy.actions.switch import switch
     from canopy.actions import slots as sm
+    from canopy.actions import prs_cache
 
+    # X (vacating) needs an open PR to evacuate warm under the Phase-4
+    # default; a clean, PR-less X would go cold instead.
+    prs_cache.write(ws, {"X": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
     result = switch(ws, "Y")
 
     assert result["mode"] == "active_rotation"
@@ -84,8 +92,12 @@ def test_partial_switch_failure_marks_in_flight(
     ws = workspace_with_canonical_only
     from canopy.actions import evacuate as evac
     from canopy.actions import slots as sm
+    from canopy.actions import prs_cache
     from canopy.actions.switch import switch
 
+    # X (vacating) needs an open PR to take the warm evacuation path this
+    # test exercises; otherwise the Phase-4 default sends X cold (no evac).
+    prs_cache.write(ws, {"X": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
     real_evacuate = evac.evacuate_repo
     call_count = {"n": 0}
 
@@ -371,8 +383,12 @@ def test_switch_to_warm_feature_with_orphaned_repo_worktree_reclaims_slot(
     """
     ws = workspace_with_full_slots  # X canonical; A in wt-1, B in wt-2
     from canopy.actions import slots as sm
+    from canopy.actions import prs_cache
     from canopy.actions.switch import switch
 
+    # X (vacating on switch to A) needs an open PR to reclaim A's slot warm
+    # under the Phase-4 default; else a clean, PR-less X goes cold.
+    prs_cache.write(ws, {"X": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
     sid = _orphan_repo_worktree(ws, "A", "repo-a")
 
     # Must NOT raise no_free_slot.
@@ -406,8 +422,14 @@ def test_no_free_slot_on_first_repo_does_not_stamp_in_flight(
     """
     ws = workspace_with_canonical_only  # X canonical, Y cold
     from canopy.actions import slots as sm
+    from canopy.actions import prs_cache
     from canopy.actions.errors import BlockerError
     from canopy.actions.switch import switch
+
+    # X (vacating) needs an open PR so the switch takes the warm cold-Y
+    # allocation path (which the patched allocator fails); a clean, PR-less
+    # X would go cold under the Phase-4 default and never reach allocate.
+    prs_cache.write(ws, {"X": {"repos": {"repo-a": {"number": 1, "state": "open"}}}})
 
     # Force the cold-Y allocator to fail on the first repo.
     monkeypatch.setattr(

@@ -188,8 +188,10 @@ def workspace_with_canonical_only(canopy_toml_for_workspace):
 def workspace_with_slots(workspace_with_canonical_only):
     """X canonical, Y warm in worktree-1."""
     from canopy.actions.switch import switch
-    switch(workspace_with_canonical_only, "Y")  # Y canonical, X warm slot-1
-    switch(workspace_with_canonical_only, "X")  # X canonical, Y warm slot-1
+    # evict_to pins the vacating feature warm (the Phase-4 default would
+    # send a clean, PR-less feature cold); slot ids match the old default.
+    switch(workspace_with_canonical_only, "Y", evict_to="worktree-1")  # X warm slot-1
+    switch(workspace_with_canonical_only, "X", evict_to="worktree-1")  # Y warm slot-1
     return workspace_with_canonical_only
 
 
@@ -202,9 +204,11 @@ def workspace_with_full_slots(workspace_with_canonical_only):
             subprocess.run(["git", "branch", branch],
                            cwd=ws.config.root / repo, check=True)
     from canopy.actions.switch import switch
-    switch(ws, "A")  # X→warm slot-1, A canonical
-    switch(ws, "B")  # A→warm slot-2, B canonical
-    switch(ws, "X")  # B→warm? — keeps X canonical with A and B warm
+    # evict_to pins each vacating feature warm (Phase-4 default sends
+    # clean, PR-less features cold); slot ids match the old default.
+    switch(ws, "A", evict_to="worktree-1")  # X→warm slot-1, A canonical
+    switch(ws, "B", evict_to="worktree-2")  # A→warm slot-2, B canonical
+    switch(ws, "X", evict_to="worktree-1")  # B→warm slot-1 (fastpath), X canonical
     # Deterministic LRU ordering: A newer, B older
     from canopy.actions import slots as sm
     state = sm.read_state(ws)

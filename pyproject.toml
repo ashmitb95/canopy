@@ -44,6 +44,8 @@ dev = [
 [project.scripts]
 canopy = "canopy.cli.main:main"
 canopy-mcp = "canopy.mcp.server:main"
+canopy-hook-gate = "canopy.hooks_entry:gate_main"
+canopy-hook-context = "canopy.hooks_entry:context_main"
 
 [tool.hatch.version]
 path = "src/canopy/__init__.py"

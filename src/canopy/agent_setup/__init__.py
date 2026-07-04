@@ -15,6 +15,7 @@ and ``augment-canopy`` (opt-in via ``--skill augment-canopy``).
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -170,12 +171,49 @@ _HOOK_CONTEXT_ENTRY = {
 }
 
 
+_HOOK_COMMANDS = ("canopy-hook-gate", "canopy-hook-context")
+
+
+def _entry_has_command(entry: object, command: str) -> bool:
+    """True if a hook-array entry registers ``command``. Shape-tolerant."""
+    if not isinstance(entry, dict):
+        return False
+    return any(
+        isinstance(h, dict) and h.get("command") == command
+        for h in (entry.get("hooks") or [])
+        if isinstance(entry.get("hooks"), list)
+    )
+
+
+def hooks_configured(settings_path: Path) -> bool:
+    """True if settings.json exists, parses, and registers BOTH hook commands."""
+    if not settings_path.exists():
+        return False
+    try:
+        settings = json.loads(settings_path.read_text())
+    except (ValueError, OSError):
+        return False
+    if not isinstance(settings, dict):
+        return False
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    all_entries = [
+        e for lst in hooks.values() if isinstance(lst, list) for e in lst
+    ]
+    return all(
+        any(_entry_has_command(e, cmd) for e in all_entries)
+        for cmd in _HOOK_COMMANDS
+    )
+
+
 def install_hooks(workspace_root: Path) -> dict:
     """Merge canopy's enforcement hooks into <root>/.claude/settings.json.
 
     Project-scoped on purpose: the gate only makes sense inside a canopy
     workspace. Non-destructive: existing settings and foreign hooks are
-    preserved; re-running is a no-op.
+    preserved; re-running is a no-op. Refuses (rather than clobbering) a
+    settings.json that isn't the shape we expect.
     """
     path = workspace_root / ".claude" / "settings.json"
     settings: dict = {}
@@ -185,6 +223,22 @@ def install_hooks(workspace_root: Path) -> dict:
         except (ValueError, OSError):
             return {"action": "skipped", "path": str(path),
                     "reason": "existing settings.json is not valid JSON — fix it first"}
+        if not isinstance(settings, dict):
+            return {"action": "skipped", "path": str(path),
+                    "reason": "existing settings.json has an unexpected shape — fix it first"}
+        existing_hooks = settings.get("hooks", {})
+        if not isinstance(existing_hooks, dict):
+            return {"action": "skipped", "path": str(path),
+                    "reason": "existing settings.json has an unexpected shape — fix it first"}
+        for event in ("PreToolUse", "SessionStart"):
+            if event not in existing_hooks:
+                continue
+            entries = existing_hooks[event]
+            if not isinstance(entries, list) or not all(
+                isinstance(e, dict) for e in entries
+            ):
+                return {"action": "skipped", "path": str(path),
+                        "reason": "existing settings.json has an unexpected shape — fix it first"}
     hooks = settings.setdefault("hooks", {})
     changed = False
     for event, entry, command in (
@@ -192,17 +246,17 @@ def install_hooks(workspace_root: Path) -> dict:
         ("SessionStart", _HOOK_CONTEXT_ENTRY, "canopy-hook-context"),
     ):
         entries = hooks.setdefault(event, [])
-        present = any(
-            h.get("command") == command
-            for e in entries for h in (e.get("hooks") or [])
-        )
+        present = any(_entry_has_command(e, command) for e in entries)
         if not present:
             entries.append(entry)
             changed = True
     if not changed:
         return {"action": "unchanged", "path": str(path)}
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(settings, indent=2) + "\n")
+    # Atomic write: never leave a half-written settings.json behind.
+    tmp = path.with_name(path.name + ".canopy-tmp")
+    tmp.write_text(json.dumps(settings, indent=2) + "\n")
+    os.replace(tmp, path)
     return {"action": "added", "path": str(path)}
 
 
@@ -235,7 +289,14 @@ def check_status(workspace_root: Path) -> dict:
         except json.JSONDecodeError:
             mcp_state["error"] = "invalid JSON"
 
-    return {"skill": skill_state, "skills": skills_state, "mcp": mcp_state}
+    settings_path = workspace_root / ".claude" / "settings.json"
+    hooks_state = {
+        "path": str(settings_path),
+        "configured": hooks_configured(settings_path),
+    }
+
+    return {"skill": skill_state, "skills": skills_state,
+            "mcp": mcp_state, "hooks": hooks_state}
 
 
 def check_skill_status(name: str) -> dict:

@@ -35,3 +35,11 @@ def test_brief_mentions_switch_hint(workspace_with_canonical_only):
     from canopy.actions.hook_context import context_brief
     brief = context_brief(workspace_with_canonical_only)
     assert "canopy switch" in brief
+
+
+def test_slot_sort_key_orders_numerically():
+    from canopy.actions.hook_context import _slot_sort_key
+    ids = ["worktree-10", "worktree-2", "worktree-1", "custom-slot"]
+    assert sorted(ids, key=_slot_sort_key) == [
+        "worktree-1", "worktree-2", "worktree-10", "custom-slot",
+    ]

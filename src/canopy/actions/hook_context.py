@@ -6,7 +6,17 @@ under ~10 lines: it lands in every session's context budget.
 """
 from __future__ import annotations
 
+import re
+
 from ..workspace.workspace import Workspace
+
+_SLOT_NUM = re.compile(r"worktree-(\d+)$")
+
+
+def _slot_sort_key(sid: str) -> tuple[int, int, str]:
+    """Sort worktree-N slots numerically; other ids fall back to name order."""
+    m = _SLOT_NUM.match(sid)
+    return (0, int(m.group(1)), "") if m else (1, 0, sid)
 
 
 def context_brief(workspace: Workspace) -> str:
@@ -26,8 +36,8 @@ def context_brief(workspace: Workspace) -> str:
         dirty = f"{rs.dirty_count} dirty" if rs.is_dirty else "clean"
         lines.append(f"  {name} → {rs.current_branch} ({dirty})")
     if state and state.slots:
-        for sid, entry in sorted(state.slots.items()):
-            lines.append(f"  slot {sid} → {entry.feature}")
+        for sid in sorted(state.slots, key=_slot_sort_key):
+            lines.append(f"  slot {sid} → {state.slots[sid].feature}")
     lines.append(
         "  Before any work: confirm the branch above matches this chat's "
         "ticket. If not, run `canopy switch <feature>` FIRST."

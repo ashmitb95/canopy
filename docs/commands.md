@@ -163,8 +163,8 @@ Deny codes (all four block with an explanatory message that also names the fix):
 | Code | Meaning | Fix the message names |
 |---|---|---|
 | `outside_repo` | The mutation's effective directory (after resolving `cd`/`git -C`) isn't inside any workspace repo or slot worktree. | `cd <repo> && git ...`, or use `canopy run`. |
-| `trunk_branch_drift` | A canonical-slot repo is on a branch owned by a different registered feature than the current canonical one. | `canopy switch <feature>` (either the branch's owner, or back to canonical). |
-| `slot_branch_drift` | A warm-slot repo is on a branch that doesn't match the slot's recorded occupant feature. | `git checkout <expected-branch>` in that worktree, or `canopy doctor`. |
+| `trunk_branch_drift` | On **commit/push only**: a canonical-slot repo is on a branch owned by a different registered feature than the current canonical one. (Other mutations like `git add` on a drifted branch are allowed.) | `canopy switch <feature>` (either the branch's owner, or back to canonical). |
+| `slot_branch_drift` | On **commit/push only**: a warm-slot repo is on a branch that doesn't match the slot's recorded occupant feature. | `git checkout <expected-branch>` in that worktree, or `canopy doctor`. |
 | `push_unknown_branch` | `git push`'s source refspec names a branch that doesn't exist in the effective repo (but does exist in a different one). | Check the branch for *this* repo with `git branch --list` or `canopy context`; likely the wrong repo. |
 
 **Fail-open contract.** The gate only blocks when it's sure the mutation targets the wrong place. It allows (exit 0) on: unparseable shell segments (`shlex` failure), unresolvable `cd` targets (`$VAR`, `~`, backticks, `cd -`), a `cwd` with no `canopy.toml` anywhere above it, non-`Bash` tool calls, commands with no `git` token, and any internal exception — `run_gate` never raises. `checkout`/`switch` are deliberately never gated: they're the recovery action for a drifted branch, and blocking them would trap the agent.

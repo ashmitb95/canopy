@@ -2077,6 +2077,11 @@ def cmd_setup_agent(args: argparse.Namespace) -> None:
             console.print(f"  mcp     [success]✓ configured[/]  [muted]CANOPY_ROOT={root}[/]")
         else:
             console.print(f"  mcp     [error]✗ not configured[/]  [muted]{mcp['path']}[/]")
+        hooks_state = status.get("hooks") or {}
+        if hooks_state.get("configured"):
+            console.print(f"  hooks   [success]✓ installed[/]  [muted]{hooks_state.get('path', '')}[/]")
+        else:
+            console.print(f"  hooks   [muted]· not installed[/]  [muted]{hooks_state.get('path', '')}[/]")
         console.print()
         return
 
@@ -2105,9 +2110,22 @@ def cmd_setup_agent(args: argparse.Namespace) -> None:
     if args.hooks:
         from ..agent_setup import install_hooks
         if workspace_root is None:
-            workspace = _load_workspace()
-            workspace_root = workspace.config.root
-        result["hooks"] = install_hooks(workspace_root)
+            # Resolve the workspace without _load_workspace()'s sys.exit —
+            # a missing workspace must not discard the skill/MCP result
+            # already computed above; report hooks as skipped instead.
+            from ..workspace.config import load_config
+            from ..workspace.workspace import Workspace
+            try:
+                workspace_root = Workspace(load_config()).config.root
+            except Exception:
+                workspace_root = None
+        if workspace_root is None:
+            result["hooks"] = {
+                "action": "skipped", "path": "",
+                "reason": "no canopy workspace found — run `canopy setup-agent --hooks` from inside one",
+            }
+        else:
+            result["hooks"] = install_hooks(workspace_root)
 
     if args.json:
         _print_json(result)

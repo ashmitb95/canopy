@@ -1193,7 +1193,7 @@ def cmd_fork(args: argparse.Namespace) -> None:
 
 
 def _cmd_preflight_feature(args: argparse.Namespace) -> None:
-    """Feature-scoped preflight via coordinator.review_prep (records result)."""
+    """Feature-scoped preflight via review_ops.review_prep (records result)."""
     from ..management.review_ops import review_prep as review_prep_op
     from .ui import console, separator, spinner, SYM_CHECK, SYM_DOT, SYM_CROSS
 

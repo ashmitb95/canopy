@@ -178,20 +178,24 @@ class TestSwitchBehavior:
         assert len(calls) == 1
         assert calls[0][1] == "auth-flow"
 
-    def test_resume_does_not_double_bump_when_switch_ran(
+    def test_resume_bumps_last_visit_even_when_switch_ran(
         self, canopy_toml_for_workspace, monkeypatch
     ):
-        """Single-bump invariant: resume does NOT call mark_visited when switch ran.
+        """Sole-bumper invariant: resume bumps last_visit even when switch ran.
 
-        The mock switch does NOT bump last_visit (T13 hasn't landed). We verify
-        that resume also skips the bump, leaving the anchor at the pre-seeded value.
+        Phase 5 stripped switch's last_visit bump — switch returns slot state
+        only. So feature_resume is now the SOLE bumper and must advance the
+        anchor on the switch path too, else the resume+switch case never
+        records a visit (a zero-bump).
         """
+        import time
         ws = _load_workspace(canopy_toml_for_workspace)
         # Pre-seed a visit.
         t0 = lv.mark_visited(ws, "auth-flow")
+        time.sleep(1.1)
 
         def fake_switch(workspace, feature, **kwargs):
-            # Deliberately does NOT bump last_visit (simulating pre-T13 state).
+            # Real switch no longer bumps last_visit (phase 5 strip).
             return {"feature": feature, "switch_performed": True}
 
         import canopy.actions.resume as resume_mod
@@ -201,11 +205,14 @@ class TestSwitchBehavior:
 
         feature_resume(ws, "auth-flow")
 
-        # last_visit should still be t0 — neither mock-switch nor resume bumped.
+        # resume is the sole bumper — the anchor must have advanced past t0.
         after = lv.get_last_visit(ws, "auth-flow")
-        assert after["last_visit"] == t0, (
-            "resume must not bump last_visit when switch_summary is truthy "
-            "(single-bump invariant)"
+        assert after["last_visit"] > t0, (
+            "resume must bump last_visit on the switch path "
+            "(switch no longer bumps — sole-bumper invariant)"
+        )
+        assert after["previous_visit"] == t0, (
+            "the prior anchor must roll into previous_visit"
         )
 
 

@@ -8,8 +8,6 @@ classifier or the priority logic.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
 from .aliases import _resolve_owner_slug

@@ -2,18 +2,19 @@
 
 Single command takes an alias and gets the user back in business:
   1. Resolve alias to feature name.
-  2. If feature isn't canonical, switch to it (which will bump last_visit once T13 lands).
+  2. If feature isn't canonical, switch to it.
   3. Compute "since prior anchor" sections (commits, threads, drafts...).
   4. Compute current_state (feature_state, CI, bot rollup, branch position).
   5. Build intent_hints from the deltas + current state.
-  6. If no switch happened, bump last_visit at the end.
+  6. Bump last_visit at the end.
   7. Return the complete brief.
 
 Refreshes from GitHub/Linear on every call. No caching at this layer.
 
 Single-bump invariant: last_visit moves exactly once per feature_resume call.
-  - switch ran  → switch bumps (T13). Resume does NOT bump again.
-  - no switch   → resume bumps at the end, after delta is computed.
+  feature_resume is the sole bumper — switch returns slot state only and no
+  longer touches last_visit (phase 5 strip), so resume always bumps at the
+  end, after the delta is computed against the captured prior anchor.
 """
 from __future__ import annotations
 
@@ -116,8 +117,6 @@ def feature_resume(workspace: Workspace, alias: str) -> dict[str, Any]:
     )
     if not is_canonical:
         switch_summary = switch(workspace, feature)
-        # T13 will make switch bump last_visit internally. Until then, the
-        # single-bump invariant is: resume does NOT bump when switch ran.
 
     # 3. Empty containers — T7–T12 expand _populate_since / _populate_current.
     since: dict[str, Any] = {
@@ -148,9 +147,10 @@ def feature_resume(workspace: Workspace, alias: str) -> dict[str, Any]:
     # 5. Build intent hints from populated shapes.
     intent_hints = _intent_hints(since, current, prior_iso is None)
 
-    # 6. Single-bump: only bump when switch didn't already run.
-    if switch_summary is None:
-        lv.mark_visited(workspace, feature)
+    # 6. Bump the visit anchor. switch no longer touches last_visit (phase 5
+    #    stripped that embed), so feature_resume is the sole bumper. prior_iso
+    #    was captured at step 1, so the brief's window is unaffected.
+    lv.mark_visited(workspace, feature)
 
     # 7. Window duration (None on first visit).
     window_hours = _hours_between(prior_iso, now_iso) if prior_iso is not None else None

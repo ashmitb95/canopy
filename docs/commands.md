@@ -145,6 +145,41 @@ Install-staleness (canopy's installation around the workspace):
 | `skill_stale` | warn | installed skill drifted from bundled source | `install_skill(reinstall=True)` |
 | `vsix_duplicates` | info | multiple `singularityinc.canopy-*` extension dirs | requires `--clean-vsix` |
 
+## Hooks (enforcement)
+
+Claude Code hooks that stop the agent from mutating git state in the wrong place. Separate from the drift-tracking `canopy hooks install|uninstall|status` (post-checkout, feeds `heads.json`) described in "Setup" above.
+
+| Command | What it does |
+|---|---|
+| `canopy setup-agent --hooks` | Installs (or refreshes) the enforcement hooks into `<workspace>/.claude/settings.json`: a `PreToolUse` entry (matcher `Bash`) running `canopy-hook-gate`, and a `SessionStart` entry running `canopy-hook-context`. **Project-scoped, not user-scoped** — the workspace root is normally not itself a git repo (it's a container of repos), so nothing lands in `~/.claude/settings.json` or in any employer repo's tree. Merges into existing `settings.json`: other keys (`permissions`, foreign hooks) are preserved untouched; re-running is a no-op (`action: "unchanged"`) once both entries are present. If `settings.json` exists but isn't valid JSON, install is skipped with a `reason` rather than clobbering it. Combine with the other `setup-agent` flags (`--skill-only`, `--mcp-only`, `--reinstall`, `--check`) as usual. |
+
+`canopy-hook-gate` and `canopy-hook-context` are internal console scripts (registered in `pyproject.toml`, not meant to be run by hand) that Claude Code invokes per the `settings.json` entries above:
+
+- **`canopy-hook-gate`** (PreToolUse, matcher `Bash`) — reads the tool-call payload as JSON on stdin (`{tool_name, tool_input: {command}, cwd, ...}`). For non-`Bash` calls or commands with no `git` token, exits 0 immediately without touching disk. Otherwise it resolves the workspace from `cwd` (walking up for `canopy.toml`), splits the command on top-level shell operators, tracks the effective directory through `cd` chains and `git -C`, and judges only the mutating git subcommands (`commit`, `push`, `merge`, `rebase`, `reset`, `cherry-pick`, `add`, `rm`, `mv`, `am`, `revert`, mutating `stash` verbs). **Exit 0** = allow (nothing printed). **Exit 2** = block, with a one-line reason on stderr that Claude Code feeds back to the model.
+- **`canopy-hook-context`** (SessionStart) — reads the same payload shape, resolves the workspace from `cwd`, and prints a compact brief to stdout (which becomes session context): workspace name, canonical feature, each repo's branch + dirty count, each warm slot's occupant, and a one-line reminder to `canopy switch` before working if the ticket doesn't match. Always exits 0; on any error it prints nothing.
+
+Deny codes (all four block with an explanatory message that also names the fix):
+
+| Code | Meaning | Fix the message names |
+|---|---|---|
+| `outside_repo` | The mutation's effective directory (after resolving `cd`/`git -C`) isn't inside any workspace repo or slot worktree. | `cd <repo> && git ...`, or use `canopy run`. |
+| `trunk_branch_drift` | A canonical-slot repo is on a branch owned by a different registered feature than the current canonical one. | `canopy switch <feature>` (either the branch's owner, or back to canonical). |
+| `slot_branch_drift` | A warm-slot repo is on a branch that doesn't match the slot's recorded occupant feature. | `git checkout <expected-branch>` in that worktree, or `canopy doctor`. |
+| `push_unknown_branch` | `git push`'s source refspec names a branch that doesn't exist in the effective repo (but does exist in a different one). | Check the branch for *this* repo with `git branch --list` or `canopy context`; likely the wrong repo. |
+
+**Fail-open contract.** The gate only blocks when it's sure the mutation targets the wrong place. It allows (exit 0) on: unparseable shell segments (`shlex` failure), unresolvable `cd` targets (`$VAR`, `~`, backticks, `cd -`), a `cwd` with no `canopy.toml` anywhere above it, non-`Bash` tool calls, commands with no `git` token, and any internal exception — `run_gate` never raises. `checkout`/`switch` are deliberately never gated: they're the recovery action for a drifted branch, and blocking them would trap the agent.
+
+**Escape hatch:** set `CANOPY_HOOKS_DISABLED=1` in the environment to make the gate a no-op (checked first, before any parsing).
+
+**Known bypasses** (deliberate fail-open — not bugs, documented so nobody relies on the gate as a security boundary):
+- Env-prefix invocations: `GIT_TRACE=1 git push`, `env git push` — the leading token isn't `git`, so the segment isn't recognized as a git mutation.
+- Non-literal git: `/usr/bin/git ...`, `command git ...`, `sh -c "git push"`, `xargs git push` — same reason, no literal `git` argv[0].
+- Subshells, loops, brace groups: `(cd x && git push)`, `for d in a b; do (cd "$d" && git push); done` — the gate's segment splitter is top-level-operator-aware but doesn't recurse into subshell/loop bodies.
+- Unresolvable directories: `cd $DIR`, `cd ~/x`, `git -C "$dir"`, or any `--git-dir`/`--work-tree` override — these poison `dir_known` for the segment (or everything after, for an unresolvable `cd`), which fails open rather than guessing.
+- Shlex-unparseable segments: unbalanced quotes cause that segment to be skipped entirely.
+- Backslash-escape edge cases in the quote-tracking scanner (best-effort, not a full shell parser).
+- Sessions whose `cwd` is outside the workspace entirely — no `canopy.toml` is found walking up, so the gate can't resolve repos/slots and allows everything.
+
 ## Debug
 
 | Command | What it does |

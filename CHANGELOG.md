@@ -4,6 +4,23 @@ Tracks the Python side (CLI + MCP server). The VSCode extension has its own [vsc
 
 Versions follow semver. Pre-1.0 — minor bumps may add features or break behavior; the README is the source-of-truth contract.
 
+## 3.2.0 — 2026-07-04 (Enforcement hooks — 4.0 phase 2)
+
+### Added
+- Claude Code enforcement hooks, installed by `canopy setup-agent --hooks`
+  (project-scoped `.claude/settings.json`):
+  - **PreToolUse git gate** (`canopy-hook-gate`): blocks git mutations whose
+    effective directory (after resolving `cd` chains, `git -C`, and heredoc
+    bodies) is outside a workspace repo (`outside_repo`), commits/pushes on
+    a branch belonging to a different registered feature
+    (`trunk_branch_drift` / `slot_branch_drift`), and pushes of branch names
+    that only exist in a different repo (`push_unknown_branch`). Fail-open
+    by design; `CANOPY_HOOKS_DISABLED=1` disables.
+  - **SessionStart brief** (`canopy-hook-context`): injects a compact
+    repo → branch → canonical-feature map at session start.
+- `tests/fixtures/hook_gate_corpus.jsonl`: 680 real-world git command shapes
+  (mined from 35 days of transcripts) as a parser regression corpus.
+
 ## 3.1.2 — 2026-07-04
 
 Slot-model consistency fixes from canopy-test dogfooding.

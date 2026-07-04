@@ -182,6 +182,13 @@ When `mcp__canopy__feature_state` returns state `awaiting_bot_resolution`, only 
 - ❌ `mcp__canopy__run(repo='...', command='git commit ...')` to commit one repo at a time — use `mcp__canopy__commit(message=...)` so the whole canonical feature commits with one message and the wrong-branch / hooks-failed cases come back classified.
 - ❌ `mcp__canopy__run(repo='...', command='git push')` per repo — use `mcp__canopy__push()`. First push needs `set_upstream=True`; the `no_upstream` blocker tells you when (and the fix-action carries the same args + `set_upstream=True` so you can retry mechanically).
 
+## If a git command is blocked by canopy
+
+A message starting with `canopy: blocked` means the enforcement hook stopped
+a git mutation that targeted the wrong directory or branch. Do NOT retry the
+same command or work around it with a different path. Read the reason — it
+names the fix (usually `cd <repo> && ...` or `canopy switch <feature>`).
+
 ## When canopy doesn't apply
 
 Use raw `Bash`, `Read`, `Edit` etc. as normal for:

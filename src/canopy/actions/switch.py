@@ -240,6 +240,16 @@ def switch(
         out, release_current=effective_release, per_repo_results=per_repo_results,
     )
 
+    # Phase 4: auto-bootstrap the freshly-created warm slot (never fails switch).
+    if not effective_release and previously_canonical:
+        _sid = slots_mod.slot_for_feature(workspace, previously_canonical)
+        if _sid:
+            try:
+                from .slot_bootstrap import bootstrap_on_slot_create
+                bootstrap_on_slot_create(workspace, previously_canonical, _sid)
+            except Exception:
+                pass
+
     # M4: include the new feature's persistent memory so the agent picks
     # up cross-session context immediately. Empty string when no memory
     # has been recorded yet — caller can ignore.

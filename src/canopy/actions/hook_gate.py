@@ -235,10 +235,54 @@ def gate_command(workspace, command: str, cwd: Path) -> GateDecision:
             deny = _check_branch(workspace, repo_root, repo_name, slot_id, seg)
             if deny is not None:
                 return deny
+        if seg.argv_after_globals[0] == "push":
+            deny = _check_push_refspec(workspace, repo_root, repo_name, seg)
+            if deny is not None:
+                return deny
     return GateDecision(allow=True)
 
 
 _BRANCH_CHECK_SUBCOMMANDS = frozenset({"commit", "push"})
+
+
+def _check_push_refspec(workspace, repo_root: Path, repo_name: str,
+                        seg: GitSegment) -> GateDecision | None:
+    """Deny pushes of branch names that don't exist in the effective repo."""
+    from ..git import repo as git
+
+    args = seg.argv_after_globals[1:]           # after "push"
+    positional = [a for a in args if not a.startswith("-")]
+    if len(positional) < 2:
+        return None                              # bare push / push origin
+    refspecs = positional[1:]                    # after the remote
+    if "--delete" in args or "-d" in args:
+        return None
+    for spec in refspecs:
+        src = spec.split(":", 1)[0].lstrip("+")
+        if not src or src in ("HEAD",) or "/" in src or "«" in src:
+            continue                             # HEAD/tags-with-path/redacted
+        try:
+            if git.branch_exists(repo_root, src):
+                continue
+        except Exception:
+            return None                          # fail open
+        elsewhere = [
+            rs.config.name for rs in workspace.repos
+            if rs.config.name != repo_name and rs.abs_path.exists()
+            and git.branch_exists(rs.abs_path, src)
+        ]
+        hint = (f" That branch exists in {', '.join(elsewhere)} — wrong repo?"
+                if elsewhere else "")
+        return GateDecision(
+            allow=False, code="push_unknown_branch",
+            reason=(
+                f"canopy: blocked `git push` in {repo_name} — branch '{src}' "
+                f"does not exist here (src refspec would fail).{hint} "
+                f"Check the branch for THIS repo with `git branch --list` "
+                f"or `canopy context`."
+            ),
+        )
+    return None
 
 
 def _branch_owner_map(workspace) -> dict[tuple[str, str], str]:

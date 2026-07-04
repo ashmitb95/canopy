@@ -205,3 +205,40 @@ def test_gate_blocks_wrong_branch_in_slot(workspace_with_slots):
     assert d.allow is False
     assert d.code == "slot_branch_drift"
     assert "Y" in d.reason                      # names the expected occupant
+
+
+# ── gate_command: push refspec ──────────────────────────────────────────
+
+def test_gate_blocks_push_of_branch_from_other_repo(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    # create a branch that exists ONLY in repo-b
+    subprocess.run(["git", "branch", "only-in-b"], cwd=_root(ws) / "repo-b",
+                   check=True, capture_output=True)
+    d = gate_command(ws, "git push -u origin only-in-b", cwd=_root(ws) / "repo-a")
+    assert d.allow is False
+    assert d.code == "push_unknown_branch"
+    assert "repo-b" in d.reason        # tells the agent where the branch lives
+
+
+def test_gate_allows_push_of_existing_branch(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    d = gate_command(ws, "git push -u origin X", cwd=_root(ws) / "repo-a")
+    assert d.allow is True             # X exists in repo-a
+
+
+def test_gate_allows_bare_push(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    d = gate_command(ws, "git push", cwd=_root(ws) / "repo-a")
+    assert d.allow is True
+
+
+def test_gate_allows_push_options_and_head(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    assert gate_command(ws, "git push --force-with-lease origin HEAD",
+                        cwd=_root(ws) / "repo-a").allow is True
+    assert gate_command(ws, "git push origin --delete X",
+                        cwd=_root(ws) / "repo-a").allow is True

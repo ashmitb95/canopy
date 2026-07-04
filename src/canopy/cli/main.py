@@ -1007,6 +1007,22 @@ def cmd_migrate_slots(args: argparse.Namespace) -> None:
     console.print()
 
 
+def cmd_reclaim(args: argparse.Namespace) -> None:
+    """Free warm slots whose PR merged (clean-only; dirty→advisory)."""
+    from ..actions.reclaim import reclaim_merged
+    ws = _load_workspace()
+    result = reclaim_merged(ws)
+    if args.json:
+        _print_json(result); return
+    from .ui import console, print_success
+    for f in result["freed"]:
+        print_success(f"freed: {f}")
+    for a in result["advisories"]:
+        console.print(f"  [warning]⚠ {a['message']}[/]")
+    if not result["freed"] and not result["advisories"]:
+        console.print("  [muted]nothing to reclaim[/]")
+
+
 def _open_ide(ide_cmd: str, args: argparse.Namespace) -> None:
     """Open an IDE with the right directories for a feature or workspace.
 
@@ -2846,8 +2862,25 @@ def cmd_worktree_bootstrap(args: argparse.Namespace) -> None:
     from .ui import console, spinner
 
     workspace = _load_workspace()
-    steps_arg = getattr(args, "step", None)
-    steps = [steps_arg] if steps_arg else None
+
+    slot_id = getattr(args, "_slot", None)
+    if slot_id:
+        # Detached deps worker (spawned by slot_bootstrap._spawn_deps_background):
+        # just install deps for this slot and record status — no other output.
+        from ..actions import slot_bootstrap
+        slot_bootstrap._run_deps_now(workspace, args.feature, slot_id)
+        return
+
+    # --interactive: this handler already runs in the foreground and streams
+    # output, so the flag is effectively a marker here — it forces the deps
+    # step to happen synchronously in *this* invocation rather than being
+    # detached to a background process (that detach only happens via the
+    # --_slot path above, spawned elsewhere).
+    if getattr(args, "deps", False):
+        steps = ["deps"]
+    else:
+        steps_arg = getattr(args, "step", None)
+        steps = [steps_arg] if steps_arg else None
 
     try:
         with spinner("Bootstrapping…"):
@@ -3879,6 +3912,10 @@ def main() -> None:
     )
     migrate_slots_p.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # reclaim
+    reclaim_p = subparsers.add_parser("reclaim", help="Free warm slots whose PR merged")
+    reclaim_p.add_argument("--json", action="store_true")
+
     # setup-agent
     setup_p = subparsers.add_parser(
         "setup-agent",
@@ -3936,6 +3973,11 @@ def main() -> None:
                               help="Overwrite existing destination env files")
     bootstrap_p.add_argument("--step", choices=["env", "deps", "ide"], default=None,
                               help="Run only one step instead of all three")
+    bootstrap_p.add_argument("--deps", action="store_true",
+                              help="Deps step only (env/ide/hooks skipped)")
+    bootstrap_p.add_argument("--interactive", action="store_true",
+                              help="Run deps install in the foreground (streams output, handles prompts)")
+    bootstrap_p.add_argument("--_slot", default=None, help=argparse.SUPPRESS)
     bootstrap_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     ship_p = subparsers.add_parser(
@@ -4158,6 +4200,7 @@ def main() -> None:
         "switch": cmd_switch,
         "slots": cmd_slots,
         "migrate-slots": cmd_migrate_slots,
+        "reclaim": cmd_reclaim,
         "commit": cmd_commit,
         "bot-status": cmd_bot_status,
         "historian": cmd_historian,

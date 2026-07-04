@@ -38,11 +38,11 @@ def bootstrap_on_slot_create(workspace: Workspace, feature: str, sid: str) -> No
 
 
 def _spawn_deps_background(workspace: Workspace, feature: str, sid: str) -> None:
-    """Detach a `canopy worktree bootstrap --deps` for this slot."""
+    """Detach a `canopy worktree-bootstrap --deps` for this slot."""
     if os.environ.get("CANOPY_NO_BG_BOOTSTRAP"):
         return
     subprocess.Popen(
-        [sys.executable, "-m", "canopy.cli.main", "worktree", "bootstrap",
+        [sys.executable, "-m", "canopy.cli.main", "worktree-bootstrap",
          "--deps", feature, "--_slot", sid],
         cwd=str(workspace.config.root),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

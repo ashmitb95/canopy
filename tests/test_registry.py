@@ -59,3 +59,32 @@ def test_remote_false_has_no_pr_key(canopy_toml_for_workspace):
     _register(root, "auth-flow", ["repo-a", "repo-b"])
     ctx = context(_ws(root))
     assert ctx["features"]["auth-flow"]["repos"]["repo-a"].get("pr", "ABSENT") == "ABSENT"
+
+
+def test_remote_overlay_merges_pr(canopy_toml_for_workspace, monkeypatch):
+    from canopy.actions import registry
+    root = canopy_toml_for_workspace
+    _register(root, "auth-flow", ["repo-a", "repo-b"])
+    import canopy.actions.triage as triage
+    monkeypatch.setattr(triage, "_fetch_open_prs", lambda ws, repos, author: {
+        "repo-a": [{"head_branch": "auth-flow", "number": 7, "url": "u",
+                    "state": "open", "review_decision": "APPROVED"}],
+        "repo-b": [],
+    })
+    ctx = registry.context(_ws(root), remote=True)
+    pr = ctx["features"]["auth-flow"]["repos"]["repo-a"]["pr"]
+    assert pr["number"] == 7 and pr["review_decision"] == "APPROVED"
+
+
+def test_remote_overlay_falls_back_to_cache_when_offline(canopy_toml_for_workspace, monkeypatch):
+    from canopy.actions import registry, prs_cache
+    root = canopy_toml_for_workspace
+    _register(root, "auth-flow", ["repo-a", "repo-b"])
+    ws = _ws(root)
+    prs_cache.write(ws, {"auth-flow": {"repos": {"repo-a": {"number": 9, "state": "open"}}}})
+    import canopy.actions.triage as triage
+    monkeypatch.setattr(triage, "_fetch_open_prs",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")))
+    ctx = registry.context(ws, remote=True)
+    assert ctx["remote"]["stale"] is True
+    assert ctx["features"]["auth-flow"]["repos"]["repo-a"]["pr"]["number"] == 9

@@ -69,8 +69,54 @@ def _compute_advisories(workspace: Workspace, active_feature):
 
 
 def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:
-    # Replaced in Task 4 with the real live-fetch overlay.
-    pass
+    """Merge live PR data into per-repo entries; cache fallback if offline."""
+    from . import triage as triage_mod
+    from . import prs_cache
+    from ..git import repo as git
+
+    repo_names = list({r for f in out["features"].values() for r in f["repos"]})
+    stale = False
+    try:
+        prs_by_repo = triage_mod._fetch_open_prs(workspace, repo_names, author)
+        idx: dict[tuple[str, str], dict] = {}
+        for repo_name, prs in prs_by_repo.items():
+            for pr in prs:
+                b = pr.get("head_branch") or ""
+                if b:
+                    idx[(repo_name, b)] = pr
+        live_by_feature: dict = {}
+        for fname, fdata in out["features"].items():
+            live_by_feature[fname] = {"repos": {}}
+            for repo_name, entry in fdata["repos"].items():
+                pr = idx.get((repo_name, entry["branch"]))
+                if pr:
+                    slim = {"number": pr.get("number"), "state": pr.get("state"),
+                            "review_decision": pr.get("review_decision"),
+                            "url": pr.get("url")}
+                    entry["pr"] = slim
+                    live_by_feature[fname]["repos"][repo_name] = slim
+        prs_cache.write(workspace, live_by_feature)
+    except Exception:
+        stale = True
+        cached = prs_cache.read(workspace)
+        if cached:
+            for fname, fdata in out["features"].items():
+                cf = (cached["features"].get(fname) or {}).get("repos", {})
+                for repo_name, entry in fdata["repos"].items():
+                    if repo_name in cf:
+                        entry["pr"] = cf[repo_name]
+    # origin divergence is remote-only (needs the last fetch's tracking ref)
+    for fdata in out["features"].values():
+        for repo_name, entry in fdata["repos"].items():
+            try:
+                rs = workspace.get_repo(repo_name)
+                base = f"origin/{rs.config.default_branch}"
+                if git.branch_exists(rs.abs_path, entry["branch"]):
+                    a, b = git.divergence(rs.abs_path, entry["branch"], base)
+                    entry["ahead_origin"], entry["behind_origin"] = a, b
+            except Exception:
+                pass
+    out["remote"] = {"stale": stale}
 
 
 def context(workspace: Workspace, *, cwd: Path | None = None,

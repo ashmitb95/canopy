@@ -31,7 +31,7 @@ from ..workspace.workspace import Workspace
 from . import slots as slots_mod
 from .aliases import repos_for_feature, resolve_feature
 from .errors import BlockerError, FixAction
-from .feature_state import resolve_repo_paths
+from .repo_paths import resolve_repo_paths
 
 
 def _resolve_feature_name(

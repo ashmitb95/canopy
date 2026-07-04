@@ -39,7 +39,8 @@ from . import slots as slots_mod
 from .aliases import repos_for_feature, resolve_feature
 from .bot_resolutions import record_resolution
 from .errors import BlockerError, FixAction
-from .feature_state import _per_repo_facts, resolve_repo_paths
+from .feature_state import _per_repo_facts
+from .repo_paths import resolve_repo_paths
 
 
 def _resolve_feature_name(

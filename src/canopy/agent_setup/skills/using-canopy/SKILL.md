@@ -196,3 +196,15 @@ Use raw `Bash`, `Read`, `Edit` etc. as normal for:
 - Workspace not under canopy management (no `canopy.toml`)
 - Operations on repos not registered in `canopy.toml`
 - One-off utilities that don't need path resolution (ls, find, etc., outside any canopy repo)
+
+## The registry: context / start / join
+
+- `context` is your single read for the workspace map (feature ↔ repo ↔ branch
+  ↔ path ↔ state). It's local + instant. Use it freely for orientation.
+- Add the remote overlay (`context remote=True`) ONLY when the task depends on
+  remote state — addressing PR comments, checking if CI is green, reviewing.
+  Local code/feature work does not need it.
+- `start <alias>` begins new work (lazy: no repos until you join).
+- `canopy join <repo>` when you're ready to work in a repo — it creates the
+  branch AND registers the repo so the enforcement gate recognizes it. A raw
+  `git checkout -b` does NOT register; `context` will advise you to `join`.

@@ -49,6 +49,8 @@ Write actions and execution.
 
 | Command | What it does |
 |---|---|
+| `canopy start <alias>` | **Registry consolidation (4.0 phase 3).** Begin new work: resolves the issue provider best-effort (Linear ID, GitHub issue, etc.) and creates the feature lazily — zero repos until you `join`. Marks the feature active in `.canopy/state/active.json`. |
+| `canopy join <repo>` | **Registry consolidation (4.0 phase 3).** The lazy-growth primitive: creates the active feature's branch in `<repo>`, registers the repo on the feature lane, and promotes the feature to canonical so the enforcement gate and `context` recognize it. A raw `git checkout -b` does not register — `context` will advise `join` for unregistered branches. |
 | `canopy resume <alias> [--reset-anchor]` | **Session-start primitive (Plan 2).** Switch-aware compound action: alias → switch-if-needed → refresh GitHub + Linear → compute structured brief → bump last-visit anchor. Returns `{feature, switch_performed, first_visit, window_hours, since_last_visit, current_state, next_actions, intent_hints}`. Use this instead of manually calling `switch` + `feature_state` + `github_get_pr_comments` at the start of a session. `--reset-anchor` sets the anchor to now (useful when you want a fresh delta window). See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief). |
 | `canopy resolve <thread_id> [--feature <f>]` | **Plan 2.** Resolve a GitHub PR review thread via GraphQL + record the closure in `.canopy/state/thread_resolutions.json`. The log feeds `feature_resume`'s `since_last_visit.resolved_threads` count. `--feature` pins which feature the resolution is attributed to (defaults to the canonical feature). |
 | `canopy reply <thread_id> [--body <text> \| --body-file <path> \| stdin] [--resolve] [--feature <f>]` | **Plan 2.** Post a reply to a GitHub review thread. Body comes from `--body`, `--body-file`, or stdin (pipe-friendly). `--resolve` closes the thread after posting (equivalent to `reply_to_thread(..., resolve_after=True)`) and logs the closure. |
@@ -184,7 +186,7 @@ Deny codes (all four block with an explanatory message that also names the fix):
 
 | Command | What it does |
 |---|---|
-| `canopy context` | Show detected canopy context for the current dir (which feature, repo, branch). Powers `preflight`'s context detection. |
+| `canopy context [--remote]` | **The registry read (registry consolidation, 4.0 phase 3).** One call for the workspace map: feature ↔ repo ↔ branch ↔ path ↔ slot state ↔ advisories. **Tier 1** (default): local + instant, no network calls. **Tier 2** (`--remote`): adds a live PR + CI + origin-divergence overlay per repo. Intent rule: local code/feature work → `context`; addressing PR comments, checking CI, or review → `context --remote`. Surfaces `unregistered_join_candidate` advisories — repos on the active feature's branch that were never `canopy join`-ed. Powers `preflight`'s context detection and the SessionStart brief. Supersedes the old debug-only `context`; the `workspace_context` MCP tool is deprecated in favor of this. |
 
 ## Common patterns
 

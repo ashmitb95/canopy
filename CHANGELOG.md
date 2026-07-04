@@ -4,6 +4,26 @@ Tracks the Python side (CLI + MCP server). The VSCode extension has its own [vsc
 
 Versions follow semver. Pre-1.0 — minor bumps may add features or break behavior; the README is the source-of-truth contract.
 
+## 3.3.0 — 2026-07-04 (Registry consolidation — 4.0 phase 3)
+
+### Added
+- `context` (CLI + MCP): one registry read — feature ↔ repo ↔ branch ↔ path ↔
+  slots ↔ advisories (Tier 1, local + instant) with an opt-in live PR + CI +
+  origin-divergence overlay (`--remote` / `remote=True`). Supersedes the old
+  debug `context` (now a superset) and the `workspace_context` MCP tool.
+- `start <alias>` (CLI + MCP): begin new work — resolves the issue provider
+  best-effort, creates the feature lazily (zero repos), marks it active.
+- `canopy join <repo>` (CLI + MCP): the lazy-growth primitive — creates the
+  active feature's branch in a repo, registers it, and promotes the feature to
+  canonical so the enforcement gate recognizes it.
+- Observe-as-advisory: `context` and the SessionStart brief surface repos on a
+  feature branch that were never `join`-ed (`unregistered_join_candidate`).
+- State files: `.canopy/state/active.json` (intended focus),
+  `.canopy/state/prs.json` (PR-overlay offline cache).
+
+### Deprecated
+- `workspace_context` MCP tool — use `context`. Removed in phase 5.
+
 ## 3.2.0 — 2026-07-04 (Enforcement hooks — 4.0 phase 2)
 
 ### Added

@@ -26,7 +26,11 @@ Missing slot dirs → silently drop from the returned state.
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -164,12 +168,49 @@ def read_state(workspace: Workspace) -> SlotState | None:
     )
 
 
+@contextlib.contextmanager
+def _slots_lock(workspace: Workspace):
+    """Advisory cross-process lock serializing a slots.json read-modify-write.
+
+    The lost-update race (a detached bootstrap process and the main switch
+    both reading, mutating, then writing slots.json) requires holding the
+    lock across the WHOLE read->modify->write, not just the write. Callers
+    that do such an RMW must wrap the entire sequence in this context.
+
+    ``write_state`` itself does NOT acquire this lock (its unique-tmp +
+    atomic replace is already collision-safe on its own), so a locked RMW
+    can call ``write_state`` without self-deadlocking on a non-reentrant
+    flock. Same pattern as git/hooks.py.
+    """
+    lock_path = _state_path(workspace).parent / "slots.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
+
 def write_state(workspace: Workspace, state: SlotState) -> None:
     path = _state_path(workspace)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(state.to_dict(), indent=2))
-    tmp.replace(path)
+    # Unique temp in the same dir so concurrent processes never collide on a
+    # shared tmp name (the old fixed ".json.tmp" was moved out from under a
+    # racing writer -> FileNotFoundError). Atomic rename onto the final path.
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=path.name + ".", suffix=".tmp",
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(json.dumps(state.to_dict(), indent=2))
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+        raise
 
 
 def slot_worktree_path(workspace: Workspace, slot_id: str, repo: str) -> Path:
@@ -208,9 +249,10 @@ def allocate_slot(state: SlotState) -> str | None:
 
 def set_bootstrap_status(workspace: Workspace, sid: str, repo: str, status: str) -> None:
     """Record ``status`` (installing|ready|failed) for ``repo`` in slot ``sid``."""
-    state = read_state(workspace) or SlotState(slot_count=workspace.config.slots)
-    state.bootstrap.setdefault(sid, {})[repo] = status
-    write_state(workspace, state)
+    with _slots_lock(workspace):
+        state = read_state(workspace) or SlotState(slot_count=workspace.config.slots)
+        state.bootstrap.setdefault(sid, {})[repo] = status
+        write_state(workspace, state)
 
 
 def get_bootstrap_status(workspace: Workspace, sid: str, repo: str) -> str | None:

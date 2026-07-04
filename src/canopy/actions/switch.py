@@ -509,55 +509,59 @@ def _post_switch_persist(
     out["per_repo"] = per_repo_results
     out["per_repo_paths"] = new_canonical_paths
 
-    state = slots_mod.read_state(workspace) or slots_mod.SlotState(
-        slot_count=workspace.config.slots,
-    )
-    now = slots_mod.now_iso()
+    # Serialize the whole read->modify->write against the detached
+    # bootstrap process's own slots.json RMW, or the two interleave and
+    # clobber ``canonical`` (lost update). See slots._slots_lock.
+    with slots_mod._slots_lock(workspace):
+        state = slots_mod.read_state(workspace) or slots_mod.SlotState(
+            slot_count=workspace.config.slots,
+        )
+        now = slots_mod.now_iso()
 
-    state.previous_canonical = (
-        state.canonical.feature if state.canonical else None
-    )
-    state.canonical = slots_mod.CanonicalEntry(
-        feature=feature_name,
-        activated_at=now,
-        per_repo_paths={k: str(v) for k, v in new_canonical_paths.items()},
-    )
+        state.previous_canonical = (
+            state.canonical.feature if state.canonical else None
+        )
+        state.canonical = slots_mod.CanonicalEntry(
+            feature=feature_name,
+            activated_at=now,
+            per_repo_paths={k: str(v) for k, v in new_canonical_paths.items()},
+        )
 
-    # Apply per-repo slot mutations. fastpath swaps update the existing
-    # slot entry; cold-Y evacuations occupy a freshly allocated slot.
-    for r in per_repo_results:
-        if r.get("status") == "fastpath_swapped":
-            sid = r["slot_id"]
-            state.slots[sid] = slots_mod.SlotEntry(
-                feature=r["swapped_out"], occupied_at=now,
-            )
-        elif r.get("status") == "evacuated":
-            sid = r["slot_id"]
-            state.slots[sid] = slots_mod.SlotEntry(
-                feature=previously_canonical or "",
-                occupied_at=now,
-            )
+        # Apply per-repo slot mutations. fastpath swaps update the existing
+        # slot entry; cold-Y evacuations occupy a freshly allocated slot.
+        for r in per_repo_results:
+            if r.get("status") == "fastpath_swapped":
+                sid = r["slot_id"]
+                state.slots[sid] = slots_mod.SlotEntry(
+                    feature=r["swapped_out"], occupied_at=now,
+                )
+            elif r.get("status") == "evacuated":
+                sid = r["slot_id"]
+                state.slots[sid] = slots_mod.SlotEntry(
+                    feature=previously_canonical or "",
+                    occupied_at=now,
+                )
 
-    state.last_touched[feature_name] = now
-    if previously_canonical:
-        state.last_touched[previously_canonical] = now
+        state.last_touched[feature_name] = now
+        if previously_canonical:
+            state.last_touched[previously_canonical] = now
 
-    # Drop any slot entries that still claim Y — Y is now canonical and
-    # its slot dir (if it had one) was emptied by fastpath_swap_repo.
-    for sid, entry in list(state.slots.items()):
-        if entry.feature == feature_name:
-            del state.slots[sid]
+        # Drop any slot entries that still claim Y — Y is now canonical and
+        # its slot dir (if it had one) was emptied by fastpath_swap_repo.
+        for sid, entry in list(state.slots.items()):
+            if entry.feature == feature_name:
+                del state.slots[sid]
 
-    # Clear any in_flight marker — this switch completed cleanly.
-    state.in_flight = None
+        # Clear any in_flight marker — this switch completed cleanly.
+        state.in_flight = None
 
-    # T14: capture prior anchor BEFORE the T13 bump so the summary's
-    # "since when" window reflects what the user last saw, not this visit.
-    from . import last_visit as lv
-    _prior = lv.get_last_visit(workspace, feature_name)
-    prior_iso: str | None = _prior["last_visit"] if _prior else None
+        # T14: capture prior anchor BEFORE the T13 bump so the summary's
+        # "since when" window reflects what the user last saw, not this visit.
+        from . import last_visit as lv
+        _prior = lv.get_last_visit(workspace, feature_name)
+        prior_iso: str | None = _prior["last_visit"] if _prior else None
 
-    slots_mod.write_state(workspace, state)
+        slots_mod.write_state(workspace, state)
 
     # T13: bump last_visit after slots.json is committed — every successful
     # switch into a feature counts as a "conscious look" per the plan.
@@ -641,10 +645,11 @@ def _evict_warm_to_cold(
         })
 
     # Drop the slot entry from state so the slot becomes available.
-    st = slots_mod.read_state(workspace)
-    if st is not None and slot_id in st.slots:
-        del st.slots[slot_id]
-        slots_mod.write_state(workspace, st)
+    with slots_mod._slots_lock(workspace):
+        st = slots_mod.read_state(workspace)
+        if st is not None and slot_id in st.slots:
+            del st.slots[slot_id]
+            slots_mod.write_state(workspace, st)
     return {"feature": feature, "slot_id": slot_id, "repos": repo_results}
 
 
@@ -772,20 +777,21 @@ def _persist_in_flight(
     which repo blew up, and the underlying error message. Cleared on the
     next successful switch via ``_post_switch_persist``.
     """
-    state = slots_mod.read_state(workspace) or slots_mod.SlotState(
-        slot_count=workspace.config.slots,
-    )
-    state.in_flight = {
-        "feature_being_promoted": feature_being_promoted,
-        "previously_canonical": previously_canonical,
-        "started_at": slots_mod.now_iso(),
-        "per_repo_completed": [
-            {k: v for k, v in r.items()} for r in completed_results
-        ],
-        "failed_repo": failed_repo,
-        "error_what": error_what,
-    }
-    slots_mod.write_state(workspace, state)
+    with slots_mod._slots_lock(workspace):
+        state = slots_mod.read_state(workspace) or slots_mod.SlotState(
+            slot_count=workspace.config.slots,
+        )
+        state.in_flight = {
+            "feature_being_promoted": feature_being_promoted,
+            "previously_canonical": previously_canonical,
+            "started_at": slots_mod.now_iso(),
+            "per_repo_completed": [
+                {k: v for k, v in r.items()} for r in completed_results
+            ],
+            "failed_repo": failed_repo,
+            "error_what": error_what,
+        }
+        slots_mod.write_state(workspace, state)
 
 
 def _ensure_consistent(workspace: Workspace) -> None:

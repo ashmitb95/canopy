@@ -117,8 +117,36 @@ def workspace_status() -> dict:
 
 
 @mcp.tool()
+def context(remote: bool = False) -> dict:
+    """The registry: feature ↔ repo ↔ branch ↔ path ↔ state (single read).
+
+    Tier 1 (default) is local + instant. Set remote=True ONLY when the task
+    depends on remote state (addressing PR comments, checking CI) — it adds
+    the live PR + CI + origin-divergence overlay at network cost.
+    """
+    from ..actions.registry import context as _impl
+    return _impl(_get_workspace(), remote=remote)
+
+
+@mcp.tool()
+def start(alias: str, repos: list[str] | None = None) -> dict:
+    """Begin new work on a feature (lazy — zero repos until you `join`)."""
+    from ..actions.start import start as _impl
+    return _impl(_get_workspace(), alias, repos=repos)
+
+
+@mcp.tool()
+def join(repo: str) -> dict:
+    """Join a repo to the active feature (create + register its branch)."""
+    from ..actions.join import join as _impl
+    return _impl(_get_workspace(), repo)
+
+
+@mcp.tool()
 def workspace_context(cwd: str | None = None) -> dict:
-    """Detect canopy context from a directory path.
+    """Deprecated — use ``context``. Kept for back-compat; removed in phase 5.
+
+    Detect canopy context from a directory path.
 
     Tells you which feature, repo, and branch you're in based on
     the directory. Useful for understanding worktree structure.

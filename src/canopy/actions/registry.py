@@ -68,10 +68,13 @@ def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:
     """Merge live PR data into per-repo entries; cache fallback if offline."""
     from . import triage as triage_mod
     from . import prs_cache
+    from .aliases import _resolve_owner_slug
     from ..git import repo as git
+    from ..integrations import github as gh
 
     repo_names = list({r for f in out["features"].values() for r in f["repos"]})
     stale = False
+    fetched_at = None
     try:
         prs_by_repo = triage_mod._fetch_open_prs(workspace, repo_names, author)
         idx: dict[tuple[str, str], dict] = {}
@@ -89,6 +92,23 @@ def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:
                     slim = {"number": pr.get("number"), "state": pr.get("state"),
                             "review_decision": pr.get("review_decision"),
                             "url": pr.get("url")}
+                    # CI check rollup — best-effort; a failure here (e.g. an
+                    # unparseable remote) must not take down the whole PR
+                    # overlay, so it's caught locally rather than bubbling
+                    # to the outer stale-fallback handler.
+                    try:
+                        owner, slug = _resolve_owner_slug(workspace, repo_name)
+                        rollup, _raw = gh.get_pr_checks(
+                            workspace.config.root, owner, slug, slim["number"],
+                        )
+                        slim["checks_summary"] = {
+                            "status": rollup.get("status"),
+                            "passed": rollup.get("passed"),
+                            "failing": rollup.get("failing"),
+                            "pending": rollup.get("pending"),
+                        }
+                    except Exception:
+                        pass
                     entry["pr"] = slim
                     live_by_feature[fname]["repos"][repo_name] = slim
         prs_cache.write(workspace, live_by_feature)
@@ -96,6 +116,7 @@ def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:
         stale = True
         cached = prs_cache.read(workspace)
         if cached:
+            fetched_at = cached.get("fetched_at")
             for fname, fdata in out["features"].items():
                 cf = (cached["features"].get(fname) or {}).get("repos", {})
                 for repo_name, entry in fdata["repos"].items():
@@ -112,7 +133,7 @@ def _remote_overlay(workspace: Workspace, out: dict, author: str) -> None:
                     entry["ahead_origin"], entry["behind_origin"] = a, b
             except Exception:
                 pass
-    out["remote"] = {"stale": stale}
+    out["remote"] = {"stale": stale, "fetched_at": fetched_at}
 
 
 def context(workspace: Workspace, *, cwd: Path | None = None,

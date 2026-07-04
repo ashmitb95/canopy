@@ -74,3 +74,19 @@ def test_join_idempotent(canopy_toml_for_workspace):
     join(ws, "repo-a")
     r2 = join(ws, "repo-a")           # no-op
     assert r2["status"] in ("already_joined", "joined")
+
+
+def test_join_wraps_git_error(canopy_toml_for_workspace, monkeypatch):
+    from canopy.actions.join import join
+    from canopy.actions.errors import BlockerError
+    from canopy.git import repo as git
+    root = canopy_toml_for_workspace
+    _seed_active(root, "newfeat")
+    ws = _ws(root)
+    monkeypatch.setattr(
+        git, "checkout",
+        lambda *a, **k: (_ for _ in ()).throw(git.GitError("boom")),
+    )
+    with pytest.raises(BlockerError) as e:
+        join(ws, "repo-a")
+    assert e.value.code == "join_failed"

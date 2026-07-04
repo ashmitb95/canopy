@@ -36,9 +36,15 @@ def join(workspace: Workspace, repo: str) -> dict[str, Any]:
     already = repo in (entry.get("repos") or [])
 
     # Create the branch off default_branch unless it already exists (adopt).
-    if not git.branch_exists(rs.abs_path, feature):
-        git.create_branch(rs.abs_path, feature, start_point=rs.config.default_branch)
-    git.checkout(rs.abs_path, feature)
+    try:
+        if not git.branch_exists(rs.abs_path, feature):
+            git.create_branch(rs.abs_path, feature, start_point=rs.config.default_branch)
+        git.checkout(rs.abs_path, feature)
+    except git.GitError as ex:
+        raise BlockerError(
+            code="join_failed",
+            what=f"could not create/checkout branch '{feature}' in {repo}: {ex}",
+        )
 
     if not already:
         entry.setdefault("repos", [])

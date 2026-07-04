@@ -43,6 +43,21 @@ def test_create_feature_subset(canopy_toml):
     assert not branch_exists(ui.abs_path, "api-only")
 
 
+def test_create_zero_repos_worktrees_no_raise(canopy_toml):
+    config = load_config(canopy_toml)
+    ws = Workspace(config)
+    coord = FeatureCoordinator(ws)
+
+    lane = coord.create("empty", repos=[], use_worktrees=True)
+
+    assert lane.repos == []
+    base = ws.config.root / ".canopy" / "worktrees"
+    if base.exists():
+        # No repo worktrees should have been created for the empty feature.
+        for entry in base.iterdir():
+            assert not any(entry.iterdir())
+
+
 def test_create_feature_unknown_repo(canopy_toml):
     config = load_config(canopy_toml)
     ws = Workspace(config)

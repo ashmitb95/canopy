@@ -205,7 +205,7 @@ class FeatureCoordinator:
                     results[repo_name] = str(e)
 
             failed = {r: msg for r, msg in results.items() if msg is not True}
-            if len(failed) == len(target_repos):
+            if target_repos and len(failed) == len(target_repos):
                 raise RuntimeError(
                     f"Failed to create worktrees in all repos: {failed}"
                 )

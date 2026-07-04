@@ -82,3 +82,14 @@ def test_unparseable_segment_skipped(tmp_path):
     # unbalanced quote inside one segment must not raise
     segs = resolve_segments("git commit -m 'unclosed && git push", cwd=tmp_path)
     assert isinstance(segs, list)
+
+
+# ── classification ──────────────────────────────────────────────────────
+
+def test_mutation_classification(tmp_path):
+    from canopy.actions.hook_gate import resolve_segments, is_mutation
+    segs = resolve_segments(
+        "git status && git add -A && git checkout main && git push", cwd=tmp_path)
+    flags = [(s.argv_after_globals[0], is_mutation(s)) for s in segs]
+    assert flags == [("status", False), ("add", True),
+                     ("checkout", False), ("push", True)]

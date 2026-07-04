@@ -155,3 +155,17 @@ def resolve_segments(command: str, cwd: Path) -> list[GitSegment]:
             i += 1
         out.append(GitSegment(argv=argv, effective_dir=seg_dir, dir_known=seg_known))
     return out
+
+
+# Gated git subcommands. checkout/switch are deliberately ABSENT: they are
+# the recovery action for wrong-branch states; blocking them traps the
+# agent. Branch safety is enforced on commit/push instead.
+MUTATION_SUBCOMMANDS = frozenset({
+    "commit", "push", "merge", "rebase", "stash", "reset",
+    "cherry-pick", "add", "rm", "mv", "am", "revert",
+})
+
+
+def is_mutation(seg: GitSegment) -> bool:
+    sub = seg.argv_after_globals
+    return bool(sub) and sub[0] in MUTATION_SUBCOMMANDS

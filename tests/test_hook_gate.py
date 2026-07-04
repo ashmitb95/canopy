@@ -93,3 +93,58 @@ def test_mutation_classification(tmp_path):
     flags = [(s.argv_after_globals[0], is_mutation(s)) for s in segs]
     assert flags == [("status", False), ("add", True),
                      ("checkout", False), ("push", True)]
+
+
+# ── gate_command: path check ────────────────────────────────────────────
+# Uses the slot-model fixtures from conftest.py:
+#   workspace_with_canonical_only — X canonical in trunk, Y cold, slots=2
+
+
+def _root(ws):
+    return ws.config.root
+
+
+def test_gate_allows_mutation_inside_trunk_repo(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    d = gate_command(ws, "git add -A", cwd=_root(ws) / "repo-a")
+    assert d.allow is True
+
+
+def test_gate_allows_cd_chain_from_workspace_root(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    d = gate_command(ws, 'cd repo-a && git commit -m "x"', cwd=_root(ws))
+    assert d.allow is True
+
+
+def test_gate_blocks_mutation_from_workspace_root(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    d = gate_command(ws, 'git commit -m "x"', cwd=_root(ws))
+    assert d.allow is False
+    assert d.code == "outside_repo"
+    assert "repo-a" in d.reason and "repo-b" in d.reason  # lists real repos
+
+
+def test_gate_allows_reads_anywhere(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    d = gate_command(ws, "git status && git log --oneline -5", cwd=_root(ws))
+    assert d.allow is True   # reads are never gated
+
+
+def test_gate_fails_open_on_unknown_dir(workspace_with_canonical_only):
+    from canopy.actions.hook_gate import gate_command
+    ws = workspace_with_canonical_only
+    d = gate_command(ws, 'cd "$SOMEWHERE" && git push', cwd=_root(ws))
+    assert d.allow is True
+
+
+def test_gate_allows_mutation_in_slot_worktree(workspace_with_slots):
+    from canopy.actions.hook_gate import gate_command
+    from canopy.actions import slots as sm
+    ws = workspace_with_slots      # X canonical, Y warm in worktree-1
+    slot_dir = sm.slot_worktree_path(ws, "worktree-1", "repo-a")
+    d = gate_command(ws, 'git commit -m "review fix"', cwd=slot_dir)
+    assert d.allow is True

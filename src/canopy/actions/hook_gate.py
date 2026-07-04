@@ -169,3 +169,65 @@ MUTATION_SUBCOMMANDS = frozenset({
 def is_mutation(seg: GitSegment) -> bool:
     sub = seg.argv_after_globals
     return bool(sub) and sub[0] in MUTATION_SUBCOMMANDS
+
+
+@dataclass
+class GateDecision:
+    allow: bool
+    code: str = ""       # "outside_repo" | "trunk_branch_drift" | "slot_branch_drift" | "push_unknown_branch"
+    reason: str = ""     # fed to the model on deny — must name the fix
+
+
+def _repo_dirs(workspace) -> dict[Path, tuple[str, str | None]]:
+    """Map of every legal mutation dir → (repo_name, slot_id | None).
+
+    Trunk checkouts map to (repo, None); slot worktrees to (repo, slot_id).
+    """
+    from . import slots as slots_mod
+
+    dirs: dict[Path, tuple[str, str | None]] = {}
+    repo_names = [rs.config.name for rs in workspace.repos]
+    for rs in workspace.repos:
+        dirs[rs.abs_path.resolve()] = (rs.config.name, None)
+    state = slots_mod.read_state(workspace)
+    if state is not None:
+        for sid in state.slots:
+            for name in repo_names:
+                p = slots_mod.slot_worktree_path(workspace, sid, name)
+                if p.exists():
+                    dirs[p.resolve()] = (name, sid)
+    return dirs
+
+
+def _locate(dirs: dict[Path, tuple[str, str | None]], d: Path):
+    """Return (repo_root, repo_name, slot_id) if d is at/under a legal dir."""
+    d = d.resolve()
+    for root, (name, sid) in dirs.items():
+        if d == root or root in d.parents:
+            return root, name, sid
+    return None
+
+
+def gate_command(workspace, command: str, cwd: Path) -> GateDecision:
+    """Decide allow/deny for one Bash command. Pure — no I/O beyond git reads."""
+    segments = [s for s in resolve_segments(command, cwd) if is_mutation(s)]
+    if not segments:
+        return GateDecision(allow=True)
+    dirs = _repo_dirs(workspace)
+    for seg in segments:
+        if not seg.dir_known:
+            continue                      # fail open on this segment
+        hit = _locate(dirs, seg.effective_dir)
+        if hit is None:
+            repo_list = ", ".join(sorted(n for n, s in dirs.values() if s is None))
+            return GateDecision(
+                allow=False, code="outside_repo",
+                reason=(
+                    f"canopy: blocked `git {seg.argv_after_globals[0]}` — "
+                    f"effective directory {seg.effective_dir} is not inside a "
+                    f"workspace repo. Repos: {repo_list} (under "
+                    f"{workspace.config.root}). Re-run from inside the target "
+                    f"repo, e.g. `cd <repo> && git ...`, or use `canopy run`."
+                ),
+            )
+    return GateDecision(allow=True)

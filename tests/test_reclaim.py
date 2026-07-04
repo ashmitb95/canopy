@@ -12,12 +12,14 @@ def test_clean_merged_slot_is_vacated(workspace_with_slots):
     from canopy.actions import reclaim, slots as sm, prs_cache
     from canopy.git import repo as git
     ws = workspace_with_slots                 # Y warm in worktree-1
+    sm.set_bootstrap_status(ws, "worktree-1", "repo-a", "ready")  # FIX C
     prs_cache.write(ws, {"Y": {"repos": {"repo-a": {"number": 1, "state": "merged"},
                                          "repo-b": {"number": 2, "state": "merged"}}}})
     result = reclaim.reclaim_merged(ws)
     assert "Y" in result["freed"]
     state = sm.read_state(ws)
     assert all(e.feature != "Y" for e in state.slots.values())   # slot freed
+    assert "worktree-1" not in state.bootstrap   # FIX C: no stale bootstrap map
     wt = sm.slot_worktree_path(ws, "worktree-1", "repo-a")
     assert git.current_branch(wt) == ws.get_repo("repo-a").config.default_branch
 

@@ -60,16 +60,21 @@ def render_blocker(
         out.print()
         out.print("    [header]fix:[/]")
         for fa in fix_actions:
-            label_parts = [f"canopy {fa['action']}"]
             args = fa.get("args") or {}
-            for k, v in args.items():
-                if k == "feature":
-                    label_parts.append(str(v))
-                elif isinstance(v, bool) and v:
-                    label_parts.append(f"--{k}")
-                elif not isinstance(v, bool):
-                    label_parts.append(f"--{k} {v}")
-            cmd = " ".join(label_parts)
+            if fa["action"] == "config" and "slots" in args:
+                # `config` takes a positional key + value, not --flags.
+                cmd = f"canopy config slots {args['slots']}"
+            else:
+                label_parts = [f"canopy {fa['action']}"]
+                for k, v in args.items():
+                    flag = k.replace("_", "-")
+                    if k == "feature":
+                        label_parts.append(str(v))
+                    elif isinstance(v, bool) and v:
+                        label_parts.append(f"--{flag}")
+                    elif not isinstance(v, bool):
+                        label_parts.append(f"--{flag} {v}")
+                cmd = " ".join(label_parts)
             tag = "[muted](safe)[/]" if fa.get("safe") else "[warning](needs review)[/]"
             out.print(f"      [info]{cmd}[/]  {tag}")
             preview = fa.get("preview")

@@ -2871,11 +2871,10 @@ def cmd_worktree_bootstrap(args: argparse.Namespace) -> None:
         slot_bootstrap._run_deps_now(workspace, args.feature, slot_id)
         return
 
-    # --interactive: this handler already runs in the foreground and streams
-    # output, so the flag is effectively a marker here — it forces the deps
-    # step to happen synchronously in *this* invocation rather than being
-    # detached to a background process (that detach only happens via the
-    # --_slot path above, spawned elsewhere).
+    # --interactive: run the deps install without capturing its stdio, so it
+    # streams to the terminal and can satisfy prompts (auth, a pnpm
+    # build-script approval) the detached background install can't.
+    interactive = getattr(args, "interactive", False)
     if getattr(args, "deps", False):
         steps = ["deps"]
     else:
@@ -2883,12 +2882,21 @@ def cmd_worktree_bootstrap(args: argparse.Namespace) -> None:
         steps = [steps_arg] if steps_arg else None
 
     try:
-        with spinner("Bootstrapping…"):
+        # Under --interactive the install streams to the terminal; a spinner
+        # would fight that output, so run bare.
+        if interactive:
             result = bootstrap_feature(
                 workspace, args.feature,
                 force=getattr(args, "force", False),
-                steps=steps,
+                steps=steps, interactive=True,
             )
+        else:
+            with spinner("Bootstrapping…"):
+                result = bootstrap_feature(
+                    workspace, args.feature,
+                    force=getattr(args, "force", False),
+                    steps=steps,
+                )
     except ActionError as err:
         if args.json:
             _print_json(err.to_dict())

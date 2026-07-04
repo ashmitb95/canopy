@@ -158,6 +158,12 @@ def preflight(
                 actual={"warm_now": cap_issue["current_warm"]},
                 fix_actions=[
                     FixAction(
+                        action="config",
+                        args={"slots": cap_issue["cap"] + 1},
+                        safe=True,
+                        preview=f"raise warm_slot_cap to {cap_issue['cap'] + 1}",
+                    ),
+                    FixAction(
                         action="switch",
                         args={"feature": feature_to_activate, "release_current": True},
                         safe=False,
@@ -180,21 +186,9 @@ def preflight(
                             else "no LRU candidate found — set last_touched manually"
                         ),
                     ),
-                    FixAction(
-                        action="workspace_config",
-                        args={"slots": cap_issue["cap"] + 1},
-                        safe=True,
-                        preview=f"raise warm_slot_cap to {cap_issue['cap'] + 1}",
-                    ),
                 ],
                 details={"all_issues": issues},
             )
-        # Non-cap blockers
-        raise BlockerError(
-            code="switch_preflight_failed",
-            what=f"{len(issues)} issue(s) detected before switch could proceed",
-            details={"issues": issues},
-        )
 
     return {
         "branches_to_create": branches_to_create,

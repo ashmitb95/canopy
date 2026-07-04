@@ -203,7 +203,7 @@ class TestCapReached:
         # Fix actions: wind-down mode, evict, raise cap
         actions = [fa.action for fa in exc.value.fix_actions]
         assert "switch" in actions  # both wind-down and evict use switch
-        assert "workspace_config" in actions
+        assert "config" in actions  # raise-cap choice renders `canopy config slots N`
 
     def test_cap_reached_explicit_evict_proceeds(self, workspace_with_feature):
         """Phase-4: a bare cap-fire now RAISES a choice blocker; passing an

@@ -291,3 +291,30 @@ def test_deps_skipped_when_lockfile_unchanged(canopy_toml_for_workspace, monkeyp
     bootstrap.bootstrap_repo(_ws(root), "auth-flow", "repo-a", wt, steps=("deps",))
     bootstrap.bootstrap_repo(_ws(root), "auth-flow", "repo-a", wt, steps=("deps",))
     assert len(ran) == 1                     # second call short-circuits
+
+
+def test_deps_marker_does_not_dirty_worktree(canopy_toml_for_workspace, monkeypatch):
+    """FIX B: the deps-lock fingerprint must live OUTSIDE the worktree, so a
+    warm slot with real deps isn't left permanently dirty (which defeats
+    reclaim — every merged slot would look reclaimable_but_dirty forever)."""
+    import subprocess
+    from canopy.actions import bootstrap
+    from canopy.git import repo as git
+    root = canopy_toml_for_workspace
+    wt = root / "repo-a"
+    # Commit a lockfile so the ONLY thing that could dirty the tree is a
+    # stray marker written by the deps step.
+    (wt / "pnpm-lock.yaml").write_text("lock-v1\n")
+    subprocess.run(["git", "add", "."], cwd=wt, check=True)
+    subprocess.run(["git", "commit", "-m", "add lockfile"], cwd=wt, check=True)
+    assert git.is_dirty(wt) is False          # clean baseline
+
+    ran = []
+    monkeypatch.setattr(bootstrap, "_run_install",
+                        lambda *a, **k: ran.append(1) or {"status": "ok", "exit_code": 0})
+    bootstrap.bootstrap_repo(_ws(root), "auth-flow", "repo-a", wt, steps=("deps",))
+    assert git.is_dirty(wt) is False          # NO stray marker in the tree
+    assert len(ran) == 1
+    # Second run must still short-circuit on the out-of-tree fingerprint.
+    bootstrap.bootstrap_repo(_ws(root), "auth-flow", "repo-a", wt, steps=("deps",))
+    assert len(ran) == 1

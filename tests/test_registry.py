@@ -106,6 +106,22 @@ def test_remote_overlay_adds_checks_summary(canopy_toml_for_workspace, monkeypat
     assert pr["checks_summary"]["status"] == "passing"
 
 
+def test_remote_reclaims_freed_slot_before_slots_snapshot(workspace_with_slots, monkeypatch):
+    """FIX F: context(remote=True) must reclaim merged slots BEFORE building
+    the slots snapshot, so a freed slot doesn't linger in the output."""
+    from canopy.actions import registry, prs_cache
+    import canopy.actions.triage as triage
+    ws = workspace_with_slots                  # Y warm in worktree-1 (clean)
+    prs_cache.write(ws, {"Y": {"repos": {"repo-a": {"number": 1, "state": "merged"},
+                                         "repo-b": {"number": 2, "state": "merged"}}}})
+    # Offline → overlay uses the cache we wrote (doesn't clobber it), so
+    # reclaim sees Y as merged and frees worktree-1.
+    monkeypatch.setattr(triage, "_fetch_open_prs",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("offline")))
+    ctx = registry.context(ws, remote=True)
+    assert "worktree-1" not in ctx["slots"]    # freed slot is gone
+
+
 def test_remote_overlay_falls_back_to_cache_when_offline(canopy_toml_for_workspace, monkeypatch):
     from canopy.actions import registry, prs_cache
     root = canopy_toml_for_workspace

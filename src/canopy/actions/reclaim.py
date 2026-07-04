@@ -97,6 +97,7 @@ def reclaim_merged(workspace: Workspace) -> dict[str, Any]:
         state = sm.read_state(workspace)     # re-read; drop entry; preserve rest
         state.slots.pop(sid, None)
         state.last_touched.pop(feature, None)
+        state.bootstrap.pop(sid, None)       # don't leak a reused slot's status
         sm.write_state(workspace, state)
         freed.append(feature)
     return {"freed": freed, "advisories": advisories}

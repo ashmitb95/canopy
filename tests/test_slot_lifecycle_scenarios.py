@@ -90,8 +90,11 @@ def test_preflight_aggregates_all_repo_issues_before_mutation(
 
 
 def test_cap_full_raises_choice_blocker(workspace_with_full_slots):
+    import io
+    from rich.console import Console
     from canopy.actions.errors import BlockerError
     from canopy.actions import prs_cache
+    from canopy.cli.render import render_blocker
     ws = workspace_with_full_slots              # slots=2, both warm (A,B), X canonical
     # X vacates and wants warm (open PR), but both slots are occupied.
     # NOTE: promote the *cold* feature Y (not warm A/B) — promoting a warm
@@ -101,9 +104,23 @@ def test_cap_full_raises_choice_blocker(workspace_with_full_slots):
     with pytest.raises(BlockerError) as e:
         switch(ws, "Y")                         # promote cold feature Y; X must evacuate
     assert e.value.code == "worktree_cap_reached"
-    codes = {fa.action for fa in e.value.fix_actions}
-    assert {"raise_cap", "release_current", "evict"} <= codes
+
+    # The three choices must render as RUNNABLE canopy commands.
+    actions = {fa.action for fa in e.value.fix_actions}
+    assert actions == {"config", "switch"}      # switch appears twice
     assert "warm_features" in (e.value.details or {})
+
+    buf = io.StringIO()
+    render_blocker(e.value, action="switch",
+                   console=Console(file=buf, width=200, force_terminal=False))
+    rendered = buf.getvalue()
+    assert "canopy config slots 3" in rendered          # raise-cap choice
+    assert "canopy switch Y --release-current" in rendered  # send-cold choice
+    assert "canopy switch Y --evict " in rendered       # evict-LRU choice
+    # No fix command may carry an underscore flag (real flags use dashes).
+    for line in rendered.splitlines():
+        if "canopy " in line:
+            assert "--" not in line or "_" not in line.split("--", 1)[1].split()[0]
 
 
 def test_cap_full_explicit_evict_proceeds(workspace_with_full_slots):

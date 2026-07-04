@@ -208,46 +208,6 @@ class TestSwitchBehavior:
             "(single-bump invariant)"
         )
 
-    def test_resume_single_bump_when_real_switch_runs(
-        self, canopy_toml_for_workspace
-    ):
-        """feature_resume with real switch (T13 on): switch bumps once, resume doesn't bump again.
-
-        This test verifies the single-bump invariant with the real switch.switch()
-        implementation, which now bumps last_visit after write_state.
-        """
-        from canopy.actions.switch import switch
-        ws = _load_workspace(canopy_toml_for_workspace)
-
-        # Make auth-flow canonical, leave Y as a cold branch.
-        _make_canonical(ws, "auth-flow")
-
-        # Pre-seed an anchor for auth-flow.
-        t0 = lv.mark_visited(ws, "auth-flow")
-        time.sleep(1.1)
-
-        # Create Y branch in both repos for the second switch.
-        import subprocess
-        for repo in ("repo-a", "repo-b"):
-            subprocess.run(
-                ["git", "branch", "Y"],
-                cwd=ws.config.root / repo,
-                check=True,
-            )
-
-        # Now resume on Y (not canonical, so switch will run).
-        brief = feature_resume(ws, "Y")
-
-        # Verify switch ran.
-        assert brief["switch_performed"] is True
-
-        # Verify Y's last_visit was bumped by switch (and not again by resume).
-        visit_after = lv.get_last_visit(ws, "Y")
-        assert visit_after is not None
-        assert visit_after["last_visit"] > t0, (
-            "Y's last_visit must have been bumped by switch"
-        )
-
 
 class TestAnchorBumping:
     """Tests for the last_visit bumping logic (no-switch path)."""

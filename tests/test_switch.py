@@ -204,145 +204,15 @@ def test_switch_blocked_when_in_flight_set(workspace_with_canonical_only):
 # ── T13: last_visit bumping ────────────────────────────────────────────────
 
 
-def test_switch_bumps_last_visit(workspace_with_canonical_only):
-    """Successful switch advances last_visit for the target feature."""
-    ws = workspace_with_canonical_only
-    from canopy.actions.switch import switch
-    from canopy.actions import last_visit as lv
-
-    # Pre-condition: no anchor for Y
-    assert lv.get_last_visit(ws, "Y") is None
-
-    # Switch to Y
-    result = switch(ws, "Y")
-
-    # Verify switch succeeded
-    assert result["feature"] == "Y"
-
-    # Verify last_visit was bumped
-    visit = lv.get_last_visit(ws, "Y")
-    assert visit is not None
-    assert "last_visit" in visit
-    assert visit["last_visit"] is not None
-
-
-def test_switch_bumps_previous_visit_on_reswitch(workspace_with_canonical_only):
-    """Subsequent switches roll the prior anchor into previous_visit."""
-    import time
-    ws = workspace_with_canonical_only
-    from canopy.actions.switch import switch
-    from canopy.actions import last_visit as lv
-
-    # First switch to Y
-    switch(ws, "Y")
-    ts1 = lv.get_last_visit(ws, "Y")["last_visit"]
-
-    # Wait to ensure timestamp advances
-    time.sleep(1.1)
-
-    # Re-switch to Y (no-op on branches, but anchor still bumps)
-    switch(ws, "Y")
-
-    # Verify last_visit advanced and previous_visit holds the old value
-    after = lv.get_last_visit(ws, "Y")
-    assert after["last_visit"] > ts1, "last_visit must have advanced"
-    assert after["previous_visit"] == ts1, "previous_visit must hold the old anchor"
-
-
-# ── T14: since_last_visit_summary embedded in switch return ───────────────
-
-
-_SUMMARY_KEYS = (
-    "last_visit", "first_visit", "new_commit_count", "new_thread_count",
-    "github_resolved_count", "ci_changed", "draft_replies_pending",
-    "memory_present", "degraded",
-)
-
-
-def test_switch_result_includes_since_last_visit_summary(workspace_with_canonical_only):
-    """switch return carries since_last_visit_summary with all required keys."""
+def test_switch_return_has_no_management_embeds(workspace_with_canonical_only):
+    """switch returns slot state only — no historian/last_visit/resume embeds."""
     ws = workspace_with_canonical_only
     from canopy.actions.switch import switch
 
-    result = switch(ws, "Y")
+    out = switch(ws, "Y")
 
-    assert "since_last_visit_summary" in result, (
-        "switch must embed since_last_visit_summary in its return dict"
-    )
-    s = result["since_last_visit_summary"]
-    for key in _SUMMARY_KEYS:
-        assert key in s, f"since_last_visit_summary missing key: {key}"
-
-
-def test_switch_summary_first_visit_when_no_prior_anchor(workspace_with_canonical_only):
-    """No prior anchor for target feature → first_visit=True, counts zero."""
-    ws = workspace_with_canonical_only
-    from canopy.actions.switch import switch
-    from canopy.actions import last_visit as lv
-
-    # Confirm no anchor for Y before the switch.
-    assert lv.get_last_visit(ws, "Y") is None
-
-    result = switch(ws, "Y")
-
-    s = result["since_last_visit_summary"]
-    assert s["first_visit"] is True
-    assert s["last_visit"] is None
-    assert s["new_commit_count"] == 0
-    assert s["new_thread_count"] == 0
-    assert s["degraded"] is False
-
-
-def test_switch_summary_uses_prior_anchor(workspace_with_canonical_only):
-    """summary's last_visit reflects the value BEFORE this switch's bump."""
-    import time
-    ws = workspace_with_canonical_only
-    from canopy.actions.switch import switch
-    from canopy.actions import last_visit as lv
-
-    # First switch to Y: establishes an anchor.
-    switch(ws, "Y")
-    ts1 = lv.get_last_visit(ws, "Y")["last_visit"]
-
-    # Wait so the next bump has a strictly later timestamp.
-    time.sleep(1.1)
-
-    # Re-switch to Y — the summary should anchor to ts1 (the PRIOR value).
-    result = switch(ws, "Y")
-
-    s = result["since_last_visit_summary"]
-    assert s["first_visit"] is False, "second switch should not be first_visit"
-    assert s["last_visit"] == ts1, (
-        "summary's last_visit must equal the anchor captured BEFORE this switch bumped it"
-    )
-
-    # And the live anchor must have advanced past ts1.
-    assert lv.get_last_visit(ws, "Y")["last_visit"] > ts1
-
-
-def test_switch_summary_degraded_when_threads_fail(
-    workspace_with_canonical_only, monkeypatch
-):
-    """GH unreachable → degraded=True, thread counts zero, switch still succeeds."""
-    ws = workspace_with_canonical_only
-    from canopy.actions import last_visit as lv
-    from canopy.actions.switch import switch
-
-    # Pre-seed an anchor so we're not in first_visit territory.
-    lv.mark_visited(ws, "Y")
-
-    def boom(*a, **k):
-        raise RuntimeError("offline")
-
-    monkeypatch.setattr("canopy.actions.resume._threads_delta", boom)
-
-    result = switch(ws, "Y")
-
-    s = result["since_last_visit_summary"]
-    assert s["degraded"] is True
-    assert s["new_thread_count"] == 0
-    # Switch itself must not have failed.
-    assert result["feature"] == "Y"
+    assert "memory" not in out
+    assert "since_last_visit_summary" not in out
 
 
 # ── orphaned-warm-worktree regression (canopy-test billing-export lock-out) ──

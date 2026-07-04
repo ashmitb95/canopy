@@ -87,3 +87,29 @@ def test_preflight_aggregates_all_repo_issues_before_mutation(
         assert state.in_flight is None
     finally:
         lock.unlink(missing_ok=True)
+
+
+def test_cap_full_raises_choice_blocker(workspace_with_full_slots):
+    from canopy.actions.errors import BlockerError
+    from canopy.actions import prs_cache
+    ws = workspace_with_full_slots              # slots=2, both warm (A,B), X canonical
+    # X vacates and wants warm (open PR), but both slots are occupied.
+    # NOTE: promote the *cold* feature Y (not warm A/B) — promoting a warm
+    # feature frees its slot, so the cap wouldn't fire. Y cold → X evacuates
+    # warm while A+B stay warm → 3 > cap 2 → cap fires.
+    prs_cache.write(ws, {"X": {"repos": {"repo-a": {"number": 9, "state": "open"}}}})
+    with pytest.raises(BlockerError) as e:
+        switch(ws, "Y")                         # promote cold feature Y; X must evacuate
+    assert e.value.code == "worktree_cap_reached"
+    codes = {fa.action for fa in e.value.fix_actions}
+    assert {"raise_cap", "release_current", "evict"} <= codes
+    assert "warm_features" in (e.value.details or {})
+
+
+def test_cap_full_explicit_evict_proceeds(workspace_with_full_slots):
+    from canopy.actions import prs_cache
+    ws = workspace_with_full_slots
+    prs_cache.write(ws, {"X": {"repos": {"repo-a": {"number": 9, "state": "open"}}}})
+    # promote Y, explicitly evicting B to make room — must NOT raise
+    result = switch(ws, "Y", evict="B")
+    assert result["feature"] == "Y"

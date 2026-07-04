@@ -205,8 +205,9 @@ class TestCapReached:
         assert "switch" in actions  # both wind-down and evict use switch
         assert "workspace_config" in actions
 
-    def test_cap_reached_auto_evicts_lru_by_default(self, workspace_with_feature):
-        """Without --no-evict, switch picks the LRU warm and evicts."""
+    def test_cap_reached_explicit_evict_proceeds(self, workspace_with_feature):
+        """Phase-4: a bare cap-fire now RAISES a choice blocker; passing an
+        explicit ``evict=<feature>`` takes the proceed-and-evict path."""
         _make_feature_branches(workspace_with_feature, "feat-b")
         _make_feature_branches(workspace_with_feature, "feat-c")
         ws = _ws(workspace_with_feature, slots=1)
@@ -219,9 +220,10 @@ class TestCapReached:
 
         switch(ws, "auth-flow")
         switch(ws, "feat-b")    # auth-flow → warm
-        # Now switch to feat-c — cap would exceed; auth-flow (LRU) should
-        # evict to cold, feat-b → warm, feat-c → canonical.
-        result = switch(ws, "feat-c")
+        # Now switch to feat-c — cap would exceed; the bare switch would
+        # raise worktree_cap_reached, so pass the explicit LRU pick to
+        # evict auth-flow to cold, feat-b → warm, feat-c → canonical.
+        result = switch(ws, "feat-c", evict="auth-flow")
 
         assert result.get("eviction") is not None
         assert result["eviction"]["feature"] == "auth-flow"
@@ -250,7 +252,8 @@ class TestCapReached:
         wt_api = _warm_worktree_path(ws,"auth-flow", "repo-a")
         (wt_api / "evicted_work.txt").write_text("about to be evicted\n")
 
-        result = switch(ws, "feat-c")
+        # Phase-4: bare cap-fire raises; explicit evict takes the evict path.
+        result = switch(ws, "feat-c", evict="auth-flow")
 
         # Eviction recorded that auto-stash happened
         ev = result["eviction"]

@@ -130,6 +130,32 @@ def switch(
             effective_release = True
     out["vacate_decision"] = "cold" if effective_release else "warm"
 
+    # Phase 4: when the warm-slot cap would fire and the vacating feature is
+    # going warm, the default is to RAISE a structured choice — not silently
+    # auto-evict the LRU warm feature. Only an explicit pick (evict /
+    # evict_to) proceeds past this. The agent surfaces the three fix_actions
+    # as a question; the user picks; canopy re-runs with the chosen override.
+    if (pre["cap_will_fire"] and not effective_release
+            and evict is None and evict_to is None):
+        cap = preflight.warm_slot_cap(workspace)
+        lru = pre.get("lru_eviction_candidate")
+        raise BlockerError(
+            code="worktree_cap_reached",
+            what=(f"slot cap full ({cap}/{cap}) — choose how to make room "
+                  f"for '{previously_canonical}'"),
+            fix_actions=[
+                FixAction(action="raise_cap", args={"slots": cap + 1}, safe=True,
+                          preview="Raise the cap; keep everything warm"),
+                FixAction(action="release_current",
+                          args={"feature": previously_canonical}, safe=True,
+                          preview=f"Send {previously_canonical} cold this time"),
+                FixAction(action="evict", args={"feature": lru}, safe=False,
+                          preview=f"Evict warm PR '{lru}' to cold to make room"),
+            ],
+            details={"warm_features": pre.get("warm_features", []),
+                     "lru_candidate": lru, "vacating": previously_canonical},
+        )
+
     # Step A: optional eviction (active-rotation cap fire) —
     # explicit ``evict=<feature>`` overrides preflight's LRU pick.
     # When ``evict_to`` is pinned to an occupied slot, evict that slot's
@@ -146,8 +172,8 @@ def switch(
                 occ = cur_state.slots[evict_to].feature
                 if occ and occ != feature_name:
                     eviction_target = occ
-        elif pre["cap_will_fire"] and pre["lru_eviction_candidate"]:
-            eviction_target = pre["lru_eviction_candidate"]
+        # Note: a bare cap-fire (no explicit evict/evict_to) now RAISES
+        # worktree_cap_reached above — it no longer auto-evicts the LRU.
         if eviction_target:
             eviction_info = _evict_warm_to_cold(workspace, eviction_target)
             out["eviction"] = eviction_info

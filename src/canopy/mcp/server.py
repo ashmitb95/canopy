@@ -317,6 +317,14 @@ def slot_clear(slot_id: str) -> dict:
 
 
 @mcp.tool()
+def reclaim() -> dict:
+    """Free warm slots whose PR merged (clean-only; dirty slots are surfaced
+    as advisories, never touched). Slots return to the free pool for reuse."""
+    from ..actions.reclaim import reclaim_merged
+    return reclaim_merged(_get_workspace())
+
+
+@mcp.tool()
 def slot_swap(slot_a: str, slot_b: str) -> dict:
     """Exchange the occupants of two slots. Requires identical repo scope on both features."""
     from ..actions.slot_load import slot_swap as _impl

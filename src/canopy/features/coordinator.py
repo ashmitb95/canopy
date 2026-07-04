@@ -149,7 +149,8 @@ class FeatureCoordinator:
             worktree_base: Base directory for worktrees. Defaults to
                 <workspace_root>/.canopy/worktrees.
         """
-        target_repos = repos or [r.config.name for r in self.workspace.repos]
+        target_repos = ([r.config.name for r in self.workspace.repos]
+                        if repos is None else repos)
 
         # Validate repos exist
         known = {r.config.name for r in self.workspace.repos}
@@ -220,7 +221,7 @@ class FeatureCoordinator:
             # Just create branches
             results = create_branch_all(self.workspace, name, target_repos)
             failed = {r: msg for r, msg in results.items() if msg is not True}
-            if len(failed) == len(target_repos):
+            if target_repos and len(failed) == len(target_repos):
                 raise RuntimeError(
                     f"Failed to create branch in all repos: {failed}"
                 )

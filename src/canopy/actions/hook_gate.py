@@ -71,3 +71,87 @@ def split_top_level(command: str) -> list[str]:
         i += 1
     parts.append("".join(buf).strip())
     return [p for p in parts if p]
+
+
+@dataclass
+class GitSegment:
+    """One ``git ...`` command with its resolved execution directory."""
+    argv: list[str]                    # full tokens, argv[0] == "git"
+    effective_dir: Path
+    dir_known: bool = True             # False ⇒ fail open on this segment
+
+    @property
+    def argv_after_globals(self) -> list[str]:
+        """argv with ``git`` + global flags stripped → starts at subcommand."""
+        i = 1
+        n = len(self.argv)
+        while i < n:
+            tok = self.argv[i]
+            if tok == "-C" or tok == "-c":
+                i += 2
+                continue
+            if tok.startswith("--git-dir") or tok.startswith("--work-tree"):
+                # exotic — subcommand detection still works; dir override
+                # already handled (fail-open) in resolve_segments
+                i += 1 if "=" in tok else 2
+                continue
+            if tok.startswith("-"):
+                i += 1
+                continue
+            return self.argv[i:]
+        return []
+
+
+_UNRESOLVABLE = ("$", "~", "`")   # vars/home/expansion → don't guess
+
+
+def _resolve_path(base: Path, raw: str) -> tuple[Path, bool]:
+    token = raw.strip().strip('"').strip("'")
+    if not token or any(m in token for m in _UNRESOLVABLE):
+        return base, False
+    p = Path(token)
+    return (p if p.is_absolute() else (base / p)), True
+
+
+def resolve_segments(command: str, cwd: Path) -> list[GitSegment]:
+    """Walk the command's top-level segments tracking the effective dir.
+
+    Returns only git segments. ``cd`` updates the tracked dir for later
+    segments; ``git -C <path>`` overrides for that segment only. An
+    unresolvable ``cd`` (variables, ``~``, ``cd -``) poisons dir_known
+    for everything after it.
+    """
+    out: list[GitSegment] = []
+    cur = Path(cwd)
+    known = True
+    for part in split_top_level(command):
+        try:
+            argv = shlex.split(part, posix=True)
+        except ValueError:
+            continue                    # unparseable segment: skip, fail open
+        if not argv:
+            continue
+        if argv[0] == "cd":
+            if len(argv) < 2 or argv[1] == "-":
+                known = False
+                continue
+            cur, known = _resolve_path(cur, argv[1])
+            continue
+        if argv[0] != "git":
+            continue
+        seg_dir, seg_known = cur, known
+        # git -C <path> (repeatable, cumulative per git semantics — apply in order)
+        i = 1
+        while i < len(argv) - 1:
+            if argv[i] == "-C":
+                seg_dir, ok = _resolve_path(seg_dir, argv[i + 1])
+                seg_known = seg_known and ok
+                i += 2
+                continue
+            if argv[i].startswith("--git-dir") or argv[i].startswith("--work-tree"):
+                seg_known = False       # too exotic to judge — fail open
+            if not argv[i].startswith("-"):
+                break
+            i += 1
+        out.append(GitSegment(argv=argv, effective_dir=seg_dir, dir_known=seg_known))
+    return out

@@ -43,3 +43,20 @@ def test_slot_sort_key_orders_numerically():
     assert sorted(ids, key=_slot_sort_key) == [
         "worktree-1", "worktree-2", "worktree-10", "custom-slot",
     ]
+
+
+def test_brief_shows_join_advisory(canopy_toml_for_workspace):
+    import json, subprocess
+    from canopy.actions.hook_context import context_brief
+    from canopy.workspace.workspace import Workspace
+    from canopy.workspace.config import load_config
+    root = canopy_toml_for_workspace
+    fp = root / ".canopy" / "features.json"
+    fp.parent.mkdir(exist_ok=True)
+    fp.write_text(json.dumps({"auth-flow": {"repos": ["repo-a"], "status": "active"}}))
+    (root / ".canopy" / "state").mkdir(parents=True, exist_ok=True)
+    (root / ".canopy" / "state" / "active.json").write_text(json.dumps({"active_feature": "auth-flow"}))
+    subprocess.run(["git", "checkout", "auth-flow"], cwd=root / "repo-b",
+                   check=True, capture_output=True)
+    brief = context_brief(Workspace(load_config(root)))
+    assert "canopy join repo-b" in brief

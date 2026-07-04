@@ -21,6 +21,8 @@ def _slot_sort_key(sid: str) -> tuple[int, int, str]:
 
 def context_brief(workspace: Workspace) -> str:
     from . import slots as slots_mod
+    from . import active as active_mod
+    from .advisories import compute_advisories
 
     state = slots_mod.read_state(workspace)
     canonical = state.canonical.feature if state and state.canonical else None
@@ -38,6 +40,10 @@ def context_brief(workspace: Workspace) -> str:
     if state and state.slots:
         for sid in sorted(state.slots, key=_slot_sort_key):
             lines.append(f"  slot {sid} → {state.slots[sid].feature}")
+    active_feat = (state.canonical.feature if state and state.canonical
+                   else active_mod.get_active(workspace))
+    for adv in compute_advisories(workspace, active_feat):
+        lines.append(f"  ⚠ {adv['message']}")
     lines.append(
         "  Before any work: confirm the branch above matches this chat's "
         "ticket. If not, run `canopy switch <feature>` FIRST."

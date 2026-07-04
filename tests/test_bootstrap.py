@@ -255,3 +255,39 @@ def test_resolve_worktree_paths_uses_slots_json_for_warm_feature(workspace_with_
     assert set(paths) == {"repo-a", "repo-b"}
     assert paths["repo-a"] == sm.slot_worktree_path(ws, sid, "repo-a")
     assert (paths["repo-a"] / ".git").exists()
+
+
+# ── bootstrap status marker (Task 7) ───────────────────────────────────
+
+def test_bootstrap_status_marker_helpers(canopy_toml_for_workspace):
+    from canopy.actions import slots as sm
+    ws = _ws(canopy_toml_for_workspace)
+    sm.set_bootstrap_status(ws, "worktree-1", "repo-a", "installing")
+    assert sm.get_bootstrap_status(ws, "worktree-1", "repo-a") == "installing"
+    sm.set_bootstrap_status(ws, "worktree-1", "repo-a", "ready")
+    assert sm.get_bootstrap_status(ws, "worktree-1", "repo-a") == "ready"
+
+
+def test_bootstrap_status_preserves_other_state(canopy_toml_for_workspace):
+    from canopy.actions import slots as sm
+    ws = _ws(canopy_toml_for_workspace)
+    st = sm.SlotState(slot_count=2)
+    st.last_touched["feat-x"] = "2026-01-01T00:00:00Z"
+    sm.write_state(ws, st)
+    sm.set_bootstrap_status(ws, "worktree-1", "repo-a", "installing")
+    reloaded = sm.read_state(ws)
+    assert reloaded.last_touched.get("feat-x") == "2026-01-01T00:00:00Z"  # untouched
+    assert reloaded.bootstrap["worktree-1"]["repo-a"] == "installing"
+
+
+def test_deps_skipped_when_lockfile_unchanged(canopy_toml_for_workspace, monkeypatch):
+    from canopy.actions import bootstrap
+    root = canopy_toml_for_workspace
+    ran = []
+    monkeypatch.setattr(bootstrap, "_run_install",
+                        lambda *a, **k: ran.append(1) or {"status": "ok", "exit_code": 0})
+    wt = root / "repo-a"
+    (wt / "pnpm-lock.yaml").write_text("lock-v1\n")
+    bootstrap.bootstrap_repo(_ws(root), "auth-flow", "repo-a", wt, steps=("deps",))
+    bootstrap.bootstrap_repo(_ws(root), "auth-flow", "repo-a", wt, steps=("deps",))
+    assert len(ran) == 1                     # second call short-circuits

@@ -59,6 +59,7 @@ class SlotState:
     slots: dict[str, SlotEntry] = field(default_factory=dict)
     last_touched: dict[str, str] = field(default_factory=dict)
     in_flight: dict | None = None
+    bootstrap: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {
@@ -71,6 +72,7 @@ class SlotState:
             },
             "last_touched": dict(self.last_touched),
             "in_flight": dict(self.in_flight) if self.in_flight else None,
+            "bootstrap": {sid: dict(m) for sid, m in self.bootstrap.items()},
         }
         if self.canonical is not None:
             d["canonical"] = {
@@ -155,6 +157,10 @@ def read_state(workspace: Workspace) -> SlotState | None:
             str(k): str(v) for k, v in (data.get("last_touched") or {}).items()
         },
         in_flight=in_flight,
+        bootstrap={
+            str(k): {str(rk): str(rv) for rk, rv in (v or {}).items()}
+            for k, v in (data.get("bootstrap") or {}).items()
+        },
     )
 
 
@@ -198,6 +204,21 @@ def allocate_slot(state: SlotState) -> str | None:
         if sid not in occupied:
             return sid
     return None
+
+
+def set_bootstrap_status(workspace: Workspace, sid: str, repo: str, status: str) -> None:
+    """Record ``status`` (installing|ready|failed) for ``repo`` in slot ``sid``."""
+    state = read_state(workspace) or SlotState(slot_count=workspace.config.slots)
+    state.bootstrap.setdefault(sid, {})[repo] = status
+    write_state(workspace, state)
+
+
+def get_bootstrap_status(workspace: Workspace, sid: str, repo: str) -> str | None:
+    """Return the recorded bootstrap status for ``repo`` in slot ``sid``, or None."""
+    state = read_state(workspace)
+    if state is None:
+        return None
+    return state.bootstrap.get(sid, {}).get(repo)
 
 
 def lru_evictee(

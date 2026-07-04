@@ -117,7 +117,7 @@ def bootstrap_repo(
     deps_result: dict[str, Any] = {"status": "skipped"}
     if "deps" in chosen:
         if repo_config.install_cmd:
-            deps_result = _run_install(repo_config.install_cmd, worktree_path)
+            deps_result = _run_deps(repo_config.install_cmd, worktree_path)
         else:
             deps_result = {"status": "skipped", "reason": "no install_cmd configured"}
 
@@ -177,6 +177,44 @@ def _copy_env_files(
 
 
 # ── step 2: dep install ────────────────────────────────────────────────
+
+_LOCKFILE_NAMES = ("pnpm-lock.yaml", "package-lock.json", "yarn.lock", "requirements.txt")
+_DEPS_LOCK_MARKER = ".canopy-deps-lock"
+
+
+def _lockfile_hash(worktree_path: Path) -> str | None:
+    """Hash the first known lockfile found in ``worktree_path``, or None."""
+    import hashlib
+    for name in _LOCKFILE_NAMES:
+        candidate = worktree_path / name
+        if candidate.exists():
+            return hashlib.sha256(candidate.read_bytes()).hexdigest()
+    return None
+
+
+def _run_deps(install_cmd: str, worktree_path: Path) -> dict[str, Any]:
+    """Run the deps install, short-circuiting when unchanged since last install.
+
+    Fingerprints the worktree's lockfile (pnpm/npm/yarn/pip, first match) and
+    compares against a marker file written after the last successful install.
+    If a lockfile exists and matches the marker, skip without running
+    ``install_cmd``. Otherwise run it, and on success record the new hash.
+    Repos with no recognized lockfile always run (no short-circuit).
+    """
+    current_hash = _lockfile_hash(worktree_path)
+    marker = worktree_path / _DEPS_LOCK_MARKER
+    if current_hash is not None and marker.exists():
+        try:
+            if marker.read_text().strip() == current_hash:
+                return {"status": "skipped", "reason": "lockfile unchanged"}
+        except OSError:
+            pass
+
+    result = _run_install(install_cmd, worktree_path)
+    if current_hash is not None and result.get("status") == "ok":
+        marker.write_text(current_hash)
+    return result
+
 
 def _run_install(install_cmd: str, worktree_path: Path) -> dict[str, Any]:
     """Run ``install_cmd`` in ``worktree_path`` and capture exit + duration."""

@@ -147,6 +147,7 @@ slots = 2
 [[repos]]
 name = "repo-a"
 path = "repo-a"
+install_cmd = "true"
 
 [[repos]]
 name = "repo-b"

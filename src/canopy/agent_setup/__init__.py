@@ -161,6 +161,51 @@ def install_mcp(workspace_root: Path, *, reinstall: bool = False) -> McpResult:
     )
 
 
+_HOOK_GATE_ENTRY = {
+    "matcher": "Bash",
+    "hooks": [{"type": "command", "command": "canopy-hook-gate", "timeout": 15}],
+}
+_HOOK_CONTEXT_ENTRY = {
+    "hooks": [{"type": "command", "command": "canopy-hook-context"}],
+}
+
+
+def install_hooks(workspace_root: Path) -> dict:
+    """Merge canopy's enforcement hooks into <root>/.claude/settings.json.
+
+    Project-scoped on purpose: the gate only makes sense inside a canopy
+    workspace. Non-destructive: existing settings and foreign hooks are
+    preserved; re-running is a no-op.
+    """
+    path = workspace_root / ".claude" / "settings.json"
+    settings: dict = {}
+    if path.exists():
+        try:
+            settings = json.loads(path.read_text())
+        except (ValueError, OSError):
+            return {"action": "skipped", "path": str(path),
+                    "reason": "existing settings.json is not valid JSON — fix it first"}
+    hooks = settings.setdefault("hooks", {})
+    changed = False
+    for event, entry, command in (
+        ("PreToolUse", _HOOK_GATE_ENTRY, "canopy-hook-gate"),
+        ("SessionStart", _HOOK_CONTEXT_ENTRY, "canopy-hook-context"),
+    ):
+        entries = hooks.setdefault(event, [])
+        present = any(
+            h.get("command") == command
+            for e in entries for h in (e.get("hooks") or [])
+        )
+        if not present:
+            entries.append(entry)
+            changed = True
+    if not changed:
+        return {"action": "unchanged", "path": str(path)}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2) + "\n")
+    return {"action": "added", "path": str(path)}
+
+
 def check_status(workspace_root: Path) -> dict:
     """Report what's installed without changing anything.
 

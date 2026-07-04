@@ -161,15 +161,27 @@ def context(workspace: Workspace, *, cwd: Path | None = None,
         feat["linear"] = linear
         features[name] = feat
 
+    bootstrap_map = state.bootstrap if state else {}
+    out_slots: dict[str, Any] = {}
+    if state:
+        for sid, e in state.slots.items():
+            out_slots[sid] = {"feature": e.feature,
+                              "bootstrap": dict(bootstrap_map.get(sid, {}))}
+
     out: dict[str, Any] = {
         "workspace": {"name": workspace.config.name,
                       "root": str(workspace.config.root),
                       "active_feature": active_feat},
         "features": features,
-        "slots": {sid: e.feature for sid, e in (state.slots.items() if state else [])},
+        "slots": out_slots,
         "advisories": _compute_advisories(workspace, active_feat),
         "detected": _detected(workspace, cwd),
     }
     if remote:
         _remote_overlay(workspace, out, author)
+        try:
+            from . import reclaim
+            reclaim.reclaim_merged(workspace)
+        except Exception:
+            pass
     return out

@@ -51,6 +51,16 @@ def test_slots_reported(workspace_with_slots):
     from canopy.actions.registry import context
     ctx = context(workspace_with_slots)
     assert "worktree-1" in ctx["slots"]
+    assert ctx["slots"]["worktree-1"]["feature"] == "Y"
+
+
+def test_context_surfaces_bootstrap_status(workspace_with_slots):
+    from canopy.actions.registry import context
+    from canopy.actions import slots as sm
+    sm.set_bootstrap_status(workspace_with_slots, "worktree-1", "repo-a", "installing")
+    ctx = context(workspace_with_slots)
+    assert ctx["slots"]["worktree-1"]["feature"]     # nested shape
+    assert ctx["slots"]["worktree-1"]["bootstrap"]["repo-a"] == "installing"
 
 
 def test_remote_false_has_no_pr_key(canopy_toml_for_workspace):

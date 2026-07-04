@@ -45,3 +45,14 @@ def test_no_advisory_when_registered(canopy_toml_for_workspace):
 def test_no_active_feature_no_advisories(canopy_toml_for_workspace):
     from canopy.actions.advisories import compute_advisories
     assert compute_advisories(_ws(canopy_toml_for_workspace), None) == []
+
+
+def test_reclaimable_dirty_folds_into_advisories(workspace_with_slots):
+    from canopy.actions.advisories import compute_advisories
+    from canopy.actions import prs_cache, slots as sm
+    ws = workspace_with_slots
+    prs_cache.write(ws, {"Y": {"repos": {"repo-a": {"number": 1, "state": "merged"}}}})
+    wt = sm.slot_worktree_path(ws, "worktree-1", "repo-a")
+    (wt / "wip.txt").write_text("dirty\n")
+    adv = compute_advisories(ws, "X")     # active feature X; Y warm+merged+dirty
+    assert any(a["code"] == "reclaimable_but_dirty" for a in adv)

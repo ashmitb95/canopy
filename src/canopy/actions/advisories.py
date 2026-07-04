@@ -37,4 +37,9 @@ def compute_advisories(workspace: Workspace, active_feature: str | None) -> list
                             f"feature '{active_feature}') but isn't registered — "
                             f"`canopy join {rs.config.name}`, or ignore if scratch."),
             })
+    try:
+        from . import reclaim
+        out.extend(reclaim.reclaimable_advisories(workspace))
+    except Exception:
+        pass
     return out

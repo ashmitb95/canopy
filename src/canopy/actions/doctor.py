@@ -851,8 +851,6 @@ def check_skill_stale(workspace: Workspace) -> list[Issue]:
     )]
 
 
-
-
 def check_mcp_orphans(workspace: Workspace) -> list[Issue]:
     """Detect orphaned ``canopy-mcp`` processes (parent died, reparented to PID 1).
 

@@ -159,7 +159,6 @@ def review_comments(workspace: Workspace, name: str) -> dict:
     from ..integrations.github import (
         get_review_comments,
         PullRequestNotFoundError,
-        GitHubNotConfiguredError,
     )
     from .review_filter import classify_threads
 

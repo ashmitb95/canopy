@@ -111,10 +111,9 @@ Write actions and execution.
 
 | Command | What it does |
 |---|---|
-| `canopy doctor [-v] [--feature <f>]` | Diagnose 21 codes across 12 categories of state-file drift + install staleness (incl. slot-state checks added in Wave 3.0). Reports `errors`/`warnings`/`info` with structured `code`, `expected`, `actual`, and per-issue `fix_action`. **Run this first** when any other canopy operation returns an unexpected error — most "something is off" cases trace to one of these categories. `--json` returns the full report shape `{issues, summary, fixed, skipped}`. |
+| `canopy doctor [-v] [--feature <f>]` | Diagnose 20 codes across 11 categories of state-file drift + install staleness (incl. slot-state checks added in Wave 3.0). Reports `errors`/`warnings`/`info` with structured `code`, `expected`, `actual`, and per-issue `fix_action`. **Run this first** when any other canopy operation returns an unexpected error — most "something is off" cases trace to one of these categories. `--json` returns the full report shape `{issues, summary, fixed, skipped}`. |
 | `canopy doctor --fix` | Repair every `auto_fixable=true` issue. Examples: rewrite `heads.json` from live git, drop orphan worktree dirs via `git worktree remove --force`, reinstall a missing post-checkout hook, clean up an orphan slot dir, write a missing `.mcp.json` entry, reinstall the `using-canopy` skill. |
-| `canopy doctor --fix-category <c>` | Repair just one category (`heads`, `slots`, `active_feature`, `worktrees`, `hooks`, `preflight`, `features`, `branches`, `cli`, `mcp`, `skill`, `vsix`). Implies `--fix`. |
-| `canopy doctor --clean-vsix` | Required gate for the destructive `vsix_duplicates` repair (removes all but the newest `singularityinc.canopy-*` install dir). Other repairs are unaffected. |
+| `canopy doctor --fix-category <c>` | Repair just one category (`heads`, `slots`, `active_feature`, `worktrees`, `hooks`, `preflight`, `features`, `branches`, `cli`, `mcp`, `skill`). Implies `--fix`. |
 | `canopy --version` | Print the installed CLI version. |
 
 ### Diagnostic codes
@@ -147,7 +146,6 @@ Install-staleness (canopy's installation around the workspace):
 | `mcp_missing_in_workspace` | error | `.mcp.json` lacks canopy entry, or its `CANOPY_ROOT` is wrong | `install_mcp(reinstall=True)` |
 | `skill_missing` | warn | no `~/.claude/skills/using-canopy/SKILL.md` | `install_skill()` |
 | `skill_stale` | warn | installed skill drifted from bundled source | `install_skill(reinstall=True)` |
-| `vsix_duplicates` | info | multiple `singularityinc.canopy-*` extension dirs | requires `--clean-vsix` |
 
 ## Hooks (enforcement)
 

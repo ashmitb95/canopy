@@ -47,6 +47,11 @@ def _call_worktree_create(workspace_root, **kwargs):
     from importlib import reload
     import canopy.mcp.server as srv
     reload(srv)
+    if not hasattr(srv, "worktree_create"):
+        # phase5: worktree_create was commented off the MCP surface
+        # (reversible). Skip while it is disabled — re-enables automatically
+        # if the tool registration is uncommented.
+        pytest.skip("worktree_create commented off the MCP surface in phase5")
     return srv.worktree_create(**kwargs)
 
 

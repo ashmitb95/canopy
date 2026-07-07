@@ -4,7 +4,28 @@
 > **Historical design:** The M0 design doc is archived. This doc is the live artifact.
 > **Scope:** issue providers only in v1. Other use cases named in §8 but not specified.
 
-Canopy's read tools today are tightly coupled to specific external services — `linear_get_issue`, `linear_my_issues`, etc. all call directly into [`src/canopy/integrations/linear.py`](../../src/canopy/integrations/linear.py). That works while we use exactly those services, but the moment we want GitHub Issues (or JIRA, or anything else) instead of Linear, every action that touches issue context has to branch on which integration to call. That branching ages badly and bleeds Linear-shaped assumptions into the contract.
+> **4.0 surface note.** The issue/PR *provider abstraction* described here underlies
+> **both** canopy surfaces, but the *read tools* built on top of it are now on the
+> **human / dashboard management surface** (CLI `--json`), not the agent MCP surface.
+> `issue_get` / `linear_get_issue` / `github_get_pr` / `github_get_pr_comments` /
+> `github_get_branch` live in [`src/canopy/management/reads.py`](../../src/canopy/management/reads.py)
+> and are reached via `canopy issue`, `canopy issues`, `canopy pr`, `canopy comments`
+> — not `mcp__canopy__*`. The agent instead orients through `context`, whose **remote
+> tier** overlays PR/CI state via the core PR-mapper [`actions/pr_map.py`](../../src/canopy/actions/pr_map.py).
+> See the [4.0 two-surface split](../concepts.md) for the why. The provider registry
+> ([`src/canopy/providers/`](../../src/canopy/providers/)) and the shared integration
+> infra ([`integrations/linear.py`](../../src/canopy/integrations/linear.py),
+> [`integrations/github.py`](../../src/canopy/integrations/github.py)) are surface-agnostic:
+> they feed both core PR-mapping and management reads, and were **not** moved into
+> `canopy/management/`.
+
+Canopy's issue reads resolve through a provider abstraction rather than calling a
+specific external service directly. Before M5, tools like the Linear reads called
+straight into [`src/canopy/integrations/linear.py`](../../src/canopy/integrations/linear.py).
+That worked while we used exactly those services, but the moment we wanted GitHub
+Issues (or JIRA, or anything else) instead of Linear, every action that touched
+issue context had to branch on which integration to call. That branching ages
+badly and bleeds Linear-shaped assumptions into the contract.
 
 This doc defines the provider-injection pattern, scoped to **issue providers**. The pattern is general enough that other concerns (CI providers, code-review platforms, IDE workspace formats, pre-commit frameworks, bot-author detection) could adopt it later, but those use cases are explicitly *named, not specified* here.
 
@@ -54,7 +75,7 @@ class IssueProvider(Protocol):
           - GitHub Issues: "#142" or "owner/repo#142"
           - JIRA: "PROJ-123"
 
-        Raises BlockerError(code="issue_not_found", ...) when not resolvable.
+        Raises IssueNotFoundError when not resolvable.
         """
 
     def list_my_issues(self, limit: int = 50) -> list[Issue]:
@@ -84,12 +105,19 @@ class IssueProvider(Protocol):
 
 **Per-provider state mapping** lives inside each backend, not in the protocol. Linear's state names (`Backlog`, `Todo`, `In Progress`, `Done`, `Canceled`, …) and GitHub Issues' `open` / `closed` both collapse to canopy's `todo` / `in_progress` / `done` / `cancelled`. The mapping rules are documented per-backend (§7).
 
-**Errors.** Providers raise `BlockerError` (existing canopy pattern from `src/canopy/actions/errors.py`) with codes the action layer already understands:
-- `issue_not_found` — alias didn't resolve
-- `provider_not_configured` — credentials missing or wrong (replaces today's `LinearNotConfiguredError`)
-- `provider_call_failed` — network / API error from the backend (replaces today's `LinearCallError`)
+**Errors.** Providers raise a small exception hierarchy defined in
+[`providers/types.py`](../../src/canopy/providers/types.py) — `IssueProviderError`
+(base), `ProviderNotConfigured` (credentials missing / unknown provider name), and
+`IssueNotFoundError` (alias didn't resolve). Callers on either surface catch these
+and convert them into canopy's structured `BlockerError`
+([`src/canopy/actions/errors.py`](../../src/canopy/actions/errors.py)) with codes the
+rest of the system understands:
+- `issue_not_found` — alias didn't resolve (from `IssueNotFoundError`)
+- `issue_provider_not_configured` — credentials missing or unknown provider (from `ProviderNotConfigured`)
 
-The existing per-backend exception classes (`LinearNotConfiguredError`, etc. in [`integrations/linear.py:21-29`](../../src/canopy/integrations/linear.py)) get folded into `BlockerError` raises during the M5 refactor.
+The pre-M5 per-backend exception classes (`LinearNotConfiguredError`, etc. still in
+[`integrations/linear.py`](../../src/canopy/integrations/linear.py)) are folded into
+this provider hierarchy at the backend boundary.
 
 ---
 
@@ -102,48 +130,47 @@ How canopy finds providers.
 ```
 src/canopy/providers/
 ├── __init__.py          # registry + get_issue_provider()
-├── types.py             # Issue dataclass + IssueProvider protocol
+├── types.py             # Issue dataclass + IssueProvider protocol + error hierarchy
 ├── linear.py            # LinearProvider (refactored from integrations/linear.py)
-└── github_issues.py     # GitHubIssuesProvider (new)
+└── github_issues.py     # GitHubIssuesProvider
 ```
 
-Registry in `src/canopy/providers/__init__.py`:
+Registry in `src/canopy/providers/__init__.py` (lazy dotted-path lookup — backends
+are imported on first use so an action that never touches issues doesn't drag in the
+MCP / gh CLI machinery):
 
 ```python
-from .linear import LinearProvider
-from .github_issues import GitHubIssuesProvider
-from .types import Issue, IssueProvider
-
-_REGISTRY: dict[str, type[IssueProvider]] = {
-    "linear": LinearProvider,
-    "github_issues": GitHubIssuesProvider,
+# Lazy-imported registry: name → "module.Class" dotted path.
+_REGISTRY: dict[str, str] = {
+    "linear": "canopy.providers.linear.LinearProvider",
+    "github_issues": "canopy.providers.github_issues.GitHubIssuesProvider",
 }
 
-# Cached per-workspace
+# Cached per-workspace, keyed on workspace.config.root
 _INSTANCES: dict[Path, IssueProvider] = {}
 
 
-def get_issue_provider(workspace: WorkspaceConfig) -> IssueProvider:
+def get_issue_provider(workspace: Workspace) -> IssueProvider:
     """Return the configured provider for the workspace, instantiated and cached.
-    Raises BlockerError(code='unknown_issue_provider') for misconfigured names."""
-    if workspace.root in _INSTANCES:
-        return _INSTANCES[workspace.root]
+    Raises ProviderNotConfigured for an unknown issue_provider.name."""
+    root = workspace.config.root
+    if root in _INSTANCES:
+        return _INSTANCES[root]
 
-    config = workspace.issue_provider  # parsed from canopy.toml
-    cls = _REGISTRY.get(config.name)
-    if cls is None:
-        raise BlockerError(
-            code="unknown_issue_provider",
-            what=f"'{config.name}' is not a known provider",
-            expected={"available": sorted(_REGISTRY.keys())},
-            fix_actions=[FixAction(action="set issue_provider.name", args={"valid_choices": list(_REGISTRY.keys())})],
+    config = workspace.config.issue_provider   # parsed from canopy.toml
+    dotted = _REGISTRY.get(config.name)
+    if dotted is None:
+        raise ProviderNotConfigured(
+            f"Unknown issue provider '{config.name}'. "
+            f"Available: {', '.join(available_providers())}",
         )
-    instance = cls(config.options)
-    _INSTANCES[workspace.root] = instance
+    cls = _import(dotted)
+    instance = cls(config.options, workspace_root=root)
+    _INSTANCES[root] = instance
     return instance
 ```
 
-**Future: entry points.** Third-party providers register via `pyproject.toml` entry points (`canopy.providers` group). Out of scope for v1; document the extension point so the registry pattern doesn't preclude it.
+**Future: entry points.** Third-party providers register via `pyproject.toml` entry points (`canopy.providers` group). Out of scope for v1; `register_provider(name, dotted_path)` already exists so the extension point doesn't require a refactor when entry points land.
 
 ---
 
@@ -172,7 +199,7 @@ repo = "owner/repo"                                    # required
 labels_filter = ["good first issue", "help wanted"]    # optional; restricts list_my_issues
 ```
 
-**Per-provider `[issue_provider.<name>]` sub-table** holds backend-specific settings. The protocol's `__init__(config: dict)` receives this sub-table; protocol-level keys (`name`) are stripped before passing through.
+**Per-provider `[issue_provider.<name>]` sub-table** holds backend-specific settings. The backend's `__init__(config, workspace_root=...)` receives this sub-table (as `config.options`); protocol-level keys (`name`) are stripped before passing through.
 
 **Backward compatibility for existing workspaces:**
 - Existing `canopy.toml` files without `[issue_provider]` default to Linear. Warn once with a deprecation notice; require explicit config in v0.X+1.
@@ -182,30 +209,40 @@ labels_filter = ["good first issue", "help wanted"]    # optional; restricts lis
 
 ## 5. DI wiring
 
-How the action layer obtains the provider instance.
+How each surface obtains the provider instance.
 
-**Single entry point** (new module `src/canopy/providers/__init__.py`):
+**Single entry point** (`src/canopy/providers/__init__.py`):
 
 ```python
 from canopy.providers import get_issue_provider
 
-# In any action that previously called linear.get_issue(...):
+# In any code path that previously called linear.get_issue(...):
 issue = get_issue_provider(workspace).get_issue(alias)
 ```
 
-**Cached per-workspace.** First call constructs the provider; subsequent calls in the same process return the cached instance. Cache keyed on `workspace.root` so multi-workspace MCP sessions (when that lands) don't share instances across workspaces.
+**Cached per-workspace.** First call constructs the provider; subsequent calls in the same process return the cached instance. Cache keyed on `workspace.config.root` so multi-workspace MCP sessions (when that lands) don't share instances across workspaces.
 
-**Call sites that change in M5** (search results from current code):
+**Where the provider is obtained (current call sites):**
 
-| File | Current call | Becomes |
+| File | Surface | Call |
 |---|---|---|
-| `src/canopy/actions/reads.py` | `linear.get_issue(workspace.config.root, alias)` | `get_issue_provider(workspace).get_issue(alias)` |
-| `src/canopy/actions/reads.py` | `linear.list_my_issues(workspace.config.root, limit)` | `get_issue_provider(workspace).list_my_issues(limit)` |
-| `src/canopy/features/coordinator.py` (worktree_create's Linear lookup) | `linear.get_issue(...)` | `get_issue_provider(workspace).get_issue(alias)` |
-| `src/canopy/cli/main.py` (`cmd_issue`) | direct linear call | `get_issue_provider(workspace).get_issue(alias)` |
-| `src/canopy/mcp/server.py` (`linear_get_issue`, `linear_my_issues` MCP tools) | direct linear call | new `issue_get` / `issue_list_my_issues` tools wrapping the provider; old names kept as deprecated aliases for one release cycle |
+| [`management/reads.py`](../../src/canopy/management/reads.py) (`issue_get`, `linear_get_issue`) | human / CLI `--json` | `get_issue_provider(workspace).get_issue(issue_id)` |
+| [`actions/aliases.py`](../../src/canopy/actions/aliases.py) (`resolve_issue_id`) | core | `get_issue_provider(workspace).parse_alias(alias)` — provider-aware alias parse |
+| [`features/coordinator.py`](../../src/canopy/features/coordinator.py) (feature-create issue lookup) | core | `get_issue_provider(self.workspace).get_issue(alias)` |
+| [`cli/main.py`](../../src/canopy/cli/main.py) (`cmd_issue`) | human / CLI | `get_issue_provider(workspace).get_issue(alias)` |
 
-The action layer never imports a provider module directly. Always goes through `get_issue_provider`.
+The action/core layer never imports a provider module directly — always through `get_issue_provider`. The registry itself imports the backends lazily.
+
+**Surface placement (4.0).** The issue *read tools* — `issue_get`, `list_my_issues`,
+`github_get_pr`, `github_get_pr_comments`, `github_get_branch` — are **not** agent MCP
+tools. They live in [`management/reads.py`](../../src/canopy/management/reads.py) and
+are exposed to the human / dashboard through CLI `--json` (`canopy issue`, `canopy
+issues`, `canopy pr`, `canopy comments`). The **agent** never reads issue or PR bodies
+as a first-class tool; it gets the PR/CI overlay it needs from `context`'s **remote
+tier**, which calls the core PR-mapper [`actions/pr_map.py`](../../src/canopy/actions/pr_map.py)
+(`_fetch_open_prs`, branch↔PR↔feature mapping). Note that `resolve_issue_id` in
+`aliases.py` still calls the provider from the **core** side — resolving `SIN-7` to a
+canonical issue id is a path-resolution concern, distinct from *reading* the issue body.
 
 ---
 
@@ -213,17 +250,31 @@ The action layer never imports a provider module directly. Always goes through `
 
 **Existing code paths:**
 
-- **`integrations/linear.py`** becomes the Linear backend's implementation source. Its public functions (`get_issue`, `list_my_issues`, `format_branch_name`) move into `src/canopy/providers/linear.py:LinearProvider` methods. The module itself stays importable for one release cycle (re-exports from the new location) so external code doesn't break.
-- **`integrations/github.py`** PR/branch logic stays separate. PR-platform integration is a different concern from issue-tracker integration; the `gh` fallback for PRs is fine as-is. Don't conflate review platforms with issue providers.
-- **`mcp__canopy__linear_get_issue`** MCP tool keeps working — registered as a deprecated alias for `mcp__canopy__issue_get`. Logs a one-time deprecation warning per session.
-- **Workspaces without `[issue_provider]`** in canopy.toml default to Linear with a one-time deprecation warning. Future canopy version (TBD) requires explicit config.
+- **`integrations/linear.py`** is the Linear backend's implementation source. Its
+  logic is wrapped by [`providers/linear.py:LinearProvider`](../../src/canopy/providers/linear.py);
+  the module stays importable (re-export shim) for one release cycle so external code
+  doesn't break. It was **not** moved into `canopy/management/` — it is shared infra.
+- **`integrations/github.py`** PR/branch logic stays separate from issue-tracker
+  integration; the `gh` fallback for PRs is fine as-is. It is **shared infra**: the
+  core PR-mapper [`actions/pr_map.py`](../../src/canopy/actions/pr_map.py) (feeding
+  `context`'s remote tier) *and* the management reads in
+  [`management/reads.py`](../../src/canopy/management/reads.py) both call it. Don't
+  conflate review platforms with issue providers.
+- **`linear_get_issue`** — kept as a **CLI-side** deprecated wrapper in
+  `management/reads.py` that preserves the pre-M5 raw output shape (`state` carries the
+  provider-native string) for callers that asserted on it. New code calls `issue_get`,
+  which returns the canonical mapped `Issue.to_dict()`. This is a CLI/management read,
+  **not** an `mcp__canopy__*` tool — the issue reads left the agent MCP surface in the
+  4.0 prune.
+- **Workspaces without `[issue_provider]`** in canopy.toml default to Linear with a
+  one-time deprecation warning. A future canopy version (TBD) requires explicit config.
 
 **Migration story:**
-1. M5 ships the new providers + registry + new MCP tools, with old MCP tools kept as aliases.
-2. Workspaces that update to the M5-shipped canopy version see no behavior change unless they explicitly add `[issue_provider]`.
+1. M5 shipped the providers + registry + the canonical `issue_get` read, with `linear_get_issue` kept as a shape-preserving wrapper.
+2. Workspaces that update see no behavior change unless they explicitly add `[issue_provider]`.
 3. Workspaces that want GitHub Issues add the block, swap their workflow.
-4. A future minor release deprecates the old `linear_*` MCP tool names.
-5. A future major release removes them.
+4. The 4.0 prune moved the issue/PR reads off the agent MCP surface onto CLI `--json`; the agent orients via `context` instead.
+5. A future release retires the legacy `linear_get_issue` output shape.
 
 ---
 
@@ -235,7 +286,7 @@ The bulk of the existing Linear logic moves into `LinearProvider`. Public method
 
 ```python
 # src/canopy/providers/linear.py
-from canopy.providers.types import Issue, IssueProvider
+from canopy.providers.types import Issue, IssueNotFoundError, ProviderNotConfigured
 # ...existing imports
 
 _LINEAR_STATE_MAP = {
@@ -249,14 +300,15 @@ _LINEAR_STATE_MAP = {
 
 
 class LinearProvider:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, workspace_root: Path):
         self.api_key_env = config.get("api_key_env", "LINEAR_API_KEY")
+        self.workspace_root = workspace_root
 
     def get_issue(self, alias: str) -> Issue:
         # Existing Linear MCP fallback logic, returning Issue instead of dict.
         raw = _fetch_linear_issue(alias, env_key=self.api_key_env)
         if raw is None:
-            raise BlockerError(code="issue_not_found", what=f"Linear issue '{alias}' not found")
+            raise IssueNotFoundError(f"Linear issue '{alias}' not found")
         return Issue(
             id=raw["id"],
             identifier=raw["identifier"],
@@ -278,12 +330,12 @@ class LinearProvider:
         ...
 ```
 
-### GitHub Issues backend (new)
+### GitHub Issues backend
 
 ```python
 # src/canopy/providers/github_issues.py
 import re
-from canopy.providers.types import Issue, IssueProvider
+from canopy.providers.types import Issue, IssueNotFoundError
 from canopy.integrations.github import _gh_run  # reuse the existing gh CLI wrapper
 
 _GH_STATE_MAP = {"open": "in_progress", "closed": "done"}
@@ -294,7 +346,7 @@ _PRIORITY_LABEL_MAP = {
 
 
 class GitHubIssuesProvider:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, workspace_root):
         self.repo = config["repo"]   # required: "owner/repo"
         self.labels_filter = config.get("labels_filter") or []
 
@@ -302,7 +354,7 @@ class GitHubIssuesProvider:
         issue_num = self._parse_alias(alias)
         raw = _gh_run(["api", f"repos/{self.repo}/issues/{issue_num}"], json=True)
         if raw is None or raw.get("number") is None:
-            raise BlockerError(code="issue_not_found", what=f"GitHub issue '{alias}' not found in {self.repo}")
+            raise IssueNotFoundError(f"GitHub issue '{alias}' not found in {self.repo}")
         return self._normalize(raw)
 
     def list_my_issues(self, limit: int = 50) -> list[Issue]:
@@ -322,7 +374,7 @@ class GitHubIssuesProvider:
         # "#142" or "142" or "owner/repo#142"
         m = re.match(r"^(?:[^/]+/[^#]+)?#?(\d+)$", alias)
         if not m:
-            raise BlockerError(code="issue_not_found", what=f"can't parse GitHub alias '{alias}'")
+            raise IssueNotFoundError(f"can't parse GitHub alias '{alias}'")
         return int(m.group(1))
 
     def _normalize(self, raw: dict) -> Issue:
@@ -359,7 +411,7 @@ The following could adopt the same provider-injection shape if implementation dr
 
 - **Bot-author detection** — M3 (bot-tracking, shipped) introduced `review_bots` augment in canopy.toml for per-team configuration. `author_type == "Bot"` checks are already provider-aware via GitHub Issues. Future: could extend to a full `BotAuthorDetector` provider with custom rules (regex, allowlist, etc.), but `review_bots` meets current needs.
 - **CI providers** (GitHub Actions, CircleCI, Buildkite) — deferred to the [ci-status plan](../plans/ci-status.md). Same shape would apply: a `CIProvider` protocol with `get_check_runs(pr)` etc. Don't build until that plan exists.
-- **Code-review platforms** (GitHub, GitLab, Bitbucket) — `gh` fallback works today via [`integrations/github.py`](../../src/canopy/integrations/github.py). A `ReviewPlatformProvider` could unify, but the existing gh-or-MCP pattern handles current needs.
+- **Code-review platforms** (GitHub, GitLab, Bitbucket) — `gh` fallback works today via [`integrations/github.py`](../../src/canopy/integrations/github.py) (shared infra behind both `actions/pr_map.py` and `management/reads.py`). A `ReviewPlatformProvider` could unify, but the existing gh-or-MCP pattern handles current needs.
 - **IDE workspace formats** (VS Code `.code-workspace`, JetBrains `.idea/`, Cursor) — [worktree-bootstrap plan](../plans/worktree-bootstrap.md) defers this. Could become an `IDEWorkspaceWriter` provider.
 - **Pre-commit frameworks** (pre-commit, husky, lefthook) — auto-detection in [`integrations/precommit.py`](../../src/canopy/integrations/precommit.py) works today. A `PreflightProvider` would unify but isn't load-bearing.
 

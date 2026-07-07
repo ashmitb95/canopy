@@ -10,10 +10,9 @@ Two flavors of check, same shape:
     ``heads.json``, ``active_feature.json``, ``preflight.json``,
     ``features.json``, ``.canopy/worktrees/``, per-repo post-checkout hooks,
     branch existence per feature.
-  * **Install-staleness** (6 categories): the canopy installation around
-    the workspace — CLI binary version, MCP server version, workspace
-    ``.mcp.json`` entry, the bundled skill at ``~/.claude/skills/``, and
-    duplicate vsix install dirs.
+  * **Install-staleness**: the canopy installation around the workspace —
+    CLI binary version, MCP server version, workspace ``.mcp.json`` entry,
+    and the bundled skill at ``~/.claude/skills/``.
 
 Each check function is pure (read-only) and returns a list of ``Issue``
 records. Each repair function takes one ``Issue`` and returns a
@@ -131,7 +130,7 @@ STATE_CATEGORIES = {
     "branches",
     "slots",
 }
-INSTALL_CATEGORIES = {"cli", "mcp", "skill", "vsix"}
+INSTALL_CATEGORIES = {"cli", "mcp", "skill"}
 ALL_CATEGORIES = STATE_CATEGORIES | INSTALL_CATEGORIES
 
 
@@ -852,7 +851,6 @@ def check_skill_stale(workspace: Workspace) -> list[Issue]:
     )]
 
 
-_VSIX_PREFIX = "singularityinc.canopy-"
 
 
 def check_mcp_orphans(workspace: Workspace) -> list[Issue]:
@@ -917,29 +915,6 @@ def _list_orphan_canopy_mcp_pids() -> list[int]:
     return sorted(out_pids)
 
 
-def check_vsix_duplicates(workspace: Workspace) -> list[Issue]:
-    """Multiple ``singularityinc.canopy-*`` dirs in ~/.vscode/extensions/."""
-    ext_dir = Path.home() / ".vscode" / "extensions"
-    if not ext_dir.exists():
-        return []
-    candidates = sorted(
-        d for d in ext_dir.iterdir()
-        if d.is_dir() and d.name.startswith(_VSIX_PREFIX)
-    )
-    if len(candidates) <= 1:
-        return []
-    return [Issue(
-        code="vsix_duplicates",
-        severity="info",
-        what=f"{len(candidates)} canopy vsix install dirs found",
-        expected="1 install dir",
-        actual=str(len(candidates)),
-        fix_action="canopy doctor --clean-vsix (keeps newest)",
-        auto_fixable=True,
-        details={"paths": [str(p) for p in candidates]},
-    )]
-
-
 # ── Check registry ───────────────────────────────────────────────────────
 
 # code → (category, check_fn). Registry-driven so `--fix=<category>` and
@@ -961,7 +936,6 @@ _CHECKS: dict[str, tuple[str, Any]] = {
     "skill_missing": ("skill", check_skill_missing),
     "skill_stale": ("skill", check_skill_stale),
     "mcp_orphans": ("mcp", check_mcp_orphans),
-    "vsix_duplicates": ("vsix", check_vsix_duplicates),
     "slot_dir_orphan": ("slots", check_slot_dir_orphans),
     "slot_entry_orphan": ("slots", check_slot_entry_orphans),
     "slot_repo_worktree_missing": ("slots", check_slot_repo_worktree_missing),
@@ -1293,32 +1267,6 @@ def repair_mcp_orphans(workspace: Workspace, issue: Issue) -> RepairResult:
     return RepairResult(code=issue.code, success=True, action_taken=action)
 
 
-def repair_vsix_duplicates(workspace: Workspace, issue: Issue) -> RepairResult:
-    """Remove all but the newest matching extension dir."""
-    paths = [Path(p) for p in (issue.details.get("paths") or [])]
-    if len(paths) <= 1:
-        return RepairResult(code=issue.code, success=True,
-                            action_taken="nothing to clean")
-    paths.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
-    keep = paths[0]
-    removed: list[str] = []
-    errors: list[str] = []
-    for p in paths[1:]:
-        try:
-            shutil.rmtree(p)
-            removed.append(p.name)
-        except OSError as e:
-            errors.append(f"{p.name}: {e}")
-    if errors:
-        return RepairResult(
-            code=issue.code, success=not removed and False or True,
-            action_taken=f"kept {keep.name}; removed {len(removed)}",
-            error="; ".join(errors),
-        )
-    return RepairResult(code=issue.code, success=True,
-                        action_taken=f"kept {keep.name}; removed {len(removed)} stale dirs")
-
-
 def repair_slot_entry_orphan(workspace: Workspace, issue: Issue) -> RepairResult:
     """Drop the orphaned slots.json entry whose dir is gone."""
     state_path = workspace.config.root / ".canopy" / "state" / "slots.json"
@@ -1396,7 +1344,6 @@ _REPAIRS: dict[str, Any] = {
     "skill_missing": repair_skill_missing,
     "skill_stale": repair_skill_stale,
     "mcp_orphans": repair_mcp_orphans,
-    "vsix_duplicates": repair_vsix_duplicates,
     "slot_entry_orphan": repair_slot_entry_orphan,
     "slot_repo_worktree_missing": repair_slot_repo_worktree_missing,
     # cli_stale, mcp_stale, features_unknown_repo, branches_missing,
@@ -1414,23 +1361,20 @@ def doctor(
     fix: bool = False,
     fix_categories: list[str] | None = None,
     feature: str | None = None,
-    clean_vsix: bool = False,
 ) -> dict[str, Any]:
     """Run the diagnostic suite, optionally repair, return a structured report.
 
     Args:
         workspace: loaded ``Workspace``.
         fix: if True, run repairs for every auto-fixable issue (subject to
-            ``fix_categories`` and the ``clean_vsix`` gate).
+            ``fix_categories``).
         fix_categories: if set, only repair issues in these categories
             (state-integrity: heads/active_feature/worktrees/hooks/preflight/
-            features/branches; install: cli/mcp/skill/vsix). Unknown
-            categories are silently ignored. Implies ``fix=True``.
+            features/branches; install: cli/mcp/skill). Unknown categories
+            are silently ignored. Implies ``fix=True``.
         feature: if set, scope feature-bearing checks to this feature only.
             Workspace-wide checks (heads_stale, hook_missing, install-
             staleness) still run in full.
-        clean_vsix: required to repair ``vsix_duplicates`` even with ``fix=True``
-            — vsix removal is destructive and opt-in.
     """
     if fix_categories is not None:
         fix = True
@@ -1451,7 +1395,7 @@ def doctor(
             issues = [i for i in issues if i.feature in (None, feature) or i.code in {
                 "heads_stale", "hook_missing", "hook_chained_unsafe",
                 "cli_stale", "mcp_stale", "mcp_missing_in_workspace",
-                "mcp_orphans", "skill_missing", "skill_stale", "vsix_duplicates",
+                "mcp_orphans", "skill_missing", "skill_stale",
             }]
         all_issues.extend(issues)
 
@@ -1461,12 +1405,6 @@ def doctor(
         for issue in all_issues:
             category, _ = _CHECKS[issue.code]
             if fix_categories is not None and category not in set(fix_categories):
-                continue
-            if issue.code == "vsix_duplicates" and not clean_vsix:
-                skipped.append({
-                    **issue.to_dict(),
-                    "skip_reason": "vsix repair requires --clean-vsix",
-                })
                 continue
             repair_fn = _REPAIRS.get(issue.code)
             if repair_fn is None or not issue.auto_fixable:

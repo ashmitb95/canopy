@@ -33,7 +33,6 @@ from canopy.actions.doctor import (
     check_preflight_stale,
     check_skill_missing,
     check_skill_stale,
-    check_vsix_duplicates,
     check_worktree_missing,
     check_worktree_orphan,
     doctor,
@@ -482,25 +481,12 @@ def test_check_skill_stale_byte_mismatch(workspace_with_feature, tmp_path, monke
     assert issues[0].auto_fixable
 
 
-def test_check_vsix_duplicates_detects(workspace_with_feature, tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    ext = tmp_path / ".vscode" / "extensions"
-    ext.mkdir(parents=True)
-    (ext / "singularityinc.canopy-0.1.0").mkdir()
-    (ext / "singularityinc.canopy-0.0.9").mkdir()
-    ws = _make_workspace(workspace_with_feature)
-    issues = check_vsix_duplicates(ws)
-    assert len(issues) == 1
-    assert "2" in str(issues[0].actual)
-
-
-def test_check_vsix_duplicates_skipped_when_single(workspace_with_feature, tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    ext = tmp_path / ".vscode" / "extensions"
-    ext.mkdir(parents=True)
-    (ext / "singularityinc.canopy-0.1.0").mkdir()
-    ws = _make_workspace(workspace_with_feature)
-    assert check_vsix_duplicates(ws) == []
+def test_vsix_duplicates_code_removed():
+    """phase5: the dead vsix_duplicates check/repair are gone from the registry."""
+    from canopy.actions import doctor as doctor_mod
+    assert "vsix_duplicates" not in doctor_mod._CHECKS
+    assert "vsix_duplicates" not in doctor_mod._REPAIRS
+    assert "vsix" not in doctor_mod.INSTALL_CATEGORIES
 
 
 # ── mcp_orphans (F-3) ───────────────────────────────────────────────────
@@ -701,24 +687,6 @@ def test_doctor_fix_categories_filter(workspace_with_feature):
     assert "heads_stale" in fixed_codes
     # active_feature_orphan should NOT have been repaired
     assert "active_feature_orphan" not in fixed_codes
-
-
-def test_doctor_vsix_requires_clean_vsix_flag(workspace_with_feature, tmp_path,
-                                                monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    ext = tmp_path / ".vscode" / "extensions"
-    ext.mkdir(parents=True)
-    (ext / "singularityinc.canopy-0.1.0").mkdir()
-    (ext / "singularityinc.canopy-0.0.9").mkdir()
-    ws = _make_workspace(workspace_with_feature)
-    # fix=True alone shouldn't clean vsix
-    report = doctor(ws, fix=True)
-    skipped_codes = {s["code"] for s in report["skipped"]}
-    assert "vsix_duplicates" in skipped_codes
-    # fix=True + clean_vsix=True does
-    report2 = doctor(ws, fix=True, clean_vsix=True)
-    fixed_codes = {f["code"] for f in report2["fixed"]}
-    assert "vsix_duplicates" in fixed_codes
 
 
 def test_doctor_check_runs_all_categories(workspace_with_feature):

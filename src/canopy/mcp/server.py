@@ -414,7 +414,6 @@ def doctor(
     fix: bool = False,
     fix_categories: list[str] | None = None,
     feature: str | None = None,
-    clean_vsix: bool = False,
 ) -> dict:
     """Diagnose workspace + install integrity; optionally repair.
 
@@ -430,7 +429,7 @@ def doctor(
         hook_missing, hook_chained_unsafe, preflight_stale,
         features_unknown_repo, branches_missing.
       Install-staleness: cli_stale, mcp_stale, mcp_missing_in_workspace,
-        skill_missing, skill_stale, vsix_duplicates.
+        skill_missing, skill_stale.
 
     Use this as the recovery entry point when any other canopy operation
     returns an unexpected error — most "something is off" cases trace to
@@ -440,9 +439,8 @@ def doctor(
         fix: repair every auto-fixable issue.
         fix_categories: limit ``fix`` to a subset of categories
             (heads, active_feature, worktrees, hooks, preflight, features,
-            branches, cli, mcp, skill, vsix). Implies ``fix=True``.
+            branches, cli, mcp, skill). Implies ``fix=True``.
         feature: scope feature-bearing checks to one feature.
-        clean_vsix: required to repair ``vsix_duplicates`` (destructive).
     """
     from ..actions.doctor import doctor as _doctor
 
@@ -452,7 +450,6 @@ def doctor(
         fix=fix,
         fix_categories=fix_categories,
         feature=feature,
-        clean_vsix=clean_vsix,
     )
 
 

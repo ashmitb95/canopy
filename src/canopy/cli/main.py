@@ -3092,14 +3092,12 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         fix_categories = [args.fix_category]
     fix = bool(getattr(args, "fix", False) or fix_categories)
     feature = getattr(args, "feature", None)
-    clean_vsix = bool(getattr(args, "clean_vsix", False))
 
     report = doctor(
         workspace,
         fix=fix,
         fix_categories=fix_categories,
         feature=feature,
-        clean_vsix=clean_vsix,
     )
 
     if args.json:
@@ -4077,17 +4075,13 @@ def main() -> None:
         "--fix-category",
         choices=sorted(["heads", "active_feature", "worktrees", "hooks",
                         "preflight", "features", "branches",
-                        "cli", "mcp", "skill", "vsix"]),
+                        "cli", "mcp", "skill"]),
         default=None,
         help="Repair only one category (implies --fix)",
     )
     doctor_p.add_argument(
         "--feature", default=None,
         help="Scope feature-bearing checks to one feature",
-    )
-    doctor_p.add_argument(
-        "--clean-vsix", action="store_true",
-        help="Remove duplicate vsix install dirs (gates the vsix repair)",
     )
     doctor_p.add_argument(
         "-v", "--verbose", action="store_true",

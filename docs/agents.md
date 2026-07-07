@@ -1,201 +1,190 @@
 # Agents
 
-How AI coding agents (Claude Code primarily; others by analogy) integrate with canopy.
+How an AI coding agent (Claude Code primarily; other MCP clients by analogy) works with canopy 4.0.
+
+Canopy 4.0 splits into **two surfaces** (see [concepts.md](concepts.md)):
+
+- **The agent contract** — a **15-tool MCP server** plus **enforcement hooks**. The agent sees only what it needs to work safely and stay oriented: path-safety, the registry, focus, safe git ops, recovery. It never names a directory — it names semantic context (`feature`, `repo`, alias) and canopy resolves paths internally.
+- **The management surface** — PR triage, review-comment classification, bot rollups, ship, historian, resume briefs, conflict detection, Linear/GitHub reads. This is **human/dashboard** work, reached via `canopy <cmd> --json` (see [commands.md](commands.md)). **It is not on the agent's MCP surface.**
+
+The rule to internalize: *the agent sees less so it can understand more.* Its context budget goes to comprehension, not orchestration. This doc is about the agent surface.
 
 ## What ships
 
-Three pieces, all installed in one step by `canopy init`:
+Three pieces, installed by `canopy setup-agent`:
 
-1. **Canopy MCP server** (`canopy-mcp` binary) — 67 tools exposing every canopy operation. Registered in `<workspace>/.mcp.json`.
-2. **`using-canopy` skill** at `~/.claude/skills/using-canopy/SKILL.md` — tells the agent *when* to prefer canopy MCP over raw bash.
-3. **Per-workspace MCP config** in `<workspace>/.mcp.json` with `CANOPY_ROOT` set so the server scopes to the right workspace.
+1. **The canopy MCP server** (`canopy-mcp` binary) — **15 tools** (below). Registered in `<workspace>/.mcp.json`.
+2. **Enforcement hooks** — a PreToolUse git gate + a SessionStart brief, written into `<workspace>/.claude/settings.json`. These are the enforcement half of "the agent can't `cd` to the wrong place."
+3. **The `using-canopy` skill** at `~/.claude/skills/using-canopy/SKILL.md` — tells the agent *when* to prefer canopy MCP over raw bash/git/gh. (Opt-in `augment-canopy` for per-workspace tuning.)
 
-The MCP server makes the tools *available*; the skill makes the agent *prefer* them. Without the skill, the agent defaults to `Bash + git + gh` because that's what its training data shows.
+The MCP server makes the tools *available*; the hooks make wrong-path work *impossible*; the skill makes the agent *prefer* the right tool. Without the skill, an agent defaults to `Bash + git + gh` because that's what its training data shows.
+
+### The 15 agent tools
+
+| Group | Tools | Purpose |
+|---|---|---|
+| **Meta** | `version` | version handshake for `doctor` staleness checks |
+| **Registry** | `context`, `start`, `join` | the single-read workspace map; lazily start a feature; register a repo into the active feature |
+| **Focus / slots** | `switch`, `reclaim` | promote a feature into trunk (the run target); free a warm slot whose PR merged |
+| **Safe git ops** | `run`, `commit`, `push`, `preflight` | path-safe shell exec; feature-scoped multi-repo commit; push; pre-commit gate |
+| **Recovery** | `doctor`, `drift` | integrity check + repair; branch-drift detection |
+| **WIP / workable slots** | `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap` | feature-tagged stash save/pop; make a warm slot workable (env/deps/hooks/IDE) |
+
+`context` is **the** registry read — feature ↔ repo ↔ branch ↔ path ↔ state — with a **local tier** (instant) and a **remote tier** (PR/CI overlay, opt-in). It supersedes the pre-4.0 `workspace_status` / `workspace_context` / `feature_list` / `feature_status` / `slots` reads.
+
+> **What is NOT an agent tool.** The management operations — `triage`, `review`, `ship`, `resume`, `conflicts`, `bot-status`, historian, PR/issue/comment reads, thread resolve/reply — are **not** MCP tools. They live in `canopy/management/` and are reached by the human or dashboard via `canopy <cmd> --json`. Do not wire the agent to call them; they don't exist on the MCP surface. If you find yourself wanting `feature_resume` or `github_get_pr_comments`, use `context` (with the remote overlay) and the reads it returns instead.
 
 ### Bundled skills
 
 | Name | Default? | Purpose |
 |---|---|---|
-| `using-canopy` | ✅ always | Prefer canopy MCP tools over raw git/gh; recover via `canopy doctor`. |
-| `augment-canopy` | opt-in | Per-workspace customization — tune the `[augments]` block in canopy.toml (preflight command, bot-author list, etc.). Install with `canopy setup-agent --skill augment-canopy`. See [workspace.md §`[augments]`](workspace.md#augments--per-workspace-behavioral-overrides-m2). |
+| `using-canopy` | ✅ always | Prefer canopy MCP tools over raw git/gh; work in the slot model; recover via `canopy doctor`. |
+| `augment-canopy` | opt-in | Per-workspace customization — tune the `[augments]` block in canopy.toml (preflight command, bot-author list, etc.). Install with `canopy setup-agent --skill augment-canopy`. See [workspace.md](workspace.md). |
 
 ## Install
 
-Default path — runs as part of `canopy init`:
-
 ```bash
-canopy init                  # discovers repos + writes canopy.toml
-                             # + installs hooks + the skill + MCP config
-                             # use --no-agent to skip the AI bits
+canopy setup-agent                 # install skill + MCP config
+canopy setup-agent --hooks         # also install the enforcement hooks
+canopy setup-agent --check         # status only, no changes
 ```
 
-Or standalone (re-run, repair, switch on later):
+What each flag does:
 
-```bash
-canopy setup-agent           # do both (skill + MCP)
-canopy setup-agent --check   # status only, no changes
-canopy setup-agent --skill-only
-canopy setup-agent --mcp-only
-canopy setup-agent --skill augment-canopy   # install an opt-in extra skill (repeatable)
-canopy setup-agent --reinstall  # overwrite existing files
-```
+| Flag | Effect |
+|---|---|
+| (none) | install the `using-canopy` skill **and** the `.mcp.json` canopy entry |
+| `--hooks` | additionally merge the PreToolUse gate + SessionStart brief into `<workspace>/.claude/settings.json` |
+| `--skill NAME` | install an extra bundled skill (e.g. `augment-canopy`); repeatable |
+| `--skill-only` / `--mcp-only` | install just one of the two default pieces |
+| `--reinstall` | overwrite existing files even if foreign or current |
+| `--check` | report what's installed (skill, MCP, hooks) without changing anything |
 
-After install, restart Claude Code (or open a new session in the workspace). Tools appear as `mcp__canopy__triage`, `mcp__canopy__feature_state`, etc.
+`canopy init` installs the skill + MCP config as part of workspace setup (and the per-repo drift post-checkout hooks). The Claude Code **enforcement** hooks are opt-in via `setup-agent --hooks`.
+
+After install, **restart Claude Code** (or open a new session in the workspace) — MCP servers and hooks load once per session. Tools then appear as `mcp__canopy__context`, `mcp__canopy__switch`, etc.
 
 Verify:
 
 ```bash
-canopy setup-agent --check
+canopy setup-agent --check     # skill / MCP / hooks status
 ```
 
-## Tool selection guide
+## The enforcement layer
 
-The skill encodes this matrix; the agent reads it on session start. Mirror here for the human reader:
+Two Claude Code hooks, installed into `<workspace>/.claude/settings.json` by `setup-agent --hooks`. Together they make "the agent can't `cd` to the wrong repo or commit from the parent dir" true by construction, not by convention.
 
-| What you want | Canopy tool | Don't use |
+### PreToolUse git gate (`canopy-hook-gate`)
+
+Registered against the `Bash` tool. Before any Bash command runs, the gate:
+
+1. **Fast-paths** anything with no `git` word (allow immediately) and any command where `CANOPY_HOOKS_DISABLED=1`.
+2. **Splits the command into top-level segments** (quote-, subshell-, and heredoc-aware) and tracks the **effective directory** across the chain — following `cd`, `git -C`, and absolute/relative paths. The evidence base: the agent's cwd never leaves the workspace parent; repo work happens via `cd <repo> && git …` chains, so the gate must judge each segment's *resolved* directory, not the shell's cwd.
+3. **Only judges git *mutation* segments** — `commit`, `push`, `merge`, `rebase`, `reset`, `cherry-pick`, `add`, `rm`, `mv`, `am`, `revert`, and mutating `stash` sub-verbs. Reads (`git status`, `git log`, `stash list`) pass. `checkout` / `switch` are **deliberately not gated** — they are the recovery action for a wrong-branch state, so blocking them would trap the agent.
+
+It denies a mutation in four cases, each returning exit code `2` with a reason fed back to the model:
+
+| Code | When | The reason names the fix |
 |---|---|---|
-| Return to a feature in a new session | `mcp__canopy__feature_resume` | `switch` + `feature_state` + `github_get_pr_comments` separately |
-| What feature should I work on? | `mcp__canopy__triage` | per-repo `gh pr list` + manual grouping |
-| Show me everything about a feature | `mcp__canopy__feature_state` | composing many reads |
-| Switch a feature into main (the focus primitive) | `mcp__canopy__switch` | `cd repo && git checkout`, or guessing paths |
-| Hibernate the current focus + start something new | `mcp__canopy__switch(feature, release_current=True)` | manual stash + checkout dance |
-| Commit across the canonical feature (one message, all repos) | `mcp__canopy__commit` | `canopy run <repo> -- git commit` per repo |
-| Push the canonical feature to origin | `mcp__canopy__push` (add `set_upstream=True` on first push) | `canopy run <repo> -- git push` per repo |
-| Check HEAD alignment | `mcp__canopy__drift` | `git branch --show-current` per repo |
-| PR review comments (temporally filtered) | `mcp__canopy__github_get_pr_comments` | `gh api .../comments` + custom filter |
-| PR data (title, decision, draft) | `mcp__canopy__github_get_pr` | `gh pr view --json` per repo |
-| Branch HEAD / divergence / upstream | `mcp__canopy__github_get_branch` | `cd && git status -b` |
-| Linear issue | `mcp__canopy__linear_get_issue` | direct API |
-| Run shell command in a specific repo | `mcp__canopy__run` | `cd /path && cmd` (path mistake risk) |
-| Stash for a feature | `mcp__canopy__stash_save_feature` | raw `git stash push` |
-| Inspect slot occupancy (dashboard grid) | `mcp__canopy__slots(rich=True)` | hand-rolling `ls .canopy/worktrees/` + per-slot `feature_state` |
-| Pre-warm a cold feature into a slot without changing canonical | `mcp__canopy__slot_load(feature, slot_id?)` | `mcp__canopy__switch` (changes canonical too) |
-| Free a slot without bringing a new feature in | `mcp__canopy__slot_clear(slot_id)` | manual stash + branch checkout |
-| Exchange two slots' occupants (e.g., shuffle warm order) | `mcp__canopy__slot_swap(slot_a, slot_b)` | two `slot_load` calls with `replace=True` |
-| Migrate a pre-3.0 workspace to the slot model | `mcp__canopy__migrate_slots` | hand-renaming `.canopy/worktrees/` dirs |
-| Close a GitHub review thread + log it | `mcp__canopy__resolve_thread(thread_id)` | raw GraphQL or `gh api` |
-| Reply to a GitHub review thread | `mcp__canopy__reply_to_thread(thread_id, body)` | raw GraphQL or `gh pr review` |
+| `outside_repo` | the effective dir isn't inside any workspace repo (or slot worktree) | "re-run from inside the target repo … or use `canopy run`" |
+| `trunk_branch_drift` | committing/pushing in trunk while it's on a feature branch that isn't the canonical feature | "run `canopy switch <feature>`" |
+| `slot_branch_drift` | committing/pushing in a warm slot that's on the wrong branch for its occupant | "`git checkout <expected>` … or `canopy doctor`" |
+| `push_unknown_branch` | pushing a src refspec that doesn't exist in this repo (with a hint if it exists in a sibling repo — "wrong repo?") | "check the branch for THIS repo with `canopy context`" |
 
-### Vocabulary note: hibernate ⇄ release_current
+**Fail-open contract:** any parse failure, unresolvable path (`$vars`, `~`, `cd -`), exotic flag (`--git-dir`), or internal error ⇒ **allow**. The gate blocks *only* when it is sure the mutation targets the wrong place. It has no side effects — it reads `slots.json` + `features.json` + live git.
 
-The user-facing word for "send the current focus to branch-only with a feature-tagged stash" is **hibernate**. The dashboard button says it. The CLI flag will eventually say it. But the actual MCP parameter today is **`release_current=True`** (kept as the API name for backwards compat).
+When the agent sees a message starting with `canopy: blocked`, the correct response is to **read the reason and follow it** (usually `cd <repo> && …` or `canopy switch <feature>`) — never retry the same command or route around it with a different path.
 
-When you describe what you're about to do to the user, prefer the user-facing word:
+### SessionStart brief (`canopy-hook-context`)
 
-  - ✓ "I'll **hibernate** SIN-12 so SIN-15 can take main."
-  - ✗ "I'll set release_current=true on SIN-12."
+A compact block (~10 lines) injected into every new session's context, *before* the agent reads a single file. It shows:
 
-Same operation. Different surface vocab. A future canopy release may add `hibernate=true` as an alias for `release_current=true` — until then, when calling the tool, use `release_current=True`.
+- the workspace name and the **canonical feature**;
+- **per-repo current branch + dirty/clean** (or "missing on disk");
+- **warm slot occupancy** (`slot worktree-1 → <feature>`);
+- any advisories (`⚠ …`);
+- a standing instruction: *"Before any work: confirm the branch above matches this chat's ticket. If not, run `canopy switch <feature>` FIRST."*
 
-A feature in the resulting state is **hibernating** (synonyms in the wild: "branch only", "released to cold", "wound down" — all the same thing).
+The mismatch (this chat is about feature X, but trunk is on feature Y) must be visible before the first edit — that is what the brief buys.
 
-## Session start — returning to a feature
-
-When opening a new session on a feature you've worked on before, call `feature_resume` first:
-
-```python
-mcp__canopy__feature_resume(alias="SIN-12-search")
-# → switches if needed, refreshes GH + Linear, returns brief + intent_hints
-# → bumps the last-visit anchor so the next resume gets an accurate delta
-```
-
-The brief tells you: what state the feature is in, what changed since you last visited (commits, new/resolved threads), and `intent_hints` for the most likely next action categories. It replaces the manual `switch → feature_state → github_get_pr_comments` chain at session start.
-
-The bundled `using-canopy` skill's "Session start" section encodes this as the expected agent protocol. See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief) for the full brief shape and freshness policy.
-
-## The daily loop
+## The daily loop (the 15 tools)
 
 ```
-1. feature_resume(feature)  → session-start brief + switch-if-needed (Plan 2)
-   OR triage()              → if you don't know what to work on
-2. feature_state(feature)   → get current state (brief.current_state has feature_state + intent_hints)
-3. follow next_actions[0]   → primary CTA (canopy decided what to do next)
-4. feature_state again      → confirm state advanced
-5. repeat
+1. context()                 → orient: the workspace map (local, instant)
+   context(remote=True)      → add the PR/CI overlay when the task needs it
+2. start(<alias>) / join(<repo>)   → scope new work (lazy; join registers the repo)
+3. ... edit source with Read/Edit/Bash as normal ...
+4. commit(message=...)       → feature-scoped, one message across the repos
+   push(set_upstream=True)   → first push; the no_upstream blocker tells you when
+5. preflight                 → run pre-commit hooks / test gate before shipping
 ```
 
-Demo (output from a real test workspace, MCP-only — no bash):
+- **Orient with `context`.** It's your single read for feature ↔ repo ↔ branch ↔ path ↔ state, local and instant — use it freely. Add `remote=True` **only** when the task depends on remote state (addressing PR comments, checking CI, reviewing). Local code work does not need the overlay.
+- **Scope work with `start` / `join`.** `start <alias>` begins new work lazily (no repos touched until you join). `join <repo>` creates the branch *and* registers the repo so the enforcement gate recognizes it — a raw `git checkout -b` does **not** register, and `context` will advise you to `join`.
+- **Commit / push through canopy.** `commit` commits the feature across its repos with one message and returns the wrong-branch / hooks-failed cases classified. `push` pushes them; on the first push the `no_upstream` blocker carries the retry args with `set_upstream=True`.
+- **Gate with `preflight`.** Runs the pre-commit hooks (honoring `[augments].preflight_cmd`) before you ship.
+- **Recover with `doctor` / `drift`.** See below.
 
-```
-STEP 1: triage
-  canonical_feature: SIN-12-search
-  • SIN-12-search        is_canonical=true   physical_state=canonical
-      backend  PR#7  actionable=1
-      frontend PR#3  actionable=1
-  • SIN-13-empty-state   is_canonical=false  physical_state=warm
-      frontend PR#4  actionable=0
-  • SIN-14-stale-count   is_canonical=false  physical_state=cold
+### Worktree vs trunk — intent decides whether you `switch`
 
-STEP 2: feature_state("SIN-12-search")
-  state: ready_to_commit
-  next:
-    PRIMARY  commit({"feature": "SIN-12-search"})
+Canopy's two-tier slot model ([concepts.md §4](concepts.md#4-the-slot-model)) draws a hard line: **trunk (canonical) is the only place to RUN full-stack code**; warm slots (`.canopy/worktrees/worktree-N/<repo>/`) are the **workbench** for PR-review changes.
 
-STEP 3: github_get_pr_comments("SIN-12-search")
-  total actionable: 2
-  [backend]  src/app.py:18 (reviewer) — add a docstring with example response
-  [frontend] src/EmptyState.tsx:4 (reviewer) — prefer a discriminated union
+- **To make review changes** on a feature (address PR comments, small edits): work **in its warm slot**. `context` gives you the path; the enforcement gate allows commits/pushes there. **Do not `switch`** — switching is for running.
+- **To RUN a feature** full-stack (boot the app, integration test): `switch(<feature>)` promotes it into trunk, the only place with the full environment.
+- If `context` shows a slot's deps as `installing` or `failed`, wait or run `worktree_bootstrap` before linting/testing there.
 
-STEP 4: agent decides to pivot to SIN-13-empty-state (currently warm in worktree-1)
-  switch({"feature": "SIN-13-empty-state"})
-    mode=active_rotation
-    previously_canonical=SIN-12-search   (evacuated into worktree-1 — fast 5-op swap)
-    per_repo_paths.frontend=/.../canopy-test/frontend  (now on SIN-13)
+`switch` moves the previously-canonical feature into a warm slot by default (fast to switch back). `switch(release_current=True)` instead winds it down to **cold** (branch only, with a feature-tagged stash) — no warm worktree. When the warm-slot cap (`slots = N`, default 2) would be exceeded, `switch` auto-evicts the LRU warm feature or returns a `worktree_cap_reached` BlockerError with fix-actions (`--evict`, `--evict-to`, raise the cap). **`reclaim`** frees warm slots whose PRs have merged (clean ones only).
 
-STEP 5: feature_state("SIN-13-empty-state") confirms in_progress
-```
+## Session start / returning to a feature
 
-`next_actions` is canopy's recommendation. Trust it unless you have a specific reason not to. Same data the [VSCode dashboard](https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy) renders as the primary button.
+The agent orients with **`context`** — not with a resume tool. The rich resume brief (what changed since your last visit, intent hints, refreshed GH/Linear state) is now a **human/CLI tool: `canopy resume --json`**, on the management surface. It is **not** an MCP tool, so the agent does not call it.
+
+At session start:
+
+1. The SessionStart brief already told you the canonical feature and per-repo branches.
+2. If the chat is about a feature that isn't canonical and you need to **run** it, `switch(<alias>)`. If you're only making review changes, work in its warm slot — often no `switch` is needed because the slot is already correct.
+3. Call `context()` for the full map; add `remote=True` if you're about to touch PR comments or CI.
+
+Do not invent or call removed MCP tools (`feature_resume`, `github_get_pr_comments`, `feature_state`, `triage`, …). Orient via `context` and the reads it carries.
 
 ## Reading errors
 
-Canopy errors come back as structured `BlockerError` / `FailedError`:
+Canopy actions return structured `BlockerError` / `FailedError`:
 
 ```json
 {
   "status": "blocked",
-  "code": "worktree_cap_reached",
-  "what": "adding 'SIN-12-search' as warm would exceed warm_slot_cap=2",
-  "expected": {"warm_slot_cap": 2},
-  "actual":   {"warm_now": ["SIN-13-empty-state", "SIN-14-stale-count"]},
+  "code": "drift_detected",
+  "what": "branches don't match the feature lane",
+  "expected": {"...": "..."},
+  "actual":   {"...": "..."},
   "fix_actions": [
-    {"action": "switch",
-     "args": {"feature": "SIN-15-cache", "release_current": true},
-     "safe": false,
-     "preview": "wind-down mode: SIN-12-search goes cold (with stash), no eviction needed"},
-    {"action": "switch",
-     "args": {"feature": "SIN-15-cache", "evict": "SIN-14-stale-count"},
-     "safe": false,
-     "preview": "evict LRU warm worktree 'SIN-14-stale-count' to cold"},
-    {"action": "workspace_config",
-     "args": {"slots": 3},
-     "safe": true,
-     "preview": "raise warm_slot_cap to 3"}
+    {"action": "switch", "args": {"feature": "SIN-12-search"},
+     "safe": true, "preview": "restore the feature's branches across repos"}
   ]
 }
 ```
 
 `fix_actions` is ordered most-recommended first. Each entry has `safe: true|false`:
-- `safe: true` → call directly to recover.
-- `safe: false` → surface to the human first (might lose work or affect remote state).
 
-When you see a `BlockerError`, read `fix_actions[0]` and decide whether to follow it. Don't ignore + retry the original call.
+- `safe: true` → call it directly to recover.
+- `safe: false` → surface it to the human first (it might lose work or affect remote state).
+
+When you see a `BlockerError`, read `fix_actions[0]` and decide whether to follow it. **Don't ignore it and retry the original call.**
 
 ### Recovery: when canopy itself looks broken
 
-If a canopy call returns an unexpected error — `KeyError` from a state read, "feature not found" for a feature you just created, a path that should exist but doesn't — call `mcp__canopy__doctor` first. It diagnoses 21 codes across 12 categories of state-file drift and install-staleness (including slot-state checks added in Wave 3.0), returning each issue with a `code`, `severity`, `expected`, `actual`, and `auto_fixable` flag.
-
-Typical recovery flow:
+If a canopy call returns an *unexpected* error — a `KeyError` from a state read, "feature not found" for one you just created, a path that should exist but doesn't — call **`doctor`** first. It runs a 21-code integrity check across state-file drift and install-staleness (including slot-state checks: `slot_dir_orphan`, `slot_entry_orphan`, `slot_branch_mismatch`, `slot_detached_head`, …), returning each issue with `code`, `severity`, `expected`, `actual`, and an `auto_fixable` flag.
 
 1. `doctor()` → read the issues. If `summary.errors == 0`, it's not a state problem; investigate the original error normally.
-2. If errors are present and most are `auto_fixable: true`: `doctor(fix=True)`. Report `fixed`/`skipped` to the user.
-3. For `auto_fixable: false` (e.g., `features_unknown_repo`, `branches_missing`, `cli_stale`): surface the `fix_action` text to the human — these need a decision (delete the feature? restore the repo? reinstall the binary?), not an auto-repair.
+2. Errors present and mostly `auto_fixable: true` → `doctor(fix=True)`. Report `fixed` / `skipped` to the human.
+3. `auto_fixable: false` (e.g. `features_unknown_repo`, `branches_missing`, `cli_stale`) → surface the `fix_action` text; the human needs to decide (delete the feature? restore the repo? reinstall the binary?).
 
 The `version` tool reports `{cli_version, mcp_version, schema_version}` for the same handshake — useful when an agent suspects the CLI binary on PATH is older than the MCP it's talking to.
 
 ## External MCP servers
 
-Canopy also acts as an MCP **client** — it spawns external MCP servers (Linear, GitHub) on demand. Two transports supported:
+Canopy also acts as an MCP **client** — the management surface spawns external MCP servers (Linear, GitHub) on demand for its reads. Two transports:
 
 ### stdio (subprocess)
 
@@ -226,24 +215,23 @@ For hosted servers like Linear's official MCP at `mcp.linear.app`:
 }
 ```
 
-First call opens the browser for OAuth; the token caches at `~/.canopy/mcp-tokens/linear.{client,tokens}.json` for subsequent calls. No API key required.
+First call opens the browser for OAuth; the token caches at `~/.canopy/mcp-tokens/linear.{client,tokens}.json` for subsequent silent calls. No API key required.
 
-For GitHub specifically, canopy falls back to `gh` CLI when no MCP server is configured. Same return shapes either way. If neither is available, `BlockerError(code='github_not_configured')` includes platform-aware install hints.
+For GitHub specifically, canopy falls back to the `gh` CLI when no `github` MCP server is configured — same return shapes either way. If neither is available, `BlockerError(code='github_not_configured')` includes platform-aware install hints.
 
 ## Beyond Claude Code
 
-The `using-canopy` skill is a Claude-Code-specific convention (`~/.claude/skills/`). The MCP server itself works with any MCP-aware client (Cursor, Windsurf, custom integrations). For non-Claude clients, replicate the skill's content as a system prompt or rules file in your client's convention.
+The `using-canopy` skill and the enforcement hooks are Claude-Code conventions (`~/.claude/skills/`, `.claude/settings.json`). The **MCP server itself works with any MCP-aware client** (Cursor, Windsurf, custom integrations). For non-Claude clients, replicate the skill's guidance as a system prompt or rules file in your client's convention — but note the hook-based enforcement won't apply, so path discipline falls back to the agent following the skill.
 
 ## Troubleshooting
 
 ```bash
-canopy setup-agent --check     # is the skill installed? is MCP registered?
-canopy hooks status            # are drift hooks installed in each repo?
+canopy setup-agent --check     # is the skill installed? MCP registered? hooks configured?
+canopy hooks status            # are the per-repo drift post-checkout hooks installed?
 canopy drift                   # what does canopy think vs reality?
 ```
 
-If MCP tools don't appear in your agent session: restart the client (MCP servers are loaded once per session).
-
-If `mcp__canopy__triage` returns `github_not_configured`: either install + auth `gh` (`brew install gh && gh auth login`), or add a `github` MCP server entry to `.canopy/mcps.json`.
-
-If `mcp__canopy__linear_get_issue` opens a browser tab unexpectedly: that's the OAuth flow; complete the auth, the token caches and subsequent calls are silent.
+- **MCP tools don't appear in the session** → restart the client; MCP servers load once per session.
+- **The enforcement gate isn't firing** → confirm `setup-agent --hooks` ran (`--check` shows `hooks ✓ installed`), then restart Claude Code. To disable it for one command, set `CANOPY_HOOKS_DISABLED=1`.
+- **`context(remote=True)` returns `github_not_configured`** → install + auth `gh` (`brew install gh && gh auth login`), or add a `github` MCP server entry to `.canopy/mcps.json`.
+- **A Linear read opens a browser tab unexpectedly** → that's the OAuth flow; complete the auth, the token caches, subsequent calls are silent.

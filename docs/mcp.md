@@ -1,11 +1,19 @@
 # MCP
 
-Canopy is both an MCP **server** (every operation exposed as a tool — agents drive canopy through it) and an MCP **client** (external integrations like Linear and GitHub spawn their MCP servers; canopy never talks to those APIs directly).
+Canopy is both an MCP **server** (the agent drives canopy through it) and an MCP **client** (external integrations like Linear and GitHub spawn their own MCP servers; canopy never talks to those APIs directly).
+
+The 4.0 line — *the great distillation* — splits canopy into **two surfaces**:
+
+- **The agent contract (this document): 15 MCP tools.** The agent sees only what it needs to work safely and stay oriented — path-safety, registry, focus, safe git ops, recovery. It never names a directory; it names semantic context (`feature`, `repo`, alias) and canopy resolves paths internally. Its context budget goes to comprehension, not orchestration.
+- **The human / dashboard management surface: CLI `--json`.** PR triage, review-comment classification, bot rollups, ship, historian, resume briefs, conflict detection, Linear/GitHub reads — the "management" work — is **not** on the agent surface. It lives in `canopy/management/` and is reached by a human (or the dashboard) via `canopy <cmd> --json`. See [commands.md](commands.md).
+
+Pre-4.0, canopy exposed dozens of MCP tools and the agent spent context orchestrating PR management instead of understanding code. Nothing was deleted — management moved *off* the agent surface. The agent sees less so it can understand more.
 
 ## Server
 
 ```bash
-canopy-mcp   # starts the server over stdio
+canopy-mcp                    # entry point — starts the server over stdio
+python -m canopy.mcp.server   # equivalent
 ```
 
 Register in any MCP-compatible client. `canopy init` writes this entry into the workspace's `.mcp.json` automatically:
@@ -24,119 +32,63 @@ Register in any MCP-compatible client. `canopy init` writes this entry into the 
 
 `CANOPY_ROOT` scopes the server to one workspace. To use canopy in multiple workspaces simultaneously, register separate entries with different `CANOPY_ROOT` values (or scope MCP per-project via `.mcp.json` at each workspace root).
 
-### Tools (67)
+## The 15 agent tools
 
-Grouped by topic. Every tool is alias-aware where it accepts a feature input.
+The complete agent surface. Every tool is alias-aware where it accepts a feature input (feature name, Linear ID, `<repo>#<n>`, PR URL, `<repo>:<branch>`, or slot id). Grouped by role in the daily loop.
 
-#### Meta
+### Meta
 
-| Tool | Description |
+| Tool | Purpose |
 |---|---|
-| `version` | `{cli_version, mcp_version, schema_version}` for the doctor handshake. The extension calls this once at startup; the doctor uses it to flag CLI/MCP version drift. |
-| `doctor` | Diagnose state-file integrity + install staleness; optionally repair. 21 codes across 12 categories — including slot-state checks added in Wave 3.0 (`slot_dir_orphan`, `slot_entry_orphan`, `slot_branch_mismatch`, `slot_detached_head`). **The recovery entry point** — when any other call returns an unexpected error, agents should call `doctor` first to see whether state is corrupted. Returns `{issues, summary, fixed, skipped, ...}`. |
+| `version` | Report canopy versions (`cli`/`mcp`/`schema`) for the `doctor` staleness handshake. |
 
-#### Workspace
+### Registry
 
-| Tool | Description |
+| Tool | Purpose |
 |---|---|
-| `workspace_status` | Full workspace status across all repos. Slot occupancy is reported separately — call `slots` (or `worktree_info`) for the slot-keyed view. |
-| `workspace_context` | Detect canopy context from a directory path |
-| `workspace_config` | Read or write workspace settings |
-| `workspace_reinit` | Rescan repos and regenerate `canopy.toml` |
+| `context` | **The registry — feature ↔ repo ↔ branch ↔ path ↔ state in a single read.** Tier 1 (default) is local + instant. Set `remote=True` only when the task depends on remote state (addressing PR comments, checking CI) — it adds the live PR + CI + origin-divergence overlay at network cost. Supersedes the old `workspace_status`/`workspace_context`/`feature_list`/`feature_status`/`slots`. |
+| `start` | Begin new work on a feature — lazy, zero repos until you `join`. |
+| `join` | Join a repo to the active feature (creates + registers its branch). |
 
-#### Feature
+### Focus (slots)
 
-| Tool | Description |
+| Tool | Purpose |
 |---|---|
-| `feature_create` | Create a new feature lane across repos |
-| `feature_list` | List active feature lanes |
-| `feature_status` | Detailed status for a feature lane |
-| `feature_diff` | Aggregate diff for a feature lane |
-| `feature_changes` | Per-repo file changes for a feature |
-| `feature_merge_readiness` | Pre-merge sanity check |
-| `feature_paths` | Working directory paths per repo |
-| `feature_done` | Clean up worktrees + branches + archive |
-| `feature_link_linear` | Attach a Linear issue to a feature |
-| `feature_state` | **Dashboard backend.** Returns `{state, summary, next_actions, warnings}`. State ∈ `{drifted, needs_work, in_progress, ready_to_commit, ready_to_push, awaiting_bot_resolution, awaiting_review, approved, no_prs}`. The `summary` carries split `actionable_human_count` + `actionable_bot_count` (M3). See [concepts.md](concepts.md#3-the-9-state-machine). |
-| `bot_comments_status` | **M3.** Per-feature rollup of bot review comments — `{feature, repos: {<repo>: {pr_number, total, resolved, unresolved, threads}}, all_resolved, any_bot_comments}`. Resolutions come from the persistent log written by `commit --address`. |
-| `historian_decide` | **M4.** Record one or more decisions in the feature's memory file. Accepts `decisions: [{title, rationale}, ...]`. Deduped per-session by title. |
-| `historian_pause` | **M4.** Record why the agent stopped — what's blocked, what's needed next. |
-| `historian_defer_comment` | **M4.** Mark a review comment as intentionally deferred with a reason. |
-| `feature_memory` | **M4.** Read the rendered memory file as markdown — `{feature, memory: <markdown or "">}`. |
-| `historian_compact` | **M4.** Trim the Sessions section to the most-recent N (default 5). Resolutions log + PR context are always preserved. |
+| `switch` | Promote a feature into the canonical slot — the only place to *run* full-stack. If the target is already warm, uses a fast stash → checkout → pop path per repo; if cold, the outgoing feature's slot is reused. See [concepts.md §4](concepts.md#4-the-slot-model). |
+| `reclaim` | Free warm slots whose PR merged (clean-only; dirty slots are surfaced as advisories, never touched). Slots return to the free pool for reuse. |
 
-#### Slots (Wave 3.0)
+### Safe git ops
 
-| Tool | Description |
+| Tool | Purpose |
 |---|---|
-| `slots` | Slot occupancy + (default) per-slot enrichment for the dashboard / agent. With `rich=True` (default), returns the full payload: per-repo branch, dirty + counts, ahead/behind, default branch, last commit, PR + CI rollup, unresolved bot threads, linear link, and the computed `feature_state` for every occupied slot AND canonical. Empty slots are explicit `null`. With `rich=False`, returns the lightweight `slots.json` shape (slot id → feature + last_touched). |
-| `slot_load` | Warm a cold feature into a slot **without** changing canonical. `slot_id` defaults to the lowest free slot. `replace=True` evicts the current occupant to cold first. `bootstrap=True` runs env-file copy + install_cmd + IDE workspace gen after load. Raises `worktree_cap_reached` when all slots are full and `replace=False`. The feature must be registered (`feature_create`) first — no silent "treat as all repos" fallback. |
-| `slot_clear` | Evict the occupant of a slot to cold (with feature-tagged stash if dirty). The slot id remains; only the occupant moves. |
-| `slot_swap` | Exchange the occupants of two slots. v1 requires identical repo scope on both features; mismatched scope raises `BlockerError(code='swap_scope_mismatch')`. |
-| `migrate_slots` | One-shot migration from pre-3.0 layout to the 3.0 slot model. Renames `.canopy/worktrees/<feature>/` → `worktree-N/`, rewrites canopy.toml (`max_worktrees` → `slots`), migrates `active_feature.json` → `slots.json`. Idempotency-guarded — refuses if `slots.json` already exists. Returns `{moved, slots, canonical, slot_count}`. |
+| `run` | Run a shell command in a canopy-managed repo with directory resolution — pass `repo` (and optional `feature`) and canopy resolves the cwd. This is also how the agent reaches raw git plumbing path-safely (`run "git …"`). |
+| `commit` | Commit across every in-scope repo in a feature lane with a single message. Defaults to the canonical feature; pre-flight verifies each repo is on its expected branch, else raises `BlockerError(code='wrong_branch')`. Commit-only in 4.0 (the pre-4.0 `--address` thread-resolution path was stripped). |
+| `push` | Push the feature branch in every in-scope repo. |
+| `preflight` | Context-aware pre-commit quality gate. Records the result to `.canopy/state/preflight.json`. |
 
-#### Action (Wave 2)
+### Recovery
 
-| Tool | Description |
+| Tool | Purpose |
 |---|---|
-| `triage` | Prioritized list of features needing attention. Cross-repo PR fetch, grouped by feature, sorted by review state. |
-| `switch` | **The focus primitive (Wave 3.0 slot model).** Promote a feature to the canonical slot. Active rotation (default) evacuates the previously-canonical feature into a warm slot; `release_current=True` (wind-down) sends it to cold with a feature-tagged stash. When the destination is already warm, the swap is a fast 5-op-per-repo dance — no `mv`, no slot renaming. Slot-targeted args: `evict_to=<slot-N>` pins where the outgoing canonical lands; `to_slot=<slot-N>` promotes whatever feature occupies that slot (omit `feature`). Cap-reached blocker surfaces explicit fix actions. See [docs/concepts.md §4](concepts.md#4-the-slot-model). |
-| `drift` | Cached alignment view from `.canopy/state/heads.json`. Fast, hook-driven. |
+| `doctor` | Diagnose workspace + install integrity across ~20 typed diagnostic codes; optionally repair (`fix=True`). Returns `{issues, summary, fixed, skipped, ...}`. **The recovery entry point** — when any other call returns an unexpected error, call `doctor` first to see whether state is corrupted. |
+| `drift` | Compare recorded HEAD state (`.canopy/state/heads.json`) vs feature-lane expectations. Fast, hook-driven cached path. |
 
-#### Read primitives (alias-aware)
+### WIP + workable slots
 
-| Tool | Description |
+| Tool | Purpose |
 |---|---|
-| `issue_get` | Fetch an issue from the workspace's configured provider (Linear or GitHub Issues). Accepts a provider-native ID (`SIN-412`, `#142`) or feature alias. M5+. |
-| `issue_list_my_issues` | List the current user's open issues from the configured provider. M5+. |
-| `linear_get_issue` | **Deprecated alias for `issue_get`** — kept for backward compat; will be removed in a future release. |
-| `linear_my_issues` | **Deprecated alias for `issue_list_my_issues`.** |
-| `github_get_pr` | PR data per repo. Accepts feature alias, `<repo>#<n>`, or PR URL. |
-| `github_get_branch` | Branch HEAD/divergence/upstream per repo. Accepts feature or `<repo>:<branch>`. |
-| `github_get_pr_comments` | Temporally classified review comments. Same alias forms as `github_get_pr`. |
+| `stash_save_feature` | Stash dirty changes (including untracked) with a feature tag. |
+| `stash_pop_feature` | Pop the most recent feature-tagged stash per repo. |
+| `worktree_bootstrap` | Bootstrap a feature's worktrees to workable — env-file copy, `install_cmd`, IDE `.code-workspace` generation. |
 
-#### Workflow
+## Where the management tools went
 
-| Tool | Description |
-|---|---|
-| `ship` | **M8.** PR open/update orchestrator with cross-repo body links. Idempotent — `up_to_date` on re-run. |
-| `draft_replies` | **M9.** File-history-based addressed-comment classifier. Returns draft reply text with high/medium/low confidence per comment. No LLM. |
-| `feature_resume` | **Plan 2.** Switch-aware compound brief. One call: alias → switch-if-needed → refresh GitHub + Linear → compute `{feature, switch_performed, first_visit, window_hours, since_last_visit, current_state, intent_hints}` → bump last-visit anchor. Refreshes GH + Linear on every call (never cached at the canopy layer). See [concepts.md §5](concepts.md#5-returning-to-a-feature--the-resume-brief). |
+The pre-4.0 review/triage/ship/historian/bots/threads/Linear-reads tools are **no longer MCP tools**. They were not deleted — they moved to `canopy/management/` and are reached by humans and dashboards via `canopy <cmd> --json` (see [commands.md](commands.md)). The distillation is on the **agent (MCP) surface only**; the CLI kept every one of these commands, each with `--json`.
 
-#### Threads (Plan 2)
+- **Moved to `canopy/management/` (CLI `--json`, no MCP):** `review_status` / `review_comments` / `review_prep`, `pr_checks`, `draft_replies`, `github_get_pr` / `_comments` / `_branch`, `bot_comments_status`, `reply_to_thread`, `resolve_thread`, the `historian_*` set, `feature_memory`, `feature_resume`, `ship`, `conflicts`, `triage`, the Linear/issue reads, `feature_link_linear`, `feature_state`, `feature_diff`, `feature_changes`, `feature_merge_readiness`, `workspace_context`, `workspace_status`.
+- **Commented off the MCP surface (reversible — one uncomment away; code intact in `actions/`):** `slots`, `feature_list` / `_status` / `_paths` / `_create` / `_done`, `workspace_config` / `_reinit`, `slot_load` / `_clear` / `_swap`, `migrate_slots`, and the git-plumbing `checkout` / `log` / `sync` / `branch_*` / raw `stash_*` / `worktree_info` / `worktree_create`. Rationale: git plumbing is reachable path-safely via `run "git …"`, and the feature/slot lifecycle reads are subsumed by `context`.
 
-| Tool | Description |
-|---|---|
-| `resolve_thread` | Close a GitHub PR review thread via GraphQL + record the closure in `.canopy/state/thread_resolutions.json`. Params: `thread_id` (str), `feature` (optional — defaults to canonical). The log feeds `feature_resume`'s `since_last_visit.threads_resolved_by_canopy` list. |
-| `reply_to_thread` | Post a reply to a GitHub review thread. Params: `thread_id` (str), `body` (str), `feature` (optional), `resolve_after` (bool, default `False`). When `resolve_after=True`, closes the thread after posting and logs via `thread_resolutions`. |
-
-#### Run / preflight
-
-| Tool | Description |
-|---|---|
-| `run` | Run a shell command in a canopy-managed repo. Pass `repo` (and optional `feature`); canopy resolves the cwd. |
-| `preflight` | Run pre-commit hooks per repo. Records result to `.canopy/state/preflight.json` for `feature_state`. |
-| `review_status` / `review_comments` / `review_prep` | Older review composites. Prefer `feature_state` + `github_get_pr_comments`. |
-
-#### Stash (feature-aware)
-
-| Tool | Description |
-|---|---|
-| `stash_save_feature` | Stash with feature tag (incl. untracked). |
-| `stash_list_grouped` | List grouped by feature tag. |
-| `stash_pop_feature` | Pop most recent matching tagged stash per repo. |
-| `stash_save` / `stash_pop` / `stash_list` / `stash_drop` | Plain (non-feature-tagged) stash ops. |
-
-#### Worktree / branch / log
-
-| Tool | Description |
-|---|---|
-| `worktree_create` | Create a feature with worktrees in numbered slots (`.canopy/worktrees/worktree-N/<repo>/`). Allocates the lowest free slot; returns `slot_id` alongside `worktree_paths` so callers can reference the slot directly. Optionally linked to a Linear issue. |
-| `worktree_info` | Live worktree state — slot-keyed map (`{worktree-N: {feature, repos: {<repo>: {branch, dirty, dirty_count, dirty_files, ahead, behind, default_branch, path}}}}`) plus the per-repo `git worktree list` from the main working tree. |
-| `branch_list` / `branch_delete` / `branch_rename` | Branch ops across repos |
-| `log` | Interleaved commit log across repos |
-| `checkout` | Checkout a branch across repos |
-| `sync` | Pull default + rebase feature branches |
+If a doc lists the agent's tools, it lists the 15 above — not these.
 
 ## Client
 
@@ -157,7 +109,7 @@ For local servers (npm, python, etc.):
 }
 ```
 
-The client module (`canopy.mcp.client`) wraps the MCP SDK's `stdio_client` + `ClientSession`. Sync wrapper handles event loop management for CLI use.
+The client module (`canopy.mcp.client`) wraps the MCP SDK's `stdio_client` + `ClientSession`. A sync wrapper handles event-loop management for CLI use.
 
 ### HTTP + OAuth (browser flow)
 
@@ -173,9 +125,9 @@ For hosted servers like Linear's official MCP — no API key needed:
 }
 ```
 
-First call opens the browser to the OAuth authorize URL; canopy spins up a one-shot HTTP server on `localhost:33418` to capture the redirect. Tokens cache at `~/.canopy/mcp-tokens/<server>.{client,tokens}.json`. Subsequent calls reuse the cached token silently. Tokens auto-refresh as long as the refresh token is valid.
+First call opens the browser to the OAuth authorize URL; canopy spins up a one-shot HTTP server on `localhost:33418` to capture the redirect. Tokens cache at `~/.canopy/mcp-tokens/<server>.{client,tokens}.json`. Subsequent calls reuse the cached token silently, auto-refreshing as long as the refresh token is valid.
 
-> **Heads up — OAuth needs a TTY.** The first-call browser flow requires a TTY-attached process (Claude Code, your shell, the canopy CLI). If you invoke an MCP method *headlessly* — e.g. `python -c "from canopy.mcp.server import issue_list_my_issues; issue_list_my_issues()"` from a script — and the cached token is missing or expired, the OAuth handshake will hang waiting for a redirect that can never arrive (test-findings F-4). For tests, exercise providers directly via their classes with `call_tool` mocked at the module boundary, or rely on a pre-authorised session.
+> **Heads up — OAuth needs a TTY.** The first-call browser flow requires a TTY-attached process (Claude Code, your shell, the canopy CLI). If you invoke an MCP method *headlessly* and the cached token is missing or expired, the OAuth handshake will hang waiting for a redirect that can never arrive. For tests, exercise providers directly via their classes with `call_tool` mocked at the module boundary, or rely on a pre-authorised session.
 
 For HTTP servers that use header auth instead of OAuth:
 
@@ -191,20 +143,23 @@ For HTTP servers that use header auth instead of OAuth:
 
 ### gh CLI fallback for GitHub
 
-If no `github` MCP server is configured, canopy falls back to the user's local `gh` CLI for GitHub operations. Same return shapes either way; calling code doesn't branch.
+If no `github` MCP server is configured, canopy falls back to the user's local `gh` CLI for GitHub operations (`integrations/github.py`). Same return shapes either way; calling code doesn't branch.
 
-If neither is available:
+If neither is available, canopy raises `BlockerError(code='github_not_configured')` with a platform-aware install hint:
 
 ```
 github_not_configured
-  Install + auth gh CLI:  brew install gh && gh auth login   (macOS)
+  Install + auth gh CLI:  brew install gh && gh auth login          (macOS)
+                          winget install --id GitHub.cli && gh auth login   (Windows)
                           (platform-aware install hint per OS)
   Or configure github MCP in .canopy/mcps.json
 ```
 
+(GitHub reads themselves are now management-side / CLI `--json`; the fallback infra is shared.)
+
 ## Skill (using-canopy)
 
-The MCP server makes tools available; the [`using-canopy`](../src/canopy/agent_setup/skill.md) skill teaches the agent *when* to prefer them. Without the skill, agents default to raw `Bash + git + gh` (training data).
+The MCP server makes the 15 tools available; the [`using-canopy`](../src/canopy/agent_setup/skills/using-canopy/SKILL.md) skill teaches the agent *when* to prefer them. Without the skill, agents default to raw `Bash + git + gh` (training data).
 
 Installed by `canopy init` (or standalone via `canopy setup-agent`) at `~/.claude/skills/using-canopy/SKILL.md`. Loads in any new Claude Code session targeting a workspace where canopy MCP is registered.
 
@@ -212,6 +167,9 @@ See [agents.md](agents.md) for the full integration story.
 
 ## Architectural rules
 
-- Canopy never imports external APIs directly. Linear, GitHub, etc. all flow through MCP (or `gh` CLI fallback for GitHub).
-- The MCP server (`canopy.mcp.server`) is a thin wrapper. Business logic lives in `canopy.actions.*`, `canopy.features.*`, `canopy.git.*`. Adding a tool = registering an existing function under `@mcp.tool()`.
-- Token storage is opt-in per server (`oauth: true` enables `~/.canopy/mcp-tokens/`); stdio servers carry credentials in `env`.
+- **Same JSON shape across surfaces.** CLI, MCP, and any GUI share one JSON contract per operation. `--json` on the CLI *is* the dashboard contract; the MCP tool returns the same shape.
+- **Actions return structured errors.** `BlockerError(code, what, expected, actual, fix_actions, details)`. The CLI renders via `cli/render.py`; MCP returns `to_dict()`. Same shape, two consumers.
+- **The MCP server is a thin wrapper.** `canopy.mcp.server` holds no business logic — it lives in `canopy.actions.*`, `canopy.features.*`, `canopy.git.*`. Adding a tool = registering an existing function under `@mcp.tool()`.
+- **Agent-core imports nothing from `canopy.management`.** `actions/`, `features/`, and `agent/` must never import the management surface. This boundary is enforced statically by `tests/test_import_boundary.py` (a source scan that catches lazy/function-local imports too).
+- **Canopy never imports external APIs directly.** Linear, GitHub, etc. all flow through MCP (or the `gh` CLI fallback for GitHub).
+- **Token storage is opt-in per server.** `oauth: true` enables `~/.canopy/mcp-tokens/`; stdio servers carry credentials in `env`.

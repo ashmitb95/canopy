@@ -1,4 +1,4 @@
-"""Tests for canopy.actions.bot_status — per-feature bot-comment rollup (M3)."""
+"""Tests for canopy.management.bot_status — per-feature bot-comment rollup (M3)."""
 from __future__ import annotations
 
 import json
@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from canopy.actions.bot_resolutions import record_resolution
-from canopy.actions.bot_status import bot_comments_status
+from canopy.management.bot_resolutions import record_resolution
+from canopy.management.bot_status import bot_comments_status
 from canopy.actions.errors import BlockerError
 from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
@@ -59,9 +59,9 @@ def test_status_empty_when_no_pr_no_resolutions(workspace_with_feature):
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=None), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([], 0)):
         result = bot_comments_status(ws, feature="auth-flow")
 
@@ -78,9 +78,9 @@ def test_status_all_unresolved(workspace_with_feature):
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_bot_comment(1), _bot_comment(2)], 0)):
         result = bot_comments_status(ws, feature="auth-flow")
 
@@ -106,9 +106,9 @@ def test_status_mixed_resolved_unresolved(workspace_with_feature):
         comment_url="https://github.com/o/r/pull/1#discussion_r1",
     )
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_bot_comment(2)], 0)):
         result = bot_comments_status(ws, feature="auth-flow")
 
@@ -137,9 +137,9 @@ def test_status_all_resolved_when_resolutions_match_open_threads(workspace_with_
     )
 
     # Live API returns the same comment (still on the PR), but we've recorded it.
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_bot_comment(42)], 0)):
         result = bot_comments_status(ws, feature="auth-flow")
 

@@ -1,4 +1,4 @@
-"""Tests for canopy.actions.review_filter — temporal classification.
+"""Tests for canopy.management.review_filter — temporal classification.
 
 Reproduces the four real-PR cases from the user's research doc to anchor
 the validation:
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from canopy.actions.review_filter import classify_threads
+from canopy.management.review_filter import classify_threads
 
 
 def _git(args, cwd):

@@ -20,7 +20,7 @@ from typing import Any
 from ..git import repo as git
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
-from .aliases import resolve_pr_targets
+from ..actions.aliases import resolve_pr_targets
 
 
 def draft_replies(

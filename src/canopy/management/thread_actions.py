@@ -7,7 +7,7 @@ Each wrapper calls the GitHub integration and records the event locally in
 from __future__ import annotations
 
 from ..workspace.workspace import Workspace
-from .errors import ActionError, BlockerError
+from ..actions.errors import ActionError, BlockerError
 from . import thread_resolutions as tr
 
 

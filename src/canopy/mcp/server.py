@@ -200,7 +200,7 @@ def feature_state(feature: str) -> dict:
     preflight result into a single state + ordered next_actions list.
     Same logic the dashboard CTAs and the agent both consume.
     """
-    from ..actions.feature_state import feature_state as _impl
+    from ..management.feature_state import feature_state as _impl
     ws = _get_workspace()
     return _impl(ws, feature)
 
@@ -220,7 +220,7 @@ def triage(author: str = "@me", repos: list[str] | None = None) -> dict:
     The agent's morning daily-loop entry point. `author='@me'` filters
     to the authenticated user's PRs (gh CLI shorthand).
     """
-    from ..actions.triage import triage as _impl
+    from ..management.triage import triage as _impl
     ws = _get_workspace()
     return _impl(ws, author=author, repos=repos)
 
@@ -392,7 +392,7 @@ def bot_comments_status(feature: str | None = None) -> dict:
     ``.canopy/state/bot_resolutions.json`` log written by
     ``commit --address``.
     """
-    from ..actions.bot_status import bot_comments_status as _impl
+    from ..management.bot_status import bot_comments_status as _impl
     from ..actions.errors import ActionError
     ws = _get_workspace()
     try:
@@ -434,7 +434,7 @@ def historian_decide(feature: str | None = None,
     with the same title within a session is a no-op (the hybrid Stop-hook
     backup mechanism relies on this).
     """
-    from ..actions import historian
+    from ..management import historian
     from ..actions.errors import ActionError
     try:
         root, name = _historian_feature(feature)
@@ -451,7 +451,7 @@ def historian_decide(feature: str | None = None,
 @mcp.tool()
 def historian_pause(feature: str | None = None, reason: str = "") -> dict:
     """Record a pause / blocker for the feature (M4)."""
-    from ..actions import historian
+    from ..management import historian
     from ..actions.errors import ActionError
     try:
         root, name = _historian_feature(feature)
@@ -464,7 +464,7 @@ def historian_pause(feature: str | None = None, reason: str = "") -> dict:
 def historian_defer_comment(feature: str | None = None,
                             comment_id: str = "", reason: str = "") -> dict:
     """Mark a review comment as intentionally deferred (M4)."""
-    from ..actions import historian
+    from ..management import historian
     from ..actions.errors import ActionError
     try:
         root, name = _historian_feature(feature)
@@ -482,7 +482,7 @@ def feature_memory(feature: str | None = None) -> dict:
     Returns ``{feature, memory: <markdown or "">}`` — empty string when
     no memory has been recorded yet.
     """
-    from ..actions import historian
+    from ..management import historian
     from ..actions.errors import ActionError
     try:
         root, name = _historian_feature(feature)
@@ -501,7 +501,7 @@ def historian_compact(feature: str | None = None,
     pass can replace this with summarized recaps; the storage shape is
     forward-compatible.
     """
-    from ..actions import historian
+    from ..management import historian
     from ..actions.errors import ActionError
     try:
         root, name = _historian_feature(feature)
@@ -586,7 +586,7 @@ def linear_get_issue(alias: str) -> dict:
     """Deprecated. Use ``issue_get`` instead.
 
     Provider-agnostic alias surviving from the pre-M5 era. Forwards to
-    the configured issue provider via ``actions.reads.linear_get_issue``;
+    the configured issue provider via ``management.reads.linear_get_issue``;
     same return shape (``{alias, issue_id, title, state, url, description, raw}``).
     Will be removed in a future release.
 
@@ -594,7 +594,7 @@ def linear_get_issue(alias: str) -> dict:
       - Provider-native issue ID (Linear ``"SIN-7"``, GH ``"#142"``)
       - Feature alias whose lane has a linked issue
     """
-    from ..actions.reads import linear_get_issue as _impl
+    from ..management.reads import linear_get_issue as _impl
     ws = _get_workspace()
     return _impl(ws, alias)
 
@@ -608,7 +608,7 @@ def github_get_pr(alias: str) -> dict:
       - <repo>#<pr_number> (e.g. 'api#142') -> specific PR
       - GitHub PR URL -> specific PR
     """
-    from ..actions.reads import github_get_pr as _impl
+    from ..management.reads import github_get_pr as _impl
     ws = _get_workspace()
     return _impl(ws, alias)
 
@@ -623,7 +623,7 @@ def github_get_branch(alias: str, repo: str | None = None) -> dict:
 
     Pass `repo` to filter feature-alias results to one repo.
     """
-    from ..actions.reads import github_get_branch as _impl
+    from ..management.reads import github_get_branch as _impl
     ws = _get_workspace()
     return _impl(ws, alias, repo=repo)
 
@@ -639,7 +639,7 @@ def github_get_pr_comments(alias: str) -> dict:
     Bot threads are kept; the temporal classifier handles staleness regardless
     of author.
     """
-    from ..actions.reads import github_get_pr_comments as _impl
+    from ..management.reads import github_get_pr_comments as _impl
     ws = _get_workspace()
     return _impl(ws, alias)
 
@@ -766,7 +766,7 @@ def ship(
         dry_run: enumerate without firing pushes/opens.
         base: override base branch for every repo.
     """
-    from ..actions.ship import ship as ship_impl
+    from ..management.ship import ship as ship_impl
 
     ws = _get_workspace()
     return ship_impl(
@@ -790,7 +790,7 @@ def draft_replies(alias: str, include_likely_resolved: bool = False) -> dict:
             ``likely_resolved`` set (weaker signal — surfaced as
             ``confidence: low``).
     """
-    from ..actions.draft_replies import draft_replies as draft_impl
+    from ..management.draft_replies import draft_replies as draft_impl
 
     ws = _get_workspace()
     return draft_impl(ws, alias, include_likely_resolved=include_likely_resolved)
@@ -822,7 +822,7 @@ def conflicts(
             because it re-runs ``git diff --unified=0`` per repo, but
             lets ``medium`` accurately mean "same file, disjoint lines."
     """
-    from ..actions.conflicts import find_conflicts
+    from ..management.conflicts import find_conflicts
 
     ws = _get_workspace()
     return find_conflicts(
@@ -849,7 +849,7 @@ def reply_to_thread(
         resolve_after: If True, resolve the thread after posting the reply
             and record the resolution in the canopy log.
     """
-    from ..actions.thread_actions import reply_to_thread as _impl
+    from ..management.thread_actions import reply_to_thread as _impl
     from ..actions.errors import ActionError
 
     ws = _get_workspace()
@@ -878,7 +878,7 @@ def resolve_thread(thread_id: str, feature: str | None = None) -> dict:
         feature: Feature to attribute the resolution to. Defaults to the
             canonical feature if not supplied.
     """
-    from ..actions.thread_actions import resolve_thread as _impl
+    from ..management.thread_actions import resolve_thread as _impl
     from ..actions.errors import ActionError
 
     ws = _get_workspace()
@@ -912,7 +912,7 @@ def feature_resume(alias: str) -> dict:
     Args:
         alias: Feature name, Linear ID, PR URL, or slot ID.
     """
-    from ..actions.resume import feature_resume as _impl
+    from ..management.resume import feature_resume as _impl
     from ..actions.errors import ActionError
 
     ws = _get_workspace()
@@ -1774,7 +1774,7 @@ def slots(rich: bool = True) -> dict:
     if not rich:
         state = slots_mod.read_state(workspace)
         return state.to_dict() if state else {"canonical": None, "slots": {}}
-    from ..actions.slot_details import rich_slots
+    from ..management.slot_details import rich_slots
     return rich_slots(workspace)
 
 

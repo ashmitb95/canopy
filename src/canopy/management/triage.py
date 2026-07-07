@@ -18,9 +18,9 @@ from typing import Any
 
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
-from . import slots as slots_mod
-from .aliases import _resolve_owner_slug
-from .pr_map import _fetch_open_prs, _group_by_feature, _select_repos
+from ..actions import slots as slots_mod
+from ..actions.aliases import _resolve_owner_slug
+from ..actions.pr_map import _fetch_open_prs, _group_by_feature, _select_repos
 from .review_filter import classify_threads
 
 

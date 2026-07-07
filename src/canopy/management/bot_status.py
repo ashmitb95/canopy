@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import slots as slots_mod
-from .aliases import repos_for_feature, resolve_feature
+from ..actions import slots as slots_mod
+from ..actions.aliases import repos_for_feature, resolve_feature
 from .bot_resolutions import resolutions_for_feature
-from .errors import BlockerError, FixAction
+from ..actions.errors import BlockerError, FixAction
 from .feature_state import _per_repo_facts, resolve_repo_paths
 from ..workspace.workspace import Workspace
 

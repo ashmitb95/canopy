@@ -28,13 +28,13 @@ from typing import Any
 from ..git import repo as git
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
-from .aliases import (
+from ..actions.aliases import (
     repos_for_feature, resolve_feature, _resolve_owner_slug,
 )
-from .augments import bot_authors
+from ..actions.augments import bot_authors
 from .bot_resolutions import resolutions_for_feature
-from .preflight_state import is_fresh
-from .repo_paths import resolve_repo_paths
+from ..actions.preflight_state import is_fresh
+from ..actions.repo_paths import resolve_repo_paths
 from .review_filter import classify_threads
 
 

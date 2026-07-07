@@ -161,7 +161,7 @@ def review_comments(workspace: Workspace, name: str) -> dict:
         PullRequestNotFoundError,
         GitHubNotConfiguredError,
     )
-    from ..actions.review_filter import classify_threads
+    from .review_filter import classify_threads
 
     coord = FeatureCoordinator(workspace)
     name = coord._resolve_name(name)

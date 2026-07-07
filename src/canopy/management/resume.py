@@ -23,9 +23,9 @@ from typing import Any
 
 from ..workspace.workspace import Workspace
 from . import last_visit as lv
-from . import slots as slots_mod
-from .aliases import resolve_feature
-from .switch import switch
+from ..actions import slots as slots_mod
+from ..actions.aliases import resolve_feature
+from ..actions.switch import switch
 
 
 _UNSET = object()  # sentinel to distinguish "not passed" from "explicitly None"
@@ -223,7 +223,7 @@ def _commits_since(workspace: Workspace, feature: str, since_iso: str) -> dict[s
     git failures) silently default to empty list; exceptions don't crash the brief.
     """
     from ..git import repo as git
-    from .aliases import repos_for_feature
+    from ..actions.aliases import repos_for_feature
 
     out: dict[str, list] = {}
     repos_map = repos_for_feature(workspace, feature)
@@ -251,7 +251,7 @@ def _pr_coords_per_repo(
     """
     from ..git import repo as git
     from ..integrations.github import _extract_owner_repo, find_pull_request
-    from .aliases import repos_for_feature
+    from ..actions.aliases import repos_for_feature
 
     repos_map = repos_for_feature(workspace, feature)
     out: dict[str, dict | None] = {}
@@ -377,7 +377,7 @@ def _populate_current(
     from . import feature_state as fs
     from . import bot_status as bs
     from ..git import repo as git
-    from .aliases import repos_for_feature
+    from ..actions.aliases import repos_for_feature
 
     # feature_state + ci_summary_per_repo ─────────────────────────────────
     try:

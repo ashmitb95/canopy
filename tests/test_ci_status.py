@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from canopy.actions.feature_state import _aggregate_ci, _decide_state
+from canopy.management.feature_state import _aggregate_ci, _decide_state
 from canopy.integrations.github import _rollup_checks
 
 

@@ -16,11 +16,11 @@ from ..providers import (
     get_issue_provider,
 )
 from ..workspace.workspace import Workspace
-from .aliases import (
+from ..actions.aliases import (
     BranchTarget, PRTarget,
     resolve_branch_targets, resolve_issue_id, resolve_linear_id, resolve_pr_targets,
 )
-from .errors import BlockerError, FixAction
+from ..actions.errors import BlockerError, FixAction
 
 
 def issue_get(workspace: Workspace, alias: str) -> dict:
@@ -268,7 +268,7 @@ def _historian_record_comments_read(
     resolves cleanly to a feature in features.json.
     """
     try:
-        from .aliases import resolve_feature
+        from ..actions.aliases import resolve_feature
         from . import historian
 
         feature_name = resolve_feature(workspace, alias)

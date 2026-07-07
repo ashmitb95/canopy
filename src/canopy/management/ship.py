@@ -25,11 +25,11 @@ from typing import Any
 from ..git import repo as git
 from ..integrations import github as gh
 from ..workspace.workspace import Workspace
-from . import slots as slots_mod
-from .aliases import _resolve_owner_slug, repos_for_feature, resolve_feature
-from .errors import BlockerError, FixAction
+from ..actions import slots as slots_mod
+from ..actions.aliases import _resolve_owner_slug, repos_for_feature, resolve_feature
+from ..actions.errors import BlockerError, FixAction
 from .feature_state import resolve_repo_paths
-from .push import push as push_impl
+from ..actions.push import push as push_impl
 
 
 def ship(

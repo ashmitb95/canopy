@@ -19,8 +19,8 @@ from ..git import repo as git
 from ..workspace.workspace import Workspace
 from . import bot_status
 from . import feature_state as fs
-from . import slots as slots_mod
-from .aliases import repos_for_feature
+from ..actions import slots as slots_mod
+from ..actions.aliases import repos_for_feature
 
 
 def rich_slots(workspace: Workspace) -> dict[str, Any]:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from canopy.actions import thread_resolutions as tr
+from canopy.management import thread_resolutions as tr
 from canopy.actions.errors import BlockerError
 from canopy.workspace.config import load_config
 from canopy.workspace.workspace import Workspace
@@ -95,7 +95,7 @@ def _make_workspace(canopy_toml):
 
 def test_resolve_thread_writes_log(canopy_toml, monkeypatch):
     """resolve_thread calls gh integration and writes thread_resolutions.json."""
-    from canopy.actions import thread_actions
+    from canopy.management import thread_actions
 
     gh_result = {"thread_id": "PRRT_abc", "is_resolved": True}
     monkeypatch.setattr(
@@ -121,7 +121,7 @@ def test_resolve_thread_writes_log(canopy_toml, monkeypatch):
 
 def test_resolve_thread_idempotent(canopy_toml, monkeypatch):
     """Calling resolve_thread twice is safe (last-write-wins, no crash)."""
-    from canopy.actions import thread_actions
+    from canopy.management import thread_actions
 
     monkeypatch.setattr(
         "canopy.integrations.github.resolve_thread",
@@ -139,7 +139,7 @@ def test_resolve_thread_idempotent(canopy_toml, monkeypatch):
 
 def test_resolve_thread_invalid_id(canopy_toml):
     """thread_id that doesn't start with PRRT_ raises BlockerError."""
-    from canopy.actions import thread_actions
+    from canopy.management import thread_actions
 
     ws = _make_workspace(canopy_toml)
     with pytest.raises(BlockerError) as exc_info:
@@ -152,7 +152,7 @@ def test_resolve_thread_invalid_id(canopy_toml):
 
 def test_reply_to_thread_invalid_id(canopy_toml):
     """reply_to_thread also validates the thread_id."""
-    from canopy.actions import thread_actions
+    from canopy.management import thread_actions
 
     ws = _make_workspace(canopy_toml)
     with pytest.raises(BlockerError) as exc_info:
@@ -163,7 +163,7 @@ def test_reply_to_thread_invalid_id(canopy_toml):
 
 def test_reply_to_thread_posts_without_resolve(canopy_toml, monkeypatch):
     """reply_to_thread posts a comment but does not resolve by default."""
-    from canopy.actions import thread_actions
+    from canopy.management import thread_actions
 
     posted_result = {"comment_id": "IC_xyz", "url": "https://github.com/..."}
     monkeypatch.setattr(
@@ -183,7 +183,7 @@ def test_reply_to_thread_posts_without_resolve(canopy_toml, monkeypatch):
 
 def test_reply_to_thread_resolve_after(canopy_toml, monkeypatch):
     """reply_to_thread with resolve_after=True also resolves and logs."""
-    from canopy.actions import thread_actions
+    from canopy.management import thread_actions
 
     monkeypatch.setattr(
         "canopy.integrations.github.reply_to_thread",
@@ -210,7 +210,7 @@ def test_reply_to_thread_resolve_after(canopy_toml, monkeypatch):
 
 def test_reply_to_thread_resolve_after_failure_keeps_posted(canopy_toml, monkeypatch):
     """When resolve fails after successful post, both states are reported."""
-    from canopy.actions import thread_actions
+    from canopy.management import thread_actions
     from canopy.actions.errors import BlockerError
 
     monkeypatch.setattr(

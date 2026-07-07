@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from canopy.actions.draft_replies import (
+from canopy.management.draft_replies import (
     classify_comment, render_reply, _has_keyword_overlap,
 )
 from canopy.git import repo as git

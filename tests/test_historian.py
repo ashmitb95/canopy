@@ -1,4 +1,4 @@
-"""Tests for canopy.actions.historian — cross-session feature memory (M4)."""
+"""Tests for canopy.management.historian — cross-session feature memory (M4)."""
 from __future__ import annotations
 
 import json
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from canopy.actions import historian
-from canopy.actions.historian import (
+from canopy.management import historian
+from canopy.management.historian import (
     compact, format_for_agent, read, record_classifier_resolved,
     record_comment_deferred, record_comment_read, record_comment_resolved,
     record_decision, record_event, record_pause, record_pr_context,
@@ -254,7 +254,7 @@ def test_format_for_agent_since_filters_by_timestamp(tmp_path):
                     at="2026-05-25T12:00:00Z")
 
     # Import format_for_agent_since
-    from canopy.actions.historian import format_for_agent_since
+    from canopy.management.historian import format_for_agent_since
 
     # Filter with a threshold between old and new.
     md = format_for_agent_since(tmp_path, "auth-flow", "2026-05-01T00:00:00Z")
@@ -268,7 +268,7 @@ def test_format_for_agent_since_filters_by_timestamp(tmp_path):
 
 def test_format_for_agent_since_empty_when_all_older(tmp_path):
     """Returns empty string when no entry beats the since_iso threshold."""
-    from canopy.actions.historian import format_for_agent_since
+    from canopy.management.historian import format_for_agent_since
 
     record_event(tmp_path, "auth-flow", summary="ancient",
                  at="2026-01-01T00:00:00Z")
@@ -281,7 +281,7 @@ def test_format_for_agent_since_empty_when_all_older(tmp_path):
 
 def test_format_for_agent_since_empty_when_no_feature(tmp_path):
     """Returns empty string when the feature has no history."""
-    from canopy.actions.historian import format_for_agent_since
+    from canopy.management.historian import format_for_agent_since
 
     md = format_for_agent_since(tmp_path, "ghost-feature", "2026-05-01T00:00:00Z")
     assert md == ""
@@ -289,7 +289,7 @@ def test_format_for_agent_since_empty_when_no_feature(tmp_path):
 
 def test_format_for_agent_since_includes_section_headers(tmp_path):
     """Output is properly structured markdown with section headers."""
-    from canopy.actions.historian import format_for_agent_since
+    from canopy.management.historian import format_for_agent_since
 
     record_decision(tmp_path, "feat-1", title="library choice",
                     at="2026-05-26T10:00:00Z")
@@ -307,7 +307,7 @@ def test_format_for_agent_since_includes_section_headers(tmp_path):
 
 def test_format_for_agent_since_boundary_exact_match(tmp_path):
     """Entry at exactly since_iso is excluded (> comparison, not >=)."""
-    from canopy.actions.historian import format_for_agent_since
+    from canopy.management.historian import format_for_agent_since
 
     record_event(tmp_path, "feat-1", summary="at boundary",
                  at="2026-05-26T12:00:00Z")

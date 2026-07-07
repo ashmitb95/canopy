@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from canopy.actions.ship import (
+from canopy.management.ship import (
     _ahead_count, _classify_existing_pr, _format_body_initial,
     _format_body_with_siblings, _format_title, _position,
 )
@@ -93,7 +93,7 @@ def test_position_returns_one_based_index():
 def test_classify_existing_pr_up_to_date_when_shas_match(tmp_path, monkeypatch):
     fake_path = tmp_path
     monkeypatch.setattr(
-        "canopy.actions.ship.git.head_sha",
+        "canopy.management.ship.git.head_sha",
         lambda _: "abc123",
     )
     pr = {"number": 5, "url": "u", "state": "open", "head_sha": "abc123"}
@@ -103,7 +103,7 @@ def test_classify_existing_pr_up_to_date_when_shas_match(tmp_path, monkeypatch):
 
 def test_classify_existing_pr_diverged_when_shas_differ(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "canopy.actions.ship.git.head_sha",
+        "canopy.management.ship.git.head_sha",
         lambda _: "deadbeef",
     )
     pr = {"number": 5, "url": "u", "state": "open", "head_sha": "abc123"}

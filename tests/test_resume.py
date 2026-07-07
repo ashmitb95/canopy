@@ -20,9 +20,9 @@ import time
 
 import pytest
 
-from canopy.actions import last_visit as lv
+from canopy.management import last_visit as lv
 from canopy.actions import slots as slots_mod
-from canopy.actions.resume import feature_resume
+from canopy.management.resume import feature_resume
 from canopy.workspace.config import load_config
 from canopy.workspace.workspace import Workspace
 
@@ -168,7 +168,7 @@ class TestSwitchBehavior:
             return {"feature": feature, "switch_performed": True}
 
         # Patch the module-level `switch` name in resume so feature_resume uses fake.
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
         monkeypatch.setattr(resume_mod, "switch", fake_switch)
 
         brief = feature_resume(ws, "auth-flow")
@@ -198,7 +198,7 @@ class TestSwitchBehavior:
             # Real switch no longer bumps last_visit (phase 5 strip).
             return {"feature": feature, "switch_performed": True}
 
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
         monkeypatch.setattr(resume_mod, "switch", fake_switch)
         # Report NOT canonical so the switch branch fires.
         monkeypatch.setattr(resume_mod.slots_mod, "read_state", lambda ws: None)
@@ -415,7 +415,7 @@ class TestThreadDeltaSinceLastVisit:
 
     def _patch_pr_coords(self, monkeypatch):
         """Patch _pr_coords_per_repo to return one fake repo+PR."""
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
         monkeypatch.setattr(
             resume_mod,
             "_pr_coords_per_repo",
@@ -449,7 +449,7 @@ class TestThreadDeltaSinceLastVisit:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """A resolved thread whose thread_id is in thread_resolutions.json gets by_canopy=True."""
-        from canopy.actions import thread_resolutions as tr
+        from canopy.management import thread_resolutions as tr
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -531,7 +531,7 @@ class TestThreadDeltaSinceLastVisit:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """bot_resolutions entries: only matching feature AND addressed_at > anchor appear."""
-        from canopy.actions.bot_resolutions import record_resolution
+        from canopy.management.bot_resolutions import record_resolution
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -585,7 +585,7 @@ class TestThreadDeltaSinceLastVisit:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """When _pr_coords_per_repo returns {}, all three thread fields are empty arrays."""
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -646,7 +646,7 @@ class TestCurrentStatePopulation:
             }
 
         monkeypatch.setattr(
-            "canopy.actions.feature_state.feature_state",
+            "canopy.management.feature_state.feature_state",
             fake_feature_state,
         )
 
@@ -687,7 +687,7 @@ class TestCurrentStatePopulation:
 
         # Suppress feature_state (avoids GH calls) — we only need branch_position.
         monkeypatch.setattr(
-            "canopy.actions.feature_state.feature_state",
+            "canopy.management.feature_state.feature_state",
             lambda ws, f: {},
         )
 
@@ -717,7 +717,7 @@ class TestCurrentStatePopulation:
             raise RuntimeError("simulated failure")
 
         monkeypatch.setattr(
-            "canopy.actions.feature_state.feature_state",
+            "canopy.management.feature_state.feature_state",
             boom,
         )
 
@@ -748,7 +748,7 @@ class TestCurrentStatePopulation:
             }
 
         monkeypatch.setattr(
-            "canopy.actions.bot_status.bot_comments_status",
+            "canopy.management.bot_status.bot_comments_status",
             fake_bot_comments_status,
         )
 
@@ -768,7 +768,7 @@ class TestCurrentStatePopulation:
             raise RuntimeError("simulated bot_status failure")
 
         monkeypatch.setattr(
-            "canopy.actions.bot_status.bot_comments_status",
+            "canopy.management.bot_status.bot_comments_status",
             boom,
         )
 
@@ -814,7 +814,7 @@ class TestDraftRepliesSummary:
             }
 
         monkeypatch.setattr(
-            "canopy.actions.draft_replies.draft_replies",
+            "canopy.management.draft_replies.draft_replies",
             fake_drafts,
         )
 
@@ -848,7 +848,7 @@ class TestDraftRepliesSummary:
             }
 
         monkeypatch.setattr(
-            "canopy.actions.draft_replies.draft_replies",
+            "canopy.management.draft_replies.draft_replies",
             fake_drafts,
         )
 
@@ -891,7 +891,7 @@ class TestDraftRepliesSummary:
             }
 
         monkeypatch.setattr(
-            "canopy.actions.draft_replies.draft_replies",
+            "canopy.management.draft_replies.draft_replies",
             fake_drafts,
         )
 
@@ -918,7 +918,7 @@ class TestDraftRepliesSummary:
             raise RuntimeError("simulated draft_replies failure")
 
         monkeypatch.setattr(
-            "canopy.actions.draft_replies.draft_replies",
+            "canopy.management.draft_replies.draft_replies",
             boom,
         )
 
@@ -940,7 +940,7 @@ class TestLinearFromLane:
 
     def test_resume_populates_linear_from_lane(self, canopy_toml_for_workspace, monkeypatch):
         """Brief surfaces lane.linear_issue and lane.linear_url."""
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
         from canopy.features.coordinator import FeatureLane
 
         ws = _load_workspace(canopy_toml_for_workspace)
@@ -1007,7 +1007,7 @@ class TestOpenThreadCount:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """open_thread_count sums unresolved threads across repos."""
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1033,7 +1033,7 @@ class TestOpenThreadCount:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """When all PR coords are None, open_thread_count is 0."""
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1051,7 +1051,7 @@ class TestOpenThreadCount:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """If _pr_coords_per_repo raises, open_thread_count defaults to 0."""
-        import canopy.actions.resume as resume_mod
+        import canopy.management.resume as resume_mod
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1076,7 +1076,7 @@ class TestHintCoverage:
         _make_canonical(ws, "auth-flow")
 
         monkeypatch.setattr(
-            "canopy.actions.feature_state.feature_state",
+            "canopy.management.feature_state.feature_state",
             lambda ws, f: {
                 "state": "awaiting_ci",
                 "summary": {
@@ -1163,7 +1163,7 @@ class TestPrCoordsPerRepo:
         self, canopy_toml_for_workspace
     ):
         """_pr_coords_per_repo returns repo -> None for unparseable (file://) remotes."""
-        from canopy.actions.resume import _pr_coords_per_repo
+        from canopy.management.resume import _pr_coords_per_repo
 
         ws = _load_workspace(canopy_toml_for_workspace)
         # The fixture uses file:// remotes which _extract_owner_repo cannot parse.
@@ -1184,7 +1184,7 @@ class TestFutureAnchor:
         self, canopy_toml_for_workspace
     ):
         """Anchor in the future → since_last_visit sections are empty, brief doesn't crash."""
-        from canopy.actions import last_visit as lv_mod
+        from canopy.management import last_visit as lv_mod
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1220,7 +1220,7 @@ class TestHistorianExcerpt:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """When historian has entries past last_visit, the brief carries the excerpt."""
-        from canopy.actions import historian
+        from canopy.management import historian
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1246,7 +1246,7 @@ class TestHistorianExcerpt:
             return original_fn(root, feature, since_iso)
 
         monkeypatch.setattr(
-            "canopy.actions.historian.format_for_agent_since",
+            "canopy.management.historian.format_for_agent_since",
             tracked_format,
         )
 
@@ -1265,7 +1265,7 @@ class TestHistorianExcerpt:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """On first visit (no prior anchor), historian_excerpt is '' (populator not called)."""
-        from canopy.actions import historian
+        from canopy.management import historian
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1286,7 +1286,7 @@ class TestHistorianExcerpt:
             return ""
 
         monkeypatch.setattr(
-            "canopy.actions.historian.format_for_agent_since",
+            "canopy.management.historian.format_for_agent_since",
             tracked_format,
         )
 
@@ -1316,7 +1316,7 @@ class TestHistorianExcerpt:
             raise RuntimeError("simulated historian failure")
 
         monkeypatch.setattr(
-            "canopy.actions.historian.format_for_agent_since",
+            "canopy.management.historian.format_for_agent_since",
             boom,
         )
 
@@ -1333,7 +1333,7 @@ class TestHistorianExcerpt:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """historian_excerpt includes only entries newer than last_visit."""
-        from canopy.actions import historian
+        from canopy.management import historian
         from datetime import datetime, timezone, timedelta
 
         ws = _load_workspace(canopy_toml_for_workspace)
@@ -1387,7 +1387,7 @@ class TestResumeSummary:
 
     def test_resume_summary_first_visit(self, canopy_toml_for_workspace):
         """No prior anchor → first_visit=True, all counts zero, degraded=False."""
-        from canopy.actions.resume import resume_summary
+        from canopy.management.resume import resume_summary
 
         ws = _load_workspace(canopy_toml_for_workspace)
         summary = resume_summary(ws, "auth-flow")
@@ -1407,7 +1407,7 @@ class TestResumeSummary:
 
     def test_resume_summary_with_prior_iso_explicit(self, canopy_toml_for_workspace):
         """When prior_iso is passed explicitly, diff anchors to it even if current anchor differs."""
-        from canopy.actions.resume import resume_summary
+        from canopy.management.resume import resume_summary
 
         ws = _load_workspace(canopy_toml_for_workspace)
         # Bump the live anchor.
@@ -1423,7 +1423,7 @@ class TestResumeSummary:
         self, canopy_toml_for_workspace
     ):
         """When prior_iso is omitted, falls back to the current live anchor."""
-        from canopy.actions.resume import resume_summary
+        from canopy.management.resume import resume_summary
 
         ws = _load_workspace(canopy_toml_for_workspace)
         ts = lv.mark_visited(ws, "auth-flow")
@@ -1437,7 +1437,7 @@ class TestResumeSummary:
         self, canopy_toml_for_workspace, monkeypatch
     ):
         """GH unreachable → degraded=True, thread counts zero."""
-        from canopy.actions.resume import resume_summary
+        from canopy.management.resume import resume_summary
 
         ws = _load_workspace(canopy_toml_for_workspace)
         lv.mark_visited(ws, "auth-flow")
@@ -1445,7 +1445,7 @@ class TestResumeSummary:
         def boom(*a, **k):
             raise RuntimeError("offline")
 
-        monkeypatch.setattr("canopy.actions.resume._threads_delta", boom)
+        monkeypatch.setattr("canopy.management.resume._threads_delta", boom)
 
         summary = resume_summary(ws, "auth-flow", prior_iso="2020-01-01T00:00:00Z")
 
@@ -1459,7 +1459,7 @@ class TestResumeSummary:
         """Commits on the feature branch after prior_iso appear in new_commit_count."""
         import os
         import subprocess
-        from canopy.actions.resume import resume_summary
+        from canopy.management.resume import resume_summary
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1494,8 +1494,8 @@ class TestResumeSummary:
         self, canopy_toml_for_workspace
     ):
         """memory_present=True when historian.format_for_agent returns non-empty."""
-        from canopy.actions import historian
-        from canopy.actions.resume import resume_summary
+        from canopy.management import historian
+        from canopy.management.resume import resume_summary
 
         ws = _load_workspace(canopy_toml_for_workspace)
         historian.record_event(
@@ -1512,7 +1512,7 @@ class TestResumeSummary:
         self, canopy_toml_for_workspace
     ):
         """memory_present=False when historian has no content for the feature."""
-        from canopy.actions.resume import resume_summary
+        from canopy.management.resume import resume_summary
 
         ws = _load_workspace(canopy_toml_for_workspace)
         # No historian entries written.
@@ -1567,7 +1567,7 @@ class TestResumeCLI:
         self, canopy_toml_for_workspace, monkeypatch, capsys
     ):
         """--reset-anchor drops the last_visit entry."""
-        from canopy.actions.last_visit import mark_visited, get_last_visit
+        from canopy.management.last_visit import mark_visited, get_last_visit
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1590,7 +1590,7 @@ class TestResumeCLI:
         import argparse
         import json as _json
 
-        from canopy.actions.last_visit import mark_visited
+        from canopy.management.last_visit import mark_visited
 
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
@@ -1611,14 +1611,14 @@ class TestThreadsAggregation:
 
     def test_resume_threads_new_aggregates_across_repos(self, canopy_toml_for_workspace, monkeypatch):
         """When both repos have new threads, all surface in threads_new with repo+pr_number."""
-        from canopy.actions.last_visit import mark_visited
-        from canopy.actions.resume import feature_resume
+        from canopy.management.last_visit import mark_visited
+        from canopy.management.resume import feature_resume
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
         mark_visited(ws, "auth-flow")
         import time; time.sleep(1.1)
 
-        monkeypatch.setattr("canopy.actions.resume._pr_coords_per_repo",
+        monkeypatch.setattr("canopy.management.resume._pr_coords_per_repo",
             lambda ws, f: {
                 "repo-a": {"owner": "o", "repo_slug": "a", "pr_number": 1},
                 "repo-b": {"owner": "o", "repo_slug": "b", "pr_number": 2},
@@ -1639,14 +1639,14 @@ class TestThreadsAggregation:
     def test_resume_unresolved_thread_with_stale_resolved_at_excluded(self, canopy_toml_for_workspace, monkeypatch):
         """A thread with is_resolved=False but stale resolved_at (from prior resolve+unresolve) is excluded
         from both threads_new (it's old) and threads_resolved_on_github (it's not resolved)."""
-        from canopy.actions.last_visit import mark_visited
-        from canopy.actions.resume import feature_resume
+        from canopy.management.last_visit import mark_visited
+        from canopy.management.resume import feature_resume
         ws = _load_workspace(canopy_toml_for_workspace)
         _make_canonical(ws, "auth-flow")
         mark_visited(ws, "auth-flow")
         import time; time.sleep(1.1)
 
-        monkeypatch.setattr("canopy.actions.resume._pr_coords_per_repo",
+        monkeypatch.setattr("canopy.management.resume._pr_coords_per_repo",
             lambda ws, f: {"repo-a": {"owner": "o", "repo_slug": "a", "pr_number": 1}})
 
         monkeypatch.setattr("canopy.integrations.github.list_review_threads",

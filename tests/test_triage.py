@@ -1,4 +1,4 @@
-"""Tests for canopy.actions.triage — daily entry-point query."""
+"""Tests for canopy.management.triage — daily entry-point query."""
 import json
 import subprocess
 from unittest.mock import patch
@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from canopy.actions.errors import BlockerError
-from canopy.actions.triage import triage
+from canopy.management.triage import triage
 from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
@@ -59,7 +59,7 @@ def test_no_prs_returns_empty(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     _set_remote(workspace_with_feature / "repo-b", "git@github.com:owner/repo-b.git")
-    with patch("canopy.actions.triage.gh.list_open_prs", return_value=[]):
+    with patch("canopy.management.triage.gh.list_open_prs", return_value=[]):
         result = triage(ws)
     assert result["features"] == []
 
@@ -84,8 +84,8 @@ def test_groups_multi_repo_feature_via_explicit_lane(workspace_with_feature):
             return [_pr(100, "auth-flow", decision="REVIEW_REQUIRED")]
         return [_pr(200, "auth-flow", decision="REVIEW_REQUIRED")]
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -109,8 +109,8 @@ def test_implicit_feature_when_branch_shared(workspace_with_feature):
             return [_pr(100, "SIN-3010")]
         return [_pr(200, "SIN-3010")]
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -131,8 +131,8 @@ def test_single_repo_pr_is_a_feature(workspace_with_feature):
             return [_pr(50, "SIN-3008")]
         return []
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -153,8 +153,8 @@ def test_changes_requested_outranks_review_required(workspace_with_feature):
             return [_pr(100, "feat-a", decision="CHANGES_REQUESTED")]
         return [_pr(200, "feat-b", decision="REVIEW_REQUIRED")]
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -175,8 +175,8 @@ def test_bot_actionable_promotes_to_review_required_with_bot(workspace_with_feat
         return []
 
     bot_comment = _comment(author="claude[bot]", author_type="Bot")
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([bot_comment], 0)):
         result = triage(ws)
 
@@ -194,8 +194,8 @@ def test_all_approved_priority(workspace_with_feature):
             return [_pr(100, "ready", decision="APPROVED")]
         return [_pr(200, "ready", decision="APPROVED")]
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -218,8 +218,8 @@ def test_features_ordered_by_priority(workspace_with_feature):
             ]
         return []
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -252,8 +252,8 @@ def test_per_repo_branches_map_groups_mismatched_branches(workspace_with_feature
             return [_pr(11, "sin-1003-fixes")]
         return [_pr(22, "SIN-1003-fixes-v2")]
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -289,8 +289,8 @@ def test_triage_marks_canonical_feature(workspace_with_feature):
     def _list(_root, _owner, slug, author=None, **kw):
         return [_pr(1, "auth-flow")]
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -338,8 +338,8 @@ def test_triage_marks_warm_feature_with_worktree_path(workspace_with_feature):
     def _list(_root, _owner, slug, author=None, **kw):
         return [_pr(1, "auth-flow")]    # only auth-flow has a PR
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 
@@ -367,8 +367,8 @@ def test_triage_marks_cold_feature_no_worktree(workspace_with_feature):
     def _list(_root, _owner, slug, author=None, **kw):
         return [_pr(1, "auth-flow")]
 
-    with patch("canopy.actions.triage.gh.list_open_prs", side_effect=_list), \
-         patch("canopy.actions.triage.gh.get_review_comments",
+    with patch("canopy.management.triage.gh.list_open_prs", side_effect=_list), \
+         patch("canopy.management.triage.gh.get_review_comments",
                return_value=([], 0)):
         result = triage(ws)
 

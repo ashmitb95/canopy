@@ -1,4 +1,4 @@
-"""Tests for canopy.actions.reads — alias-aware read primitives.
+"""Tests for canopy.management.reads — alias-aware read primitives.
 
 GitHub-side reads are mocked at the integrations.github layer; we're
 testing the read-tool composition + alias resolution + return shape,
@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from canopy.actions.errors import BlockerError
-from canopy.actions.reads import (
+from canopy.management.reads import (
     github_get_branch, github_get_pr, github_get_pr_comments,
     linear_get_issue,
 )
@@ -65,7 +65,7 @@ def test_linear_get_issue_by_id_directly(workspace_with_feature):
         url="https://linear.app/x/issue/SIN-412",
         raw={"state": {"name": "Active"}},
     )
-    with patch("canopy.actions.reads.get_issue_provider", return_value=_fake_provider(fake)):
+    with patch("canopy.management.reads.get_issue_provider", return_value=_fake_provider(fake)):
         result = linear_get_issue(ws, "SIN-412")
     assert result["alias"] == "SIN-412"
     assert result["issue_id"] == "SIN-412"
@@ -89,7 +89,7 @@ def test_linear_get_issue_via_feature_alias(workspace_with_feature):
         raw={"state": {"name": "Active"}},
     )
     provider = _fake_provider(fake)
-    with patch("canopy.actions.reads.get_issue_provider", return_value=provider):
+    with patch("canopy.management.reads.get_issue_provider", return_value=provider):
         result = linear_get_issue(ws, "auth-flow")
     provider.get_issue.assert_called_once_with("SIN-412")  # resolved alias
     assert result["issue_id"] == "SIN-412"
@@ -112,7 +112,7 @@ def test_issue_get_returns_canonical_shape(workspace_with_feature):
     """F-6: new CLI/action surface returns Issue.to_dict() directly,
     with canonical state mapping ('todo'/'in_progress'/'done'/'cancelled')
     rather than raw provider strings."""
-    from canopy.actions.reads import issue_get
+    from canopy.management.reads import issue_get
     from canopy.providers.types import Issue
     ws = _make_workspace(workspace_with_feature)
     fake = Issue(
@@ -123,7 +123,7 @@ def test_issue_get_returns_canonical_shape(workspace_with_feature):
         labels=("bug", "p1"),
         raw={"state": {"name": "Active"}},   # raw "Active", canonical "in_progress"
     )
-    with patch("canopy.actions.reads.get_issue_provider", return_value=_fake_provider(fake)):
+    with patch("canopy.management.reads.get_issue_provider", return_value=_fake_provider(fake)):
         result = issue_get(ws, "SIN-412")
     # Canonical fields
     assert result["identifier"] == "SIN-412"
@@ -136,13 +136,13 @@ def test_issue_get_returns_canonical_shape(workspace_with_feature):
 
 
 def test_issue_get_propagates_provider_not_configured(workspace_with_feature):
-    from canopy.actions.reads import issue_get
+    from canopy.management.reads import issue_get
     from canopy.providers.types import ProviderNotConfigured
     from unittest.mock import MagicMock
     ws = _make_workspace(workspace_with_feature)
     provider = MagicMock()
     provider.get_issue.side_effect = ProviderNotConfigured("nope")
-    with patch("canopy.actions.reads.get_issue_provider", return_value=provider):
+    with patch("canopy.management.reads.get_issue_provider", return_value=provider):
         with pytest.raises(BlockerError) as exc_info:
             issue_get(ws, "SIN-412")
     assert exc_info.value.code == "issue_provider_not_configured"
@@ -159,7 +159,7 @@ def test_github_get_pr_specific_form(workspace_with_feature):
         "body": "", "review_decision": "CHANGES_REQUESTED",
         "mergeable": "MERGEABLE", "draft": False,
     }
-    with patch("canopy.actions.reads.gh.get_pull_request_by_number",
+    with patch("canopy.management.reads.gh.get_pull_request_by_number",
                return_value=fake_pr):
         result = github_get_pr(ws, "repo-a#1287")
     assert "repo-a" in result["repos"]
@@ -171,7 +171,7 @@ def test_github_get_pr_specific_form(workspace_with_feature):
 def test_github_get_pr_url_form(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
-    with patch("canopy.actions.reads.gh.get_pull_request_by_number",
+    with patch("canopy.management.reads.gh.get_pull_request_by_number",
                return_value={"number": 99, "title": "x", "url": "u",
                              "state": "open", "head_branch": "b", "base_branch": "dev",
                              "body": "", "review_decision": "", "mergeable": "", "draft": False}):
@@ -197,7 +197,7 @@ def test_github_get_pr_via_feature_alias_multi_repo(workspace_with_feature):
     # not review_status, since it operates on per-repo expected branches.
     with patch("canopy.integrations.github.find_pull_request",
                return_value=fake_pr_for_alias) as _, \
-         patch("canopy.actions.reads.gh.get_pull_request_by_number",
+         patch("canopy.management.reads.gh.get_pull_request_by_number",
                return_value=fake_pr_for_alias):
         result = github_get_pr(ws, "auth-flow")
 
@@ -207,7 +207,7 @@ def test_github_get_pr_via_feature_alias_multi_repo(workspace_with_feature):
 def test_github_get_pr_not_found_marks_found_false(workspace_with_feature):
     ws = _make_workspace(workspace_with_feature)
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
-    with patch("canopy.actions.reads.gh.get_pull_request_by_number",
+    with patch("canopy.management.reads.gh.get_pull_request_by_number",
                return_value=None):
         result = github_get_pr(ws, "repo-a#999")
     assert result["repos"]["repo-a"]["found"] is False
@@ -271,9 +271,9 @@ def test_github_get_pr_comments_specific_form(workspace_with_feature):
                 "head_branch": "auth-flow", "base_branch": "dev", "body": "",
                 "review_decision": "", "mergeable": "", "draft": False}
 
-    with patch("canopy.actions.reads.gh.get_review_comments",
+    with patch("canopy.management.reads.gh.get_review_comments",
                return_value=fake_comments), \
-         patch("canopy.actions.reads.gh.get_pull_request_by_number",
+         patch("canopy.management.reads.gh.get_pull_request_by_number",
                return_value=fake_pr):
         result = github_get_pr_comments(ws, "repo-a#42")
 

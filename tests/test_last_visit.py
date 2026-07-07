@@ -1,7 +1,7 @@
 """Tests for actions/last_visit.py."""
 import time
 
-from canopy.actions.last_visit import (
+from canopy.management.last_visit import (
     get_last_visit,
     mark_visited,
     reset_anchor,

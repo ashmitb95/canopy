@@ -1,10 +1,10 @@
-"""Tests for canopy.actions.bot_resolutions — persistence layer for M3."""
+"""Tests for canopy.management.bot_resolutions — persistence layer for M3."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from canopy.actions.bot_resolutions import (
+from canopy.management.bot_resolutions import (
     is_resolved,
     load_resolutions,
     record_resolution,

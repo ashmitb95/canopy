@@ -900,7 +900,7 @@ def cmd_slots(args: argparse.Namespace) -> None:
     workspace = _load_workspace()
     state = slots_mod.read_state(workspace)
     if args.json:
-        from ..actions.slot_details import rich_slots
+        from ..management.slot_details import rich_slots
         _print_json(rich_slots(workspace))
         return
     if state is None:
@@ -1883,7 +1883,7 @@ def cmd_issue(args: argparse.Namespace) -> None:
     full ``Issue`` shape (id, identifier, title, description, state,
     url, assignee, labels, priority, raw).
     """
-    from ..actions.reads import issue_get
+    from ..management.reads import issue_get
     from .ui import console
 
     result = _read_command(issue_get, args, "issue")
@@ -1971,7 +1971,7 @@ def cmd_issues(args: argparse.Namespace) -> None:
 
 def cmd_pr(args: argparse.Namespace) -> None:
     """Fetch PR data per repo for an alias."""
-    from ..actions.reads import github_get_pr
+    from ..management.reads import github_get_pr
     from .ui import console
 
     result = _read_command(github_get_pr, args, "pr")
@@ -1995,7 +1995,7 @@ def cmd_pr(args: argparse.Namespace) -> None:
 
 def cmd_branch(args: argparse.Namespace) -> None:
     """Fetch branch info (HEAD, divergence, upstream) per repo."""
-    from ..actions.reads import github_get_branch
+    from ..management.reads import github_get_branch
     from .ui import console
 
     workspace = _load_workspace()
@@ -2032,7 +2032,7 @@ def cmd_branch(args: argparse.Namespace) -> None:
 
 def cmd_comments(args: argparse.Namespace) -> None:
     """Fetch temporally classified PR review comments per repo."""
-    from ..actions.reads import github_get_pr_comments
+    from ..management.reads import github_get_pr_comments
     from .ui import console
 
     result = _read_command(github_get_pr_comments, args, "comments")
@@ -2190,7 +2190,7 @@ def cmd_state(args: argparse.Namespace) -> None:
     """Show the feature state + suggested next actions."""
     from ..actions.errors import ActionError, BlockerError, FixAction
     from ..actions import slots as slots_mod
-    from ..actions.feature_state import feature_state as state_impl
+    from ..management.feature_state import feature_state as state_impl
     from .render import render_blocker
     from .ui import console
 
@@ -2294,7 +2294,7 @@ def cmd_state(args: argparse.Namespace) -> None:
 def cmd_triage(args: argparse.Namespace) -> None:
     """Show prioritized list of features needing attention."""
     from ..actions.errors import ActionError
-    from ..actions.triage import triage as triage_impl
+    from ..management.triage import triage as triage_impl
     from .render import render_blocker
     from .ui import console
 
@@ -2473,7 +2473,7 @@ def cmd_commit(args: argparse.Namespace) -> None:
 
 def cmd_bot_status(args: argparse.Namespace) -> None:
     """Per-feature bot-comment rollup (M3)."""
-    from ..actions.bot_status import bot_comments_status
+    from ..management.bot_status import bot_comments_status
     from ..actions.errors import ActionError
     from .render import render_blocker
     from .ui import console
@@ -2541,7 +2541,7 @@ def _resolve_historian_feature(workspace, feature: str | None):
 
 def cmd_historian(args: argparse.Namespace) -> None:
     """Read or compact a feature's historian memory file (M4)."""
-    from ..actions import historian
+    from ..management import historian
     from ..actions.errors import ActionError
     from .render import render_blocker
     from .ui import console
@@ -2915,7 +2915,7 @@ def cmd_worktree_bootstrap(args: argparse.Namespace) -> None:
 def cmd_ship(args: argparse.Namespace) -> None:
     """Open or update one PR per repo in the canonical feature (M8 / Wave 2.4)."""
     from ..actions.errors import ActionError
-    from ..actions.ship import ship as ship_impl
+    from ..management.ship import ship as ship_impl
     from .render import render_blocker
     from .ui import console, spinner
 
@@ -2985,7 +2985,7 @@ def cmd_ship(args: argparse.Namespace) -> None:
 
 def cmd_draft_replies(args: argparse.Namespace) -> None:
     """Auto-draft "Done in <sha>" replies for addressed PR comments (M9)."""
-    from ..actions.draft_replies import draft_replies
+    from ..management.draft_replies import draft_replies
     from .ui import console
 
     workspace = _load_workspace()
@@ -3031,7 +3031,7 @@ def cmd_draft_replies(args: argparse.Namespace) -> None:
 
 def cmd_conflicts(args: argparse.Namespace) -> None:
     """Cross-feature file-overlap detection (M12)."""
-    from ..actions.conflicts import find_conflicts
+    from ..management.conflicts import find_conflicts
     from .ui import console
 
     workspace = _load_workspace()
@@ -3185,7 +3185,7 @@ def _resolve_thread_feature(workspace, feature: str | None) -> str:
 
 def cmd_reply_thread(args: argparse.Namespace) -> None:
     """Post a reply to a GitHub PR review thread, optionally resolving it."""
-    from ..actions.thread_actions import reply_to_thread
+    from ..management.thread_actions import reply_to_thread
     from ..actions.errors import ActionError, BlockerError
     from .render import render_blocker
     from .ui import console
@@ -3249,7 +3249,7 @@ def cmd_reply_thread(args: argparse.Namespace) -> None:
 
 def cmd_resolve_thread(args: argparse.Namespace) -> None:
     """Resolve a GitHub PR review thread and record the resolution locally."""
-    from ..actions.thread_actions import resolve_thread
+    from ..management.thread_actions import resolve_thread
     from ..actions.errors import ActionError
     from .render import render_blocker
     from .ui import console
@@ -3420,8 +3420,8 @@ def _render_resume_human(brief: dict, console) -> None:
 
 def cmd_resume(args: argparse.Namespace) -> None:
     """Show a fresh resume brief: what changed since last visit."""
-    from ..actions.resume import feature_resume
-    from ..actions.last_visit import reset_anchor
+    from ..management.resume import feature_resume
+    from ..management.last_visit import reset_anchor
     from ..actions.errors import ActionError
     from .render import render_blocker
     from .ui import console

@@ -6,8 +6,8 @@ import os
 import subprocess
 from unittest.mock import patch
 
-from canopy.actions.bot_resolutions import record_resolution
-from canopy.actions.feature_state import feature_state, _is_bot_comment
+from canopy.management.bot_resolutions import record_resolution
+from canopy.management.feature_state import feature_state, _is_bot_comment
 from canopy.workspace.config import RepoConfig, WorkspaceConfig
 from canopy.workspace.workspace import Workspace
 
@@ -90,9 +90,9 @@ def test_awaiting_bot_resolution_when_only_bot_comments(workspace_with_feature):
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_open_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_bot_comment(101)], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -109,9 +109,9 @@ def test_human_comment_routes_to_needs_work_not_bot_state(workspace_with_feature
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_open_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_human_comment(202)], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -128,9 +128,9 @@ def test_mixed_human_and_bot_routes_to_needs_work(workspace_with_feature):
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_open_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_human_comment(1), _bot_comment(2)], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -148,9 +148,9 @@ def test_approved_with_bot_threads_keeps_state_but_adds_secondary_cta(
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_open_pr(review_decision="APPROVED")), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_bot_comment(303)], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -175,9 +175,9 @@ def test_recorded_resolution_is_subtracted_from_bot_count(workspace_with_feature
     )
 
     # Live PR still surfaces both comments — but 999 is filtered out.
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_open_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([_bot_comment(999), _bot_comment(1000)], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -195,9 +195,9 @@ def test_review_bots_augment_narrows_classification(workspace_with_feature):
         workspace_with_feature, augments={"review_bots": ["coderabbit"]},
     )
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                return_value=_open_pr()), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([
                    _bot_comment(1, author="coderabbit"),
                    _bot_comment(2, author="copilot"),  # filtered out by augment

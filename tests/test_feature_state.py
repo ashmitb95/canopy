@@ -1,4 +1,4 @@
-"""Tests for canopy.actions.feature_state — dashboard backend."""
+"""Tests for canopy.management.feature_state — dashboard backend."""
 import json
 import os
 import subprocess
@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from canopy.actions.feature_state import feature_state
+from canopy.management.feature_state import feature_state
 from canopy.actions.preflight_state import record_result
 from canopy.git import repo as git
 from canopy.workspace.config import RepoConfig, WorkspaceConfig
@@ -64,8 +64,8 @@ def test_drift_state_supersedes_everything(workspace_with_feature):
     _git(["checkout", "main"], cwd=workspace_with_feature / "repo-b")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments", side_effect=_no_comments):
+    with patch("canopy.management.feature_state.gh.find_pull_request", side_effect=_no_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments", side_effect=_no_comments):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "drifted"
@@ -85,8 +85,8 @@ def test_in_progress_when_dirty_and_no_preflight(workspace_with_feature):
     (workspace_with_feature / "repo-a" / "src" / "app.py").write_text("modified\n")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments", side_effect=_no_comments):
+    with patch("canopy.management.feature_state.gh.find_pull_request", side_effect=_no_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments", side_effect=_no_comments):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "in_progress"
@@ -113,8 +113,8 @@ def test_ready_to_commit_when_preflight_passed_for_current_head(workspace_with_f
         },
     )
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments", side_effect=_no_comments):
+    with patch("canopy.management.feature_state.gh.find_pull_request", side_effect=_no_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments", side_effect=_no_comments):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "ready_to_commit"
@@ -136,8 +136,8 @@ def test_stale_preflight_warns_and_falls_back_to_in_progress(workspace_with_feat
         head_sha_per_repo={"repo-a": "0" * 40, "repo-b": "0" * 40},
     )
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments", side_effect=_no_comments):
+    with patch("canopy.management.feature_state.gh.find_pull_request", side_effect=_no_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments", side_effect=_no_comments):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "in_progress"
@@ -166,8 +166,8 @@ def test_ready_to_push_when_clean_and_ahead(workspace_with_feature, tmp_path):
     _git(["commit", "-m", "extra"], cwd=api)
 
     ws = _make_workspace(workspace_with_feature)
-    with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments", side_effect=_no_comments):
+    with patch("canopy.management.feature_state.gh.find_pull_request", side_effect=_no_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments", side_effect=_no_comments):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "ready_to_push"
@@ -192,8 +192,8 @@ def test_needs_work_with_actionable_comments(workspace_with_feature):
         "author": "reviewer", "author_type": "User", "state": "",
         "created_at": "2030-01-01T00:00:00Z", "url": "", "in_reply_to_id": None,
     }
-    with patch("canopy.actions.feature_state.gh.find_pull_request", return_value=fake_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+    with patch("canopy.management.feature_state.gh.find_pull_request", return_value=fake_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([fake_comment], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -214,8 +214,8 @@ def test_approved_when_all_prs_approved(workspace_with_feature):
     fake_pr = {"number": 1, "title": "x", "url": "u", "state": "open",
                 "head_branch": "auth-flow", "base_branch": "main", "body": "",
                 "review_decision": "APPROVED", "mergeable": "", "draft": False}
-    with patch("canopy.actions.feature_state.gh.find_pull_request", return_value=fake_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+    with patch("canopy.management.feature_state.gh.find_pull_request", return_value=fake_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -235,8 +235,8 @@ def test_awaiting_review_when_pr_open_no_feedback(workspace_with_feature):
     fake_pr = {"number": 1, "title": "x", "url": "u", "state": "open",
                 "head_branch": "auth-flow", "base_branch": "main", "body": "",
                 "review_decision": "REVIEW_REQUIRED", "mergeable": "", "draft": False}
-    with patch("canopy.actions.feature_state.gh.find_pull_request", return_value=fake_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+    with patch("canopy.management.feature_state.gh.find_pull_request", return_value=fake_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -253,8 +253,8 @@ def test_no_prs_when_clean_and_no_prs(workspace_with_feature):
     _set_remote(workspace_with_feature / "repo-a", "git@github.com:owner/repo-a.git")
     ws = _make_workspace(workspace_with_feature)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request", side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments", side_effect=_no_comments):
+    with patch("canopy.management.feature_state.gh.find_pull_request", side_effect=_no_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments", side_effect=_no_comments):
         result = feature_state(ws, "auth-flow")
 
     assert result["state"] == "no_prs"
@@ -273,8 +273,8 @@ def test_changes_requested_decision_is_needs_work(workspace_with_feature):
     fake_pr = {"number": 1, "title": "x", "url": "u", "state": "open",
                 "head_branch": "auth-flow", "base_branch": "main", "body": "",
                 "review_decision": "CHANGES_REQUESTED", "mergeable": "", "draft": False}
-    with patch("canopy.actions.feature_state.gh.find_pull_request", return_value=fake_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+    with patch("canopy.management.feature_state.gh.find_pull_request", return_value=fake_pr), \
+         patch("canopy.management.feature_state.gh.get_review_comments",
                return_value=([], 0)):
         result = feature_state(ws, "auth-flow")
 
@@ -316,9 +316,9 @@ def test_worktree_backed_feature_not_drifted_when_main_on_other_branch(
     # Main repos are still on in-flight, NOT on sin-9-demo. Pre-B5 this
     # would report state='drifted' suggesting realign. Post-B5 it must
     # check the worktree path and report a non-drifted state.
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                side_effect=_no_comments):
         result = feature_state(ws, "sin-9-demo")
 
@@ -348,9 +348,9 @@ def test_drifted_worktree_feature_suggests_switch_not_realign(workspace_dir):
     wt_api = workspace_dir / ".canopy" / "worktrees" / slot_id / "repo-a"
     _git(["checkout", "-b", "manual-detour"], cwd=wt_api)
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                side_effect=_no_comments):
         result = feature_state(ws, "sin-10-demo")
 
@@ -380,9 +380,9 @@ def test_per_repo_facts_use_worktree_path_for_dirty_check(workspace_dir):
     wt_api = workspace_dir / ".canopy" / "worktrees" / slot_id / "repo-a"
     (wt_api / "src" / "app.py").write_text("dirty in worktree\n")
 
-    with patch("canopy.actions.feature_state.gh.find_pull_request",
+    with patch("canopy.management.feature_state.gh.find_pull_request",
                side_effect=_no_pr), \
-         patch("canopy.actions.feature_state.gh.get_review_comments",
+         patch("canopy.management.feature_state.gh.get_review_comments",
                side_effect=_no_comments):
         result = feature_state(ws, "sin-11-demo")
 

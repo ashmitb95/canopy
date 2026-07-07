@@ -23,8 +23,8 @@ from typing import Any, Iterable
 from ..git import repo as git
 from ..git.multi import cross_repo_diff
 from ..workspace.workspace import Workspace
-from . import slots as slots_mod
-from .aliases import resolve_feature
+from ..actions import slots as slots_mod
+from ..actions.aliases import resolve_feature
 
 _GENERATED_HINT = re.compile(
     r"(?:^|/)(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|Cargo\.lock|"

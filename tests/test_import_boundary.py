@@ -57,3 +57,11 @@ def test_agent_core_never_imports_management():
             if _refs(text, name):
                 violations.append(f"{rel} references management module '{name}'")
     assert not violations, "\n".join(violations)
+
+
+def test_management_modules_are_importable():
+    for name in ["review_filter", "review_ops", "draft_replies", "thread_actions",
+                 "thread_resolutions", "bot_status", "bot_resolutions", "historian",
+                 "resume", "last_visit", "ship", "conflicts", "slot_details",
+                 "reads", "triage", "feature_state"]:
+        importlib.import_module(f"canopy.management.{name}")

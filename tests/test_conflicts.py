@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from canopy.actions.conflicts import (
+from canopy.management.conflicts import (
     classify, compute_overlap, find_conflicts,
 )
 from canopy.workspace.config import load_config

@@ -140,7 +140,7 @@ Registry:      context, start, join                     # single-read workspace 
 Focus / slots: switch, reclaim                          # promote a feature into trunk (run target); free a merged warm slot
 Safe git ops:  run, commit, push, preflight             # path-safe exec; feature-scoped commit (commit-only); push; pre-commit gate
 Recovery:      doctor, drift                            # 21-code / 11-category integrity check + repair; branch-drift detection
-WIP + slots:   stash_save_feature, stash_pop_feature, worktree_bootstrap   # feature-tagged stash; bootstrap a warm slot
+WIP + workable slots:   stash_save_feature, stash_pop_feature, worktree_bootstrap   # feature-tagged stash; bootstrap a warm slot
 ```
 
 `context` is THE registry read — feature ↔ repo ↔ branch ↔ path ↔ state, with a local (instant) tier and a remote (PR/CI overlay) tier. It supersedes the old `workspace_status` / `workspace_context` / `feature_list` / `feature_status` / `slots`.

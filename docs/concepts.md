@@ -21,7 +21,7 @@ The 15 agent tools, grouped by role in the daily loop (this grouping is used ver
 | **Focus / slots** | `switch`, `reclaim` | Promote a feature into trunk (the run target); free a warm slot whose PR merged. See §4. |
 | **Safe git ops** | `run`, `commit`, `push`, `preflight` | Path-safe shell exec; feature-scoped multi-repo commit (commit-only in 4.0); push across the lane; pre-commit gate. |
 | **Recovery** | `doctor`, `drift` | 21-code / 11-category integrity check + repair; branch-drift detection across repos. |
-| **WIP slots** | `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap` | Feature-tagged stash save/pop; bootstrap a warm slot (env / deps / hooks / IDE). |
+| **WIP + workable slots** | `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap` | Feature-tagged stash save/pop; bootstrap a warm slot (env / deps / hooks / IDE). |
 
 Full agent reference: [mcp.md](mcp.md). Full CLI (core + management) reference: [commands.md](commands.md).
 

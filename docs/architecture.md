@@ -250,7 +250,7 @@ the 9 states:
         └─ clean + PRs open + nothing actionable → awaiting_review
 ```
 
-The ninth state (`awaiting_bot_resolution`) is reached when open bot-authored review threads exist but no human CHANGES_REQUESTED is present — bot threads alone route here, not to `needs_work`. See [concepts.md](concepts.md#3-the-feature-state-machine) for the full state table. Note that `feature_state` reads `preflight_state` — an agent-core primitive — but the reverse is forbidden by the import boundary; management reaches down into agent-core, never the other way.
+The ninth state (`awaiting_bot_resolution`) is reached when open bot-authored review threads exist but no human CHANGES_REQUESTED is present — bot threads alone route here, not to `needs_work`. See [concepts.md](concepts.md#3-the-9-state-machine) for the full state table. Note that `feature_state` reads `preflight_state` — an agent-core primitive — but the reverse is forbidden by the import boundary; management reaches down into agent-core, never the other way.
 
 ### Drift detection: two pathways
 

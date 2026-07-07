@@ -70,7 +70,7 @@ Everything the agent names is semantic (`feature`, `repo`, alias); canopy owns t
 | **Focus / slots** | `switch`, `reclaim` | Promote a feature into trunk (the run target); free a warm slot whose PR merged. |
 | **Safe git ops** | `run`, `commit`, `push`, `preflight` | Path-safe shell exec; feature-scoped multi-repo commit; push across the lane; pre-commit gate. |
 | **Recovery** | `doctor`, `drift` | 21-code integrity check + repair; branch-drift detection across repos. |
-| **WIP slots** | `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap` | Feature-tagged stash save/pop; bootstrap a warm slot (env / deps / hooks / IDE). |
+| **WIP + workable slots** | `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap` | Feature-tagged stash save/pop; bootstrap a warm slot (env / deps / hooks / IDE). |
 
 `context` is *the* registry read — it supersedes the old `workspace_status` / `workspace_context` / `feature_list` / `feature_status` / `slots` tools with a local (instant) tier and a remote (PR/CI overlay) tier. Full reference: [docs/mcp.md](docs/mcp.md).
 

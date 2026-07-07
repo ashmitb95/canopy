@@ -50,7 +50,7 @@ The complete agent surface. Every tool is alias-aware where it accepts a feature
 | `start` | Begin new work on a feature — lazy, zero repos until you `join`. |
 | `join` | Join a repo to the active feature (creates + registers its branch). |
 
-### Focus (slots)
+### Focus / slots
 
 | Tool | Purpose |
 |---|---|
@@ -70,7 +70,7 @@ The complete agent surface. Every tool is alias-aware where it accepts a feature
 
 | Tool | Purpose |
 |---|---|
-| `doctor` | Diagnose workspace + install integrity across ~20 typed diagnostic codes; optionally repair (`fix=True`). Returns `{issues, summary, fixed, skipped, ...}`. **The recovery entry point** — when any other call returns an unexpected error, call `doctor` first to see whether state is corrupted. |
+| `doctor` | Diagnose workspace + install integrity across 21 typed diagnostic codes (11 categories); optionally repair (`fix=True`). Returns `{issues, summary, fixed, skipped, ...}`. **The recovery entry point** — when any other call returns an unexpected error, call `doctor` first to see whether state is corrupted. |
 | `drift` | Compare recorded HEAD state (`.canopy/state/heads.json`) vs feature-lane expectations. Fast, hook-driven cached path. |
 
 ### WIP + workable slots

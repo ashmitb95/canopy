@@ -28,7 +28,7 @@ The MCP server makes the tools *available*; the hooks make wrong-path work *impo
 | **Focus / slots** | `switch`, `reclaim` | promote a feature into trunk (the run target); free a warm slot whose PR merged |
 | **Safe git ops** | `run`, `commit`, `push`, `preflight` | path-safe shell exec; feature-scoped multi-repo commit; push; pre-commit gate |
 | **Recovery** | `doctor`, `drift` | integrity check + repair; branch-drift detection |
-| **WIP / workable slots** | `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap` | feature-tagged stash save/pop; make a warm slot workable (env/deps/hooks/IDE) |
+| **WIP + workable slots** | `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap` | feature-tagged stash save/pop; make a warm slot workable (env/deps/hooks/IDE) |
 
 `context` is **the** registry read — feature ↔ repo ↔ branch ↔ path ↔ state — with a **local tier** (instant) and a **remote tier** (PR/CI overlay, opt-in). It supersedes the pre-4.0 `workspace_status` / `workspace_context` / `feature_list` / `feature_status` / `slots` reads.
 

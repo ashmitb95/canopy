@@ -20,3 +20,8 @@ def test_no_management_tool_is_registered():
                  "feature_resume", "review_status", "review_comments",
                  "slots", "feature_list", "checkout", "log"):
         assert name not in _registered()
+
+
+def test_version_is_rc():
+    import canopy
+    assert canopy.__version__ == "4.0.0-rc1"

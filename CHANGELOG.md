@@ -4,6 +4,51 @@ Tracks the Python side (CLI + MCP server). The VSCode extension has its own [vsc
 
 Versions follow semver. Pre-1.0 — minor bumps may add features or break behavior; the README is the source-of-truth contract.
 
+## 4.0.0-rc1 — 2026-07-05 (The Great Prune — 4.0 phase 5)
+
+The distillation: the agent-facing MCP surface shrinks from 71 tools to the 15
+that serve the core loop — path-safety, registry, focus, safe git ops, recovery.
+Everything else is either commented off (reversible) or quarantined into a new
+`canopy/management/` subpackage. A static import-boundary test proves the
+agent-core imports nothing from the management surface.
+
+### Changed
+- **MCP surface: 71 → 15 core tools.** Active: `version`, `context`, `start`,
+  `join`, `run`, `switch`, `reclaim`, `commit`, `push`, `preflight`, `doctor`,
+  `drift`, `stash_save_feature`, `stash_pop_feature`, `worktree_bootstrap`.
+- **`switch` returns slot state only** — dropped the embedded historian `memory`
+  and the `since_last_visit_summary` resume brief. As a consequence `switch` no
+  longer bumps `last_visit`; `feature_resume` is now the sole bumper.
+- **`commit` commits only** — removed the `--address` bot-comment machinery and
+  its thread-resolution/bot-logging side effects (and the CLI flags).
+- **CLI management commands are KEPT**, repointed at `canopy/management/`. The
+  CLI `--json` surface remains the human/dashboard management contract
+  (`triage`, `review`, `ship`, `resume`, `conflicts`, `bot-status`, …) — only
+  the *agent* (MCP) surface was distilled.
+
+### Removed (from the MCP surface only — code retained)
+- 31 management tools removed from MCP (review/comments/threads/bots, historian,
+  resume, ship, conflicts, triage tiers, Linear/GitHub reads, feature_* reads,
+  merge-readiness, workspace_context/status). Their modules live on in
+  `canopy/management/`, reachable via the CLI.
+- 25 borderline tools commented off the MCP surface (reversible — one uncomment
+  away): `slots`, `feature_list/status/paths/create/done`,
+  `workspace_config/reinit`, `slot_load/clear/swap`, `migrate_slots`, and the
+  git-plumbing `checkout/log/sync/branch_*/stash_*/worktree_info/worktree_create`
+  (all reachable path-safely via `run`).
+- Dead `vsix_duplicates` doctor check/repair (the extension moved to its own
+  repo).
+
+### Internal
+- Extracted `actions/pr_map.py` (PR-mapping, out of `triage`) and
+  `actions/repo_paths.py` (`resolve_repo_paths`, out of `feature_state`) as core
+  modules so `registry`/`commit`/`push` no longer import management.
+- Extracted the three `FeatureCoordinator` review methods into
+  `management/review_ops.py`, decoupling the foundational coordinator.
+- Quarantined 15 management modules into `canopy/management/`.
+- New gate: `tests/test_import_boundary.py` (agent-core imports no management),
+  `tests/test_mcp_surface.py` (registry == the 15 core).
+
 ## 3.4.0 — 2026-07-04 (Slot lifecycle rework — 4.0 phase 4)
 
 ### Changed

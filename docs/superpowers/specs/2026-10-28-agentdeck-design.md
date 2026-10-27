@@ -4,7 +4,7 @@ A VS Code extension that runs chat sessions against many coding-agent providers 
 
 ## Roadmap
 
-The full product is five sub-projects. Each gets its own spec, plan, and implementation cycle.
+The full product is six sub-projects. Each gets its own spec, plan, and implementation cycle.
 
 | # | Sub-project | Delivers |
 |---|---|---|
@@ -13,6 +13,30 @@ The full product is five sub-projects. Each gets its own spec, plan, and impleme
 | 3 | Onboarding and sign-in | Provider screen with install/sign-in state, guided sign-in per provider |
 | 4 | Chat UI parity | Orca-level chat surface: markdown, tool runs, diff cards, pickers, queued messages, attachments, mentions, context ring, subagents, rewind, find |
 | 5 | Power features | Quota display, skills browser, MCP status and tools, permission configuration |
+| 6 | Voice dictation | In-extension speech-to-text for the composer, any provider |
+
+### Parity targets
+
+The bar is what the official Claude Code and Codex extensions offer, extended to every provider whose CLI supports it (gated by capabilities). Each target lands in a sub-project:
+
+| Feature | Sub-project | Notes |
+|---|---|---|
+| Start, stop (interrupt), resume, history list | 1, 2 | |
+| Model switch, permission mode switch | 1 | plan mode is a permission mode where the provider has one |
+| Reasoning effort / thinking level | 1 | Claude `applyFlagSettings({ effortLevel })`; Codex per-turn effort |
+| Approvals (once / always / deny), questions | 1 | |
+| Queued messages | 2 | edit queued: 4 |
+| Editor context: current file, selection | 1 | |
+| @-mention files, image paste and attachments | 4 | `images` capability |
+| Slash commands and skills in the composer | 4 | list comes from the `commands` fact (1) |
+| Diffs in VS Code's diff editor; per-turn change rollup | 1 (open diff), 4 (rollup) | |
+| Checkpoints / rewind | 4 | Claude rewind; Codex `thread/revert`; capability `rewind` added then |
+| Subagent sections, background tasks | 4 | `parentId` stored from 1 |
+| Context usage, quota | 1 (data), 4 (UI) | |
+| MCP servers and tools, skills browser, permission rules | 5 | |
+| Voice dictation | 6 | see below |
+
+**Voice dictation (sub-project 6).** No provider exposes dictation through the protocols AgentDeck uses; Orca implements its own speech-to-text (local sherpa-onnx models such as Parakeet and Whisper tiny, or OpenAI transcription with the user's key). AgentDeck treats dictation the same way: an extension feature available for every provider. The open question is microphone capture, since VS Code webviews do not reliably get microphone permission; a spike decides between capture in the extension host (native module), the VS Code Speech extension if its API is usable by third parties, or a helper process. Until then, OS dictation (macOS Fn Fn, Windows Win+H) works in the composer.
 
 **This spec covers sub-projects 1 and 2.** It ends with Claude, Codex, and Grok usable from a persistent session list. Sub-projects 3–5 build on the contracts defined here; the capability model is what lets them add features without per-provider special cases.
 
@@ -133,6 +157,7 @@ type Capability =
   | 'interrupt'
   | 'models' | 'setModel'
   | 'modes' | 'setMode'
+  | 'effort'          // reasoning effort / thinking level
   | 'images'          // image attachments in prompts
   | 'commands'        // slash commands / skills list
   | 'mcpStatus'
@@ -162,6 +187,7 @@ interface ProviderSession {
   cancel(): Promise<void>
   setModel?(id: string): Promise<void>
   setMode?(mode: PermissionMode): Promise<void>
+  setEffort?(level: string): Promise<void>         // levels come from the provider; shown when 'effort' is declared
   answer(itemId: string, response: string | string[][]): void   // approval option id or question answers
   dispose(): Promise<void>
   onItem: Event<SessionItem>

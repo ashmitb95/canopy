@@ -136,7 +136,7 @@ type Capability =
   | 'images'          // image attachments in prompts
   | 'commands'        // slash commands / skills list
   | 'mcpStatus'
-  | 'quota'           // emits quota facts
+  | 'quota'           // reports account quota through onQuota
   | 'context'         // emits context-usage facts
 ```
 

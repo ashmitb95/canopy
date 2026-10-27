@@ -5,7 +5,13 @@
       "name": "Run AgentDeck",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      // Open a folder up front: switching folders reloads the window and ends the debug session.
+      // Other installed extensions (e.g. Claude Code) are disabled to keep the dev window quiet.
+      "args": [
+        "--disable-extensions",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/playground"
+      ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "preLaunchTask": "build"
     }

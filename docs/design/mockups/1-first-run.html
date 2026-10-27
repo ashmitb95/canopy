@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AgentDeck first run</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+:root{--bg:#1f1f1f;--sidebar:#181818;--card:#202020;--popover:#252526;--border:#2b2b2b;--border-strong:#3c3c3c;--fg:#cccccc;--fg-strong:#ececec;--muted:#9d9d9d;--primary:#0078d4;--primary-fg:#ffffff;--secondary:#313131;--accent:#2a2d2e;--input:#2a2a2a;--success:#3fb950;--warning:#d29922;--danger:#f85149;--mono:'SF Mono',Menlo,Consolas,monospace}
+a{color:#4daafc;text-decoration:none}a:hover{color:#8cc8ff}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 13px; overflow: hidden">
+  <div style="height: 35px; background: var(--sidebar); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 8px; box-sizing: border-box">
+    <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    <div style="flex: 1; display: flex; justify-content: center"><div style="width: 420px; height: 24px; border: 1px solid var(--border-strong); border-radius: 6px; background: #222222; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px">api-service</div></div>
+  </div>
+  <div style="flex: 1; display: flex; min-height: 0">
+    <div style="width: 48px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 20px; padding-top: 12px; box-sizing: border-box">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#868686" stroke-width="1.5" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg>
+      <div style="width: 48px; display: flex; justify-content: center; border-left: 2px solid var(--primary); box-sizing: border-box"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ececec" stroke-width="1.5" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path><path d="M8 9h8M8 12h5"></path></svg></div>
+    </div>
+    <div style="width: 280px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column">
+      <div style="height: 35px; display: flex; align-items: center; padding: 0 16px; font-size: 11px; letter-spacing: 0.04em; color: var(--muted)">AGENTDECK</div>
+      <div style="padding: 4px 16px 8px; font-size: 11px; font-weight: 600; color: var(--muted)">Providers</div>
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; background: var(--accent)">
+          <span style="width: 26px; height: 26px; border-radius: 6px; background: rgba(217,119,87,0.18); color: #e8956f; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="color: var(--fg-strong)">Claude Code</span><span style="font-size: 11px; color: var(--muted)">ashmit…@gmail.com</span></div>
+          <span style="font-size: 10px; color: var(--success); background: rgba(63,185,80,0.12); border-radius: 9px; padding: 1px 7px">Ready</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px">
+          <span style="width: 26px; height: 26px; border-radius: 6px; background: rgba(63,191,153,0.16); color: #4fc9a3; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">Cx</span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="color: var(--fg-strong)">Codex</span><span style="font-size: 11px; color: var(--muted)">CLI not found</span></div>
+          <span style="font-size: 10px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 9px; padding: 0 7px">Install</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px">
+          <span style="width: 26px; height: 26px; border-radius: 6px; background: rgba(200,200,200,0.14); color: #d4d4d4; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center">G</span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px"><span style="color: var(--fg-strong)">Grok</span><span style="font-size: 11px; color: var(--muted)">v0.9.2</span></div>
+          <span style="font-size: 10px; color: var(--warning); background: rgba(210,153,34,0.12); border-radius: 9px; padding: 1px 7px">Sign in</span>
+        </div>
+      </div>
+      <div style="padding: 18px 16px 8px; font-size: 11px; font-weight: 600; color: var(--muted)">Sessions</div>
+      <div style="margin: 0 12px; border: 1px dashed var(--border-strong); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6e6e6e" stroke-width="1.4" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg>
+        <span style="color: var(--fg)">No sessions yet</span>
+        <span style="font-size: 12px; color: var(--muted); line-height: 1.5">Chats you start show up here and survive reloads.</span>
+      </div>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+      <div style="height: 35px; background: var(--sidebar); border-bottom: 1px solid var(--border); display: flex">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--bg); color: var(--fg-strong); border-top: 1px solid var(--primary)">Welcome to AgentDeck</div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 40px">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+          <span style="font-size: 11px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 12px; padding: 2px 10px">1 of 3 providers ready</span>
+          <h1 style="margin: 0; font-size: 26px; font-weight: 600; color: var(--fg-strong); letter-spacing: -0.01em">Your agents, one chat</h1>
+          <p style="margin: 0; color: var(--muted); max-width: 520px; text-align: center; line-height: 1.55">AgentDeck runs each provider's own CLI on your own subscription. Sign-ins stay with those CLIs; nothing is stored here.</p>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: 840px">
+          <div style="background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.3)">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span style="width: 32px; height: 32px; border-radius: 8px; background: rgba(217,119,87,0.18); color: #e8956f; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
+              <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 14px; color: var(--fg-strong); font-weight: 600">Claude Code</span><span style="font-size: 11px; color: var(--muted)">v2.1.111</span></div>
+              <span style="font-size: 11px; color: var(--success); background: rgba(63,185,80,0.12); border-radius: 9px; padding: 1px 8px">Ready</span>
+            </div>
+            <span style="font-size: 12px; color: var(--muted); line-height: 1.5">Signed in as ashmit…@gmail.com with your claude.ai subscription.</span>
+            <button style="height: 32px; border: none; border-radius: 6px; background: var(--primary); color: var(--primary-fg); font-size: 13px; font-weight: 500">Start a chat</button>
+          </div>
+          <div style="background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.3)">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span style="width: 32px; height: 32px; border-radius: 8px; background: rgba(63,191,153,0.16); color: #4fc9a3; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">Cx</span>
+              <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 14px; color: var(--fg-strong); font-weight: 600">Codex</span><span style="font-size: 11px; color: var(--muted)">not installed</span></div>
+              <span style="font-size: 11px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 9px; padding: 0 8px">Setup</span>
+            </div>
+            <span style="font-size: 12px; color: var(--muted); line-height: 1.5">Install the Codex CLI, then sign in with your ChatGPT account.</span>
+            <button style="height: 32px; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; color: var(--fg-strong); font-size: 13px">Set up Codex</button>
+          </div>
+          <div style="background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.3)">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span style="width: 32px; height: 32px; border-radius: 8px; background: rgba(200,200,200,0.14); color: #d4d4d4; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center">G</span>
+              <div style="flex: 1; display: flex; flex-direction: column"><span style="font-size: 14px; color: var(--fg-strong); font-weight: 600">Grok</span><span style="font-size: 11px; color: var(--muted)">v0.9.2 · ACP</span></div>
+              <span style="font-size: 11px; color: var(--warning); background: rgba(210,153,34,0.12); border-radius: 9px; padding: 1px 8px">Signed out</span>
+            </div>
+            <span style="font-size: 12px; color: var(--muted); line-height: 1.5">Installed. Sign in with the Grok CLI to start chatting.</span>
+            <button style="height: 32px; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; color: var(--fg-strong); font-size: 13px">Sign in</button>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--muted)">
+          <span>More agents: OpenCode, Gemini CLI, OMP, Antigravity</span>
+          <a href="#">Browse all</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height: 22px; background: var(--sidebar); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; font-size: 12px; color: var(--muted); box-sizing: border-box"><span>main</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

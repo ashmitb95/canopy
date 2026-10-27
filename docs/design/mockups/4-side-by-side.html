@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AgentDeck side by side</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+:root{--bg:#1f1f1f;--sidebar:#181818;--card:#202020;--popover:#252526;--border:#2b2b2b;--border-strong:#3c3c3c;--fg:#cccccc;--fg-strong:#ececec;--muted:#9d9d9d;--primary:#0078d4;--primary-fg:#ffffff;--secondary:#313131;--accent:#2a2d2e;--input:#2a2a2a;--success:#3fb950;--warning:#d29922;--danger:#f85149;--mono:'SF Mono',Menlo,Consolas,monospace}
+a{color:#4daafc;text-decoration:none}a:hover{color:#8cc8ff}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 13px; overflow: hidden; position: relative">
+  <div style="flex: 1; display: flex; min-height: 0">
+    <div style="flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0">
+      <div style="height: 35px; background: var(--sidebar); border-bottom: 1px solid var(--border); display: flex">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--bg); color: var(--fg-strong); border-top: 1px solid var(--primary)">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: rgba(217,119,87,0.18); color: #e8956f; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>Refactor auth middleware
+          <svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="#3c3c3c" stroke-width="3"></circle><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="#4daafc" stroke-width="3"></path></svg>
+        </div>
+      </div>
+      <div style="flex: 1; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+        <div style="align-self: flex-end; background: var(--secondary); border-radius: 12px 12px 4px 12px; padding: 8px 12px; max-width: 80%; color: var(--fg-strong)">Split the auth middleware into token parsing and session lookup.</div>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M6 13.5h4M6.5 11.5h3M8 2a4 4 0 0 0-2.5 7.1V11h5V9.1A4 4 0 0 0 8 2z"></path></svg>Thought for 9s<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.8" aria-hidden="true"><path d="M6 4l4 4-4 4"></path></svg></span>
+        <div style="border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px">
+          <div style="display: flex; align-items: center"><span style="font-size: 12px; font-weight: 600; color: var(--fg-strong); flex: 1">Plan</span><span style="font-size: 11px; color: var(--muted)">2 of 4</span></div>
+          <div style="height: 3px; border-radius: 2px; background: #3c3c3c; display: flex"><span style="width: 50%; background: var(--primary); border-radius: 2px"></span></div>
+          <span style="display: flex; gap: 8px; font-size: 12px; color: var(--muted); text-decoration: line-through"><span style="color: var(--success)">✓</span>Extract parseToken()</span>
+          <span style="display: flex; gap: 8px; font-size: 12px; color: var(--muted); text-decoration: line-through"><span style="color: var(--success)">✓</span>Extract loadSession()</span>
+          <span style="display: flex; gap: 8px; font-size: 12px; color: var(--fg-strong)"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="#3c3c3c" stroke-width="2.5"></circle><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="#4daafc" stroke-width="2.5"></path></svg>Update the 3 call sites</span>
+          <span style="display: flex; gap: 8px; font-size: 12px; color: var(--muted)"><span style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #6e6e6e; box-sizing: border-box"></span>Run the auth test suite</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--card)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"></path></svg>
+          <span style="font-size: 12px; color: var(--fg-strong)">Edited 2 files</span><span style="font-size: 11px; color: var(--success)">+48</span><span style="font-size: 11px; color: var(--danger)">−31</span>
+          <span style="flex: 1"></span><a href="#" style="font-size: 11px">Review changes</a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--card)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M9.5 2H4v12h8V4.5z"></path></svg>
+          <span style="font-size: 12px; color: var(--fg-strong)">Read</span><span style="font-family: var(--mono); font-size: 11.5px; color: var(--muted)">src/routes/admin.ts</span>
+          <span style="flex: 1"></span>
+          <span style="font-size: 11px; color: #4daafc; background: rgba(77,170,252,0.12); border-radius: 9px; padding: 1px 7px">Running</span>
+        </div>
+        <span style="font-size: 12px; background: linear-gradient(90deg, #6e6e6e, #ececec, #6e6e6e); -webkit-background-clip: text; color: transparent">Working… 1m 12s</span>
+      </div>
+      <div style="padding: 8px 16px 14px">
+        <div style="border: 1px solid var(--border-strong); border-radius: 10px; background: var(--input); padding: 9px 12px; display: flex; align-items: center; gap: 8px">
+          <span style="flex: 1; color: var(--muted)">Queue a follow-up…</span>
+          <span style="font-size: 11px; color: var(--muted)">Sonnet 4.6 · Accept edits</span>
+          <button aria-label="Stop" style="width: 26px; height: 26px; border: none; border-radius: 6px; background: var(--fg-strong); display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 2px; background: #1f1f1f"></span></button>
+        </div>
+      </div>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+      <div style="height: 35px; background: var(--sidebar); border-bottom: 1px solid var(--border); display: flex">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; color: var(--fg)">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: rgba(63,191,153,0.16); color: #4fc9a3; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center">Cx</span>Write users migration
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: var(--warning)"></span>
+        </div>
+      </div>
+      <div style="flex: 1; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+        <div style="align-self: flex-end; background: var(--secondary); border-radius: 12px 12px 4px 12px; padding: 8px 12px; max-width: 80%; color: var(--fg-strong)">Add a migration for users.last_seen.</div>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M6 13.5h4M6.5 11.5h3M8 2a4 4 0 0 0-2.5 7.1V11h5V9.1A4 4 0 0 0 8 2z"></path></svg>Reasoning summary<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.8" aria-hidden="true"><path d="M6 4l4 4-4 4"></path></svg></span>
+        <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--card)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M9.5 2H4v12h8V4.5z"></path><path d="M8 7v4M6 9h4"></path></svg>
+          <span style="font-size: 12px; color: var(--fg-strong)">Created</span><span style="font-family: var(--mono); font-size: 11.5px; color: var(--muted)">migrations/0042_users_last_seen.sql</span>
+          <span style="flex: 1"></span><span style="font-size: 11px; color: var(--success)">+9</span>
+        </div>
+        <div style="color: #d4d4d4; line-height: 1.55">Migration written. I'd like to apply it to the local database to confirm it runs cleanly.</div>
+        <div style="border: 1px solid rgba(210,153,34,0.45); border-radius: 8px; background: rgba(210,153,34,0.06); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#d29922" stroke-width="1.4" aria-hidden="true"><path d="M8 1.5l5 2v4c0 3-2.2 5.5-5 7-2.8-1.5-5-4-5-7v-4z"></path></svg>
+            <span style="color: var(--fg-strong); font-weight: 600">Allow Codex to run this command?</span>
+          </div>
+          <div style="font-family: var(--mono); font-size: 12px; background: #181818; border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--fg-strong)">pnpm db:migrate</div>
+          <div style="display: flex; gap: 8px">
+            <button style="height: 28px; padding: 0 12px; border: none; border-radius: 5px; background: var(--primary); color: var(--primary-fg); font-size: 12px">Allow once</button>
+            <button style="height: 28px; padding: 0 12px; border: none; border-radius: 5px; background: var(--secondary); color: var(--fg-strong); font-size: 12px">Allow for this session</button>
+            <span style="flex: 1"></span>
+            <button style="height: 28px; padding: 0 12px; border: none; border-radius: 5px; background: transparent; color: var(--fg); font-size: 12px">Deny</button>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 8px 16px 14px">
+        <div style="border: 1px solid var(--border-strong); border-radius: 10px; background: var(--input); padding: 9px 12px; display: flex; align-items: center; gap: 8px">
+          <span style="flex: 1; color: var(--muted)">Message Codex…</span>
+          <span style="font-size: 11px; color: var(--muted)">gpt-5.5-codex · Ask</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height: 22px; background: var(--sidebar); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; gap: 14px; font-size: 12px; color: var(--muted); box-sizing: border-box">
+    <span>main</span><span style="flex: 1"></span>
+    <span style="display: flex; align-items: center; gap: 5px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #4daafc"></span>1 running</span>
+    <span style="display: flex; align-items: center; gap: 5px; color: var(--warning)"><span style="width: 6px; height: 6px; border-radius: 50%; background: var(--warning)"></span>1 needs input</span>
+  </div>
+  <div style="position: absolute; right: 16px; bottom: 34px; width: 356px; background: var(--popover); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); padding: 12px 14px; display: flex; gap: 12px">
+    <span style="width: 28px; height: 28px; flex-shrink: 0; border-radius: 7px; background: rgba(63,191,153,0.16); color: #4fc9a3; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">Cx</span>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+      <span style="color: var(--fg-strong); font-weight: 600">Codex needs your approval</span>
+      <span style="font-size: 12px; color: var(--muted)">Write users migration · wants to run <span style="font-family: var(--mono)">pnpm db:migrate</span></span>
+      <div style="display: flex; gap: 8px; margin-top: 6px">
+        <button style="height: 26px; padding: 0 10px; border: none; border-radius: 5px; background: var(--primary); color: var(--primary-fg); font-size: 12px">Review</button>
+        <button style="height: 26px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: var(--fg); font-size: 12px">Dismiss</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

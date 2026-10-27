@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AgentDeck sidebar chat</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+:root{--bg:#1f1f1f;--sidebar:#181818;--card:#202020;--popover:#252526;--border:#2b2b2b;--border-strong:#3c3c3c;--fg:#cccccc;--fg-strong:#ececec;--muted:#9d9d9d;--primary:#0078d4;--primary-fg:#ffffff;--secondary:#313131;--accent:#2a2d2e;--input:#2a2a2a;--success:#3fb950;--warning:#d29922;--danger:#f85149;--mono:'SF Mono',Menlo,Consolas,monospace}
+a{color:#4daafc;text-decoration:none}a:hover{color:#8cc8ff}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 13px; overflow: hidden; position: relative">
+  <div style="height: 35px; background: var(--sidebar); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 8px; box-sizing: border-box">
+    <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840"></span>
+    <div style="flex: 1; display: flex; justify-content: center"><div style="width: 420px; height: 24px; border: 1px solid var(--border-strong); border-radius: 6px; background: #222222; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px">api-service</div></div>
+  </div>
+  <div style="flex: 1; display: flex; min-height: 0">
+    <div style="width: 48px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 20px; padding-top: 12px; box-sizing: border-box">
+      <div style="width: 48px; display: flex; justify-content: center; border-left: 2px solid var(--primary); box-sizing: border-box"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ececec" stroke-width="1.5" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg></div>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#868686" stroke-width="1.5" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"></circle><path d="M15 15l5.5 5.5"></path></svg>
+    </div>
+    <div style="width: 220px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; font-size: 13px">
+      <div style="height: 35px; display: flex; align-items: center; padding: 0 16px; font-size: 11px; letter-spacing: 0.04em; color: var(--muted)">EXPLORER</div>
+      <div style="padding: 3px 16px">▾ api-service</div>
+      <div style="padding: 3px 28px; color: var(--muted)">▸ node_modules</div>
+      <div style="padding: 3px 28px">▾ src</div>
+      <div style="padding: 3px 40px; display: flex; gap: 6px"><span style="color: #3b8eea; font-size: 10px; font-weight: 700">TS</span>retry.ts<span style="color: var(--warning); margin-left: auto; font-size: 11px">M</span></div>
+      <div style="padding: 3px 40px; display: flex; gap: 6px; background: rgba(0,120,212,0.22); color: var(--fg-strong)"><span style="color: #3b8eea; font-size: 10px; font-weight: 700">TS</span>api.test.ts</div>
+      <div style="padding: 3px 28px; display: flex; gap: 6px"><span style="color: #cbcb41; font-size: 10px; font-weight: 700">{}</span>package.json</div>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+      <div style="height: 35px; background: var(--sidebar); border-bottom: 1px solid var(--border); display: flex">
+        <div style="display: flex; align-items: center; gap: 6px; padding: 0 14px; background: var(--bg); color: var(--fg-strong); border-top: 1px solid var(--primary); border-right: 1px solid var(--border)"><span style="color: #3b8eea; font-size: 11px; font-weight: 700">TS</span>api.test.ts</div>
+      </div>
+      <div style="flex: 1; font-family: var(--mono); font-size: 12.5px; line-height: 21px; padding: 8px 0; color: #d4d4d4">
+        <div style="display: flex"><span style="width: 48px; text-align: right; padding-right: 16px; color: #6e7681">40</span><span><span style="color: #dcdcaa">it</span>(<span style="color: #ce9178">'retries with backoff'</span>, <span style="color: #569cd6">async</span> () =&gt; {</span></div>
+        <div style="display: flex; background: rgba(38,79,120,0.6)"><span style="width: 48px; text-align: right; padding-right: 16px; color: #6e7681">41</span><span>  vi.<span style="color: #dcdcaa">useFakeTimers</span>()</span></div>
+        <div style="display: flex; background: rgba(38,79,120,0.6)"><span style="width: 48px; text-align: right; padding-right: 16px; color: #6e7681">42</span><span>  <span style="color: #569cd6">const</span> <span style="color: #4fc1ff">p</span> = <span style="color: #dcdcaa">retry</span>(flaky, { attempts: <span style="color: #b5cea8">3</span> })</span></div>
+        <div style="display: flex; background: rgba(38,79,120,0.6)"><span style="width: 48px; text-align: right; padding-right: 16px; color: #6e7681">43</span><span>  vi.<span style="color: #dcdcaa">advanceTimersByTime</span>(<span style="color: #b5cea8">1000</span>)</span></div>
+        <div style="display: flex"><span style="width: 48px; text-align: right; padding-right: 16px; color: #6e7681">44</span><span>  <span style="color: #dcdcaa">expect</span>(<span style="color: #c586c0">await</span> p).<span style="color: #dcdcaa">toBe</span>(<span style="color: #ce9178">'ok'</span>)</span></div>
+        <div style="display: flex"><span style="width: 48px; text-align: right; padding-right: 16px; color: #6e7681">45</span><span>})</span></div>
+      </div>
+    </div>
+    <div style="width: 400px; background: var(--sidebar); border-left: 1px solid var(--border); display: flex; flex-direction: column">
+      <div style="height: 35px; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 12px; box-sizing: border-box">
+        <span style="font-size: 11px; letter-spacing: 0.04em; color: var(--muted); margin-right: 8px">AGENTDECK</span>
+        <button style="flex: 1; min-width: 0; height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border: none; border-radius: 5px; background: var(--accent); color: var(--fg-strong); font-size: 12px; text-align: left">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: rgba(217,119,87,0.18); color: #e8956f; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
+          <span style="flex: 1; overflow: hidden; white-space: nowrap">Fix flaky retry test</span>
+          <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.8" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg>
+        </button>
+        <button aria-label="New chat" style="width: 26px; height: 26px; border: none; border-radius: 5px; background: transparent; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#cccccc" stroke-width="1.4" aria-hidden="true"><path d="M8 3v10M3 8h10"></path></svg></button>
+        <button aria-label="Open in editor tab" style="width: 26px; height: 26px; border: none; border-radius: 5px; background: transparent; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#cccccc" stroke-width="1.3" aria-hidden="true"><rect x="2" y="4" width="10" height="10" rx="1"></rect><path d="M7 2h7v7M14 2L8 8"></path></svg></button>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 10px 14px">
+        <div style="align-self: flex-end; max-width: 90%; display: flex; flex-direction: column; align-items: flex-end; gap: 5px">
+          <div style="background: var(--secondary); border-radius: 12px 12px 4px 12px; padding: 8px 11px; color: var(--fg-strong)">Why is this flaky? Fix it.</div>
+          <span style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 5px; padding: 1px 6px"><span style="color: #3b8eea; font-weight: 700; font-size: 9px">TS</span>api.test.ts · L41–43</span>
+        </div>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M6 13.5h4M6.5 11.5h3M8 2a4 4 0 0 0-2.5 7.1V11h5V9.1A4 4 0 0 0 8 2z"></path></svg>Thought for 4s<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.8" aria-hidden="true"><path d="M6 4l4 4-4 4"></path></svg></span>
+        <div style="color: #d4d4d4; line-height: 1.55">Line 43 advances the fake clock before <code style="font-family: var(--mono); font-size: 11.5px; background: var(--secondary); border-radius: 4px; padding: 1px 4px">retry()</code> schedules its backoff. Plan:</div>
+        <div style="border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px">
+          <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 12px; font-weight: 600; color: var(--fg-strong); flex: 1">Plan</span><span style="font-size: 11px; color: var(--muted)">1 of 3</span></div>
+          <div style="height: 3px; border-radius: 2px; background: #3c3c3c; display: flex"><span style="width: 33%; background: var(--primary); border-radius: 2px"></span></div>
+          <span style="display: flex; gap: 8px; font-size: 12px; color: var(--muted); text-decoration: line-through"><span style="color: var(--success); text-decoration: none">✓</span>Make retry await the delay</span>
+          <span style="display: flex; gap: 8px; font-size: 12px; color: var(--fg-strong)"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="#3c3c3c" stroke-width="2.5"></circle><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="#4daafc" stroke-width="2.5"></path></svg>Run the test 20 times</span>
+          <span style="display: flex; gap: 8px; font-size: 12px; color: var(--muted)"><span style="width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #6e6e6e; box-sizing: border-box"></span>Add a real-timer regression test</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--card)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"></path></svg>
+          <span style="font-size: 12px; color: var(--fg-strong)">Edit</span><span style="font-family: var(--mono); font-size: 11.5px; color: var(--muted)">src/retry.ts</span>
+          <span style="font-size: 11px; color: var(--success)">+2</span><span style="font-size: 11px; color: var(--danger)">−1</span>
+          <span style="flex: 1"></span><a href="#" style="font-size: 11px">Diff</a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--card)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.3" aria-hidden="true"><path d="M2.5 3.5h11v9h-11z"></path><path d="M5 6.5l2 1.5-2 1.5M8.5 9.5H11"></path></svg>
+          <span style="font-size: 12px; color: var(--fg-strong)">Run</span><span style="font-family: var(--mono); font-size: 11.5px; color: var(--muted); overflow: hidden; white-space: nowrap; flex: 1">pnpm vitest --repeat 20</span>
+          <span style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: #4daafc; background: rgba(77,170,252,0.12); border-radius: 9px; padding: 1px 7px">Running</span>
+        </div>
+        <span style="font-size: 12px; background: linear-gradient(90deg, #6e6e6e, #ececec, #6e6e6e); -webkit-background-clip: text; color: transparent">Running tests… 14 of 20 passed</span>
+      </div>
+      <div style="padding: 8px 10px 12px">
+        <div style="border: 1px solid var(--border-strong); border-radius: 10px; background: var(--input); display: flex; flex-direction: column">
+          <div style="display: flex; gap: 6px; padding: 7px 9px 0"><span style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--fg); background: var(--secondary); border-radius: 5px; padding: 1px 6px"><span style="color: #3b8eea; font-weight: 700; font-size: 9px">TS</span>api.test.ts · L41–43<span style="color: var(--muted)">×</span></span></div>
+          <label for="side-prompt" style="position: absolute; width: 1px; height: 1px; overflow: hidden">Message Claude</label>
+          <textarea id="side-prompt" rows="2" placeholder="Queue a follow-up…" style="border: none; outline: none; background: transparent; color: var(--fg-strong); font-family: inherit; font-size: 12.5px; padding: 7px 10px; resize: none"></textarea>
+          <div style="display: flex; align-items: center; gap: 2px; padding: 0 6px 6px">
+            <button style="height: 24px; padding: 0 7px; border: none; border-radius: 5px; background: transparent; color: var(--fg); font-size: 11.5px">Opus 4.7 ▾</button>
+            <button style="height: 24px; padding: 0 7px; border: none; border-radius: 5px; background: transparent; color: var(--fg); font-size: 11.5px">Ask ▾</button>
+            <span style="flex: 1"></span>
+            <span style="font-size: 11px; color: var(--muted); margin-right: 6px">38% · 5h 42%</span>
+            <button aria-label="Stop" style="width: 26px; height: 26px; border: none; border-radius: 6px; background: var(--fg-strong); display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 2px; background: #1f1f1f"></span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height: 22px; background: var(--sidebar); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; font-size: 12px; color: var(--muted); box-sizing: border-box"><span>main</span><span style="flex: 1"></span><span style="display: flex; align-items: center; gap: 5px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #4daafc"></span>1 running</span></div>
+  <div style="position: absolute; right: 48px; top: 68px; width: 340px; background: var(--popover); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-bottom: 1px solid var(--border-strong)">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#9d9d9d" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg>
+      <span style="color: var(--muted)">Search sessions or start a new chat…</span>
+    </div>
+    <div style="padding: 6px; display: flex; flex-direction: column; gap: 1px">
+      <span style="padding: 6px 8px 4px; font-size: 11px; font-weight: 600; color: var(--muted)">New chat</span>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px; background: var(--accent)">
+        <span style="width: 18px; height: 18px; border-radius: 4px; background: rgba(217,119,87,0.18); color: #e8956f; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center">C</span>
+        <span style="flex: 1; color: var(--fg-strong)">Claude Code</span><span style="font-size: 11px; color: var(--muted)">5h 42%</span>
+        <span style="font-size: 10px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px">⌘1</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px">
+        <span style="width: 18px; height: 18px; border-radius: 4px; background: rgba(63,191,153,0.16); color: #4fc9a3; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center">Cx</span>
+        <span style="flex: 1">Codex</span>
+        <span style="font-size: 10px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px">⌘2</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px">
+        <span style="width: 18px; height: 18px; border-radius: 4px; background: rgba(200,200,200,0.14); color: #d4d4d4; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center">G</span>
+        <span style="flex: 1">Grok</span><span style="font-size: 11px; color: var(--warning)">Sign in</span>
+      </div>
+      <div style="height: 1px; background: var(--border-strong); margin: 4px 0"></div>
+      <span style="padding: 6px 8px 4px; font-size: 11px; font-weight: 600; color: var(--muted)">Recent</span>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px">
+        <svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="#3c3c3c" stroke-width="3"></circle><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="#4daafc" stroke-width="3"></path></svg>
+        <span style="flex: 1">Fix flaky retry test</span><span style="font-size: 11px; color: var(--muted)">now</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px">
+        <span style="width: 7px; height: 7px; margin: 0 1.5px; border-radius: 50%; background: var(--warning)"></span>
+        <span style="flex: 1">Write users migration</span><span style="font-size: 10px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px">in tab</span><span style="font-size: 11px; color: var(--muted)">2m</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px">
+        <span style="width: 7px; height: 7px; margin: 0 1.5px; border-radius: 50%; border: 1.5px solid #6e6e6e; box-sizing: border-box"></span>
+        <span style="flex: 1">Explain build pipeline</span><span style="font-size: 11px; color: var(--muted)">1d</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 7px 12px; border-top: 1px solid var(--border-strong); font-size: 11px; color: var(--muted)">
+      <span>↑↓ navigate</span><span>⏎ open</span><span>⌘⏎ open in tab</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

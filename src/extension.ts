@@ -18,7 +18,16 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor) lastEditor = editor
     }),
-    vscode.commands.registerCommand('agentdeck.newClaudeChat', () => openChat(context, () => lastEditor))
+    // activeTextEditor is undefined while a webview or panel has focus, so fall back to a visible file.
+    vscode.commands.registerCommand('agentdeck.newClaudeChat', () =>
+      openChat(
+        context,
+        () =>
+          vscode.window.activeTextEditor ??
+          lastEditor ??
+          vscode.window.visibleTextEditors.find((editor) => editor.document.uri.scheme === 'file')
+      )
+    )
   )
 }
 

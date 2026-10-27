@@ -1,0 +1,39 @@
+{
+  "name": "agentdeck",
+  "displayName": "AgentDeck",
+  "description": "Chat with coding agents on your own subscriptions.",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "ashmitb95",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentdeck.newClaudeChat",
+        "title": "New Claude Chat",
+        "category": "AgentDeck"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.284"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "@types/vscode": "1.95.0",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}

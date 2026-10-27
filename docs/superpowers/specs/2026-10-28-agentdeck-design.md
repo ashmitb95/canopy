@@ -1,220 +1,274 @@
 # AgentDeck — design
 
-A VS Code extension that runs chat sessions against several coding-agent providers from one place, using each provider's own CLI and the user's own subscription.
+A VS Code extension that runs chat sessions against many coding-agent providers from one place, using each provider's own CLI and the user's own subscription.
+
+## Roadmap
+
+The full product is five sub-projects. Each gets its own spec, plan, and implementation cycle.
+
+| # | Sub-project | Delivers |
+|---|---|---|
+| 1 | **Provider platform** | Provider contract, item model, capability model; Claude, Codex, and generic ACP adapters; agent registry that makes adding an ACP agent a config entry |
+| 2 | **Sessions** | Sidebar, persistence, resume, status, attention notifications |
+| 3 | Onboarding and sign-in | Provider screen with install/sign-in state, guided sign-in per provider |
+| 4 | Chat UI parity | Orca-level chat surface: markdown, tool runs, diff cards, pickers, queued messages, attachments, mentions, context ring, subagents, rewind, find |
+| 5 | Power features | Quota display, skills browser, MCP status and tools, permission configuration |
+
+**This spec covers sub-projects 1 and 2.** It ends with Claude, Codex, and Grok usable from a persistent session list. Sub-projects 3–5 build on the contracts defined here; the capability model is what lets them add features without per-provider special cases.
+
+Orca (`stablyai/orca`, MIT) is the reference for behaviour and feature scope, not a dependency. Adapted code carries Orca's license notice in `NOTICE`.
 
 ## Goals
 
-- Start, chat with, and resume sessions for **Claude Code**, **Codex**, and **any ACP agent** (Grok first) from one extension.
-- One login per provider, performed by that provider's official CLI. The extension never reads, stores, or forwards credentials.
-- Sessions run in the open workspace folder. Agents manage git worktrees themselves if asked to.
+- Start, chat with, and resume sessions for Claude Code, Codex, and any ACP agent from one extension.
+- Adding a new ACP agent is a registry entry plus fixtures, not new adapter code.
+- One login per provider, performed by the provider's official CLI. The extension never reads, stores, or forwards credentials, and never calls provider APIs directly. Quota, skills, MCP status, and models come only from what the CLI reports.
+- Sessions run in the open workspace folder. Agents manage git worktrees themselves.
 - Sessions survive a VS Code reload: the list persists, and opening a session replays its history and continues the conversation.
 
-## Non-goals (v1)
+## Non-goals (this spec)
 
-- Multi-agent coordination (one agent dispatching tasks to others).
-- Extension-managed worktrees.
-- Multiple accounts per provider.
-- Cursor (pending a check of its ACP support).
-- Sessions that keep running while VS Code is closed.
-- Rewind/fork, slash-command catalogs, MCP configuration UI.
-- Polished UX. v1 UI is functional; design comes later.
+- Guided onboarding beyond a sign-in action per provider (sub-project 3).
+- Chat UI beyond a functional item renderer (sub-project 4).
+- Quota display, skills browser, MCP views, permission rule editing (sub-project 5). This spec defines the capability and event plumbing they will use.
+- Multi-agent coordination, extension-managed worktrees, multiple accounts per provider, sessions that run while VS Code is closed.
 
-## Constraints
+## Lessons carried from the POC
 
-- **Subscription use goes through the official CLI.** Claude runs via `@anthropic-ai/claude-agent-sdk` with `pathToClaudeCodeExecutable` pointing at the user's installed `claude`; the SDK's bundled CLI binaries are not shipped. Codex runs via the user's `codex app-server`. ACP agents run via their own CLI.
-- **Runs where the code is.** `extensionKind: ["workspace"]`, so in Remote-SSH/WSL/tunnels the CLIs run on the remote host next to the files.
-- **Orca (MIT) is a reference, not a dependency.** Patterns are adapted from `stablyai/orca`; any adapted code carries Orca's license notice in `NOTICE`.
+- The installed `claude` CLI (2.1.111) rejects a permission `allow` without `updatedInput`, although the SDK types mark it optional. Always echo the tool input back.
+- The Agent SDK is ESM and reads `import.meta.url`; the CJS extension bundle defines it from `__filename`. The SDK is bundled into the extension; its per-platform CLI binaries are excluded.
+- `vscode.window.activeTextEditor` is undefined while a webview or panel has focus; editor context falls back to the last focused file, then any visible file.
+- Dropping `ANTHROPIC_API_KEY` from the child env keeps Claude on the claude.ai subscription (`apiKeySource: none`).
 
 ## Architecture
 
-Everything runs in the extension host process. Each chat is a webview editor tab. No sidecar process.
+Everything runs in the extension host. Each chat is a webview editor tab. No sidecar process. `extensionKind: ["workspace"]`, so in remote windows the CLIs run next to the files.
 
 ```
 Extension host
-├─ CliResolver        finds each CLI on the user's login-shell PATH (or a settings override)
-├─ AuthService        reports signed-in state; runs each CLI's own login
+├─ Env              login-shell PATH/env capture; CLI path resolution
+├─ Registry         provider definitions: built-ins (Claude, Codex) + ACP agent specs
 ├─ Providers
-│   ├─ ClaudeProvider   Agent SDK → user's claude
-│   ├─ CodexProvider    codex app-server, JSON-RPC over stdio
-│   └─ AcpProvider      generic ACP client, one instance per AcpAgentSpec (Grok in v1)
-├─ SessionManager     create / resume / stop sessions; owns live handles and status
-├─ Journal            per-session append-only log of SessionItems (JSONL)
-├─ SessionStore       session index in workspaceState
+│   ├─ claude/        Agent SDK → user's claude
+│   ├─ codex/         codex app-server, JSON-RPC over stdio
+│   └─ acp/           generic ACP client, parameterised by AcpAgentSpec
+├─ Sessions
+│   ├─ manager        create / open / resume / stop; owns live handles and status
+│   ├─ journal        per-session append-only SessionItem log
+│   └─ store          session index (workspaceState)
+├─ EditorContext    current file + selection for prompts
 └─ UI
-    ├─ SessionsView     sidebar tree: providers (with sign-in state) → sessions (with status)
-    └─ ChatPanel        one webview tab per session
+    ├─ sessions-view  sidebar tree
+    └─ chat-panel     webview tab per session (React)
 
-webview ⇄ ChatPanel ⇄ SessionManager ⇄ ProviderSession ⇄ CLI process
+webview ⇄ chat-panel ⇄ SessionManager ⇄ ProviderSession ⇄ CLI process
 ```
 
-Dependency direction is strictly downward. Providers know nothing about VS Code UI; the webview knows nothing about providers; SessionManager knows nothing provider-specific.
+Dependencies point downward only. Providers import nothing from `vscode`, so they run under plain Node for tests and the live smoke script.
 
 ## Core model
 
 ### SessionItem
 
-The UI renders a list of items. Providers emit **upserts**: an item with a stable `id`, which replaces any earlier item with the same `id`. Streaming text is an upsert of a growing message. This item-based model (adapted from Orca's journal) keeps the renderer trivial and makes replay a fold over the log.
+The UI renders an ordered list of items. Providers emit **upserts**: an item with a stable `id` replaces any earlier item with that `id`. Streaming text is an upsert of a growing message. Replay is a fold over the journal.
 
 ```ts
 type SessionItem =
   | { kind: 'message'; id; role: 'user' | 'assistant'; text: string; streaming: boolean }
   | { kind: 'thought'; id; text: string; streaming: boolean }
-  | { kind: 'tool'; id; title: string; toolKind: 'read' | 'edit' | 'execute' | 'search' | 'fetch' | 'other';
-      status: 'pending' | 'running' | 'done' | 'failed'; input?: unknown; output?: string; paths?: string[] }
-  | { kind: 'diff'; id; path: string; oldText: string | null; newText: string }
+  | { kind: 'tool'; id; title: string; toolKind: ToolKind; status: 'pending' | 'running' | 'done' | 'failed';
+      input?: unknown; output?: string; paths?: string[]; parentId?: string }
+  | { kind: 'diff'; id; path: string; oldText: string | null; newText: string; parentId?: string }
   | { kind: 'plan'; id; entries: { text: string; status: 'pending' | 'in_progress' | 'done' }[] }
-  | { kind: 'approval'; id; title: string; detail?: string; options: { id: string; label: string }[];
-      resolved?: string }
-  | { kind: 'question'; id; questions: { question: string; options: string[]; multi: boolean }[];
-      answers?: string[][] }
-  | { kind: 'turn'; id; state: 'started' | 'ended'; stopReason?: string; usage?: { input: number; output: number } }
-  | { kind: 'error'; id; message: string }
+  | { kind: 'approval'; id; title: string; detail?: string; options: { id: string; label: string }[]; resolved?: string }
+  | { kind: 'question'; id; questions: { question: string; options: string[]; multi: boolean }[]; answers?: string[][] }
+  | { kind: 'turn'; id; state: 'started' | 'ended'; stopReason?: string; durationMs?: number }
+  | { kind: 'notice'; id; level: 'info' | 'warning' | 'error'; text: string; action?: 'sign-in' | 'retry' }
+
+type ToolKind = 'read' | 'edit' | 'execute' | 'search' | 'fetch' | 'think' | 'other'
 ```
 
-`toolKind` and the `plan`/`tool` shapes follow ACP's `session/update` vocabulary, so the ACP provider maps nearly one to one.
+`parentId` links a subagent's tools to the tool call that spawned it, so sub-project 4 can group them; this spec stores it but renders flat. Vocabulary follows ACP's `session/update`, so ACP maps almost one to one.
+
+### Session facts
+
+Facts that are state, not transcript, travel separately so the UI can show them outside the message list (and sub-project 5 can build on them):
+
+```ts
+type SessionFact =
+  | { kind: 'model'; current: string; available?: { id: string; label: string }[] }
+  | { kind: 'mode'; current: PermissionMode; available: { id: PermissionMode; label: string }[] }
+  | { kind: 'context'; usedTokens: number; maxTokens?: number }
+  | { kind: 'quota'; windows: { label: string; usedPercent?: number; resetsAt?: string; status: 'ok' | 'warning' | 'limited' }[] }
+  | { kind: 'commands'; items: { name: string; description?: string; source: 'skill' | 'command' | 'mcp' }[] }
+  | { kind: 'mcp'; servers: { name: string; status: 'connected' | 'failed' | 'pending' | 'needs-auth'; tools?: string[] }[] }
+```
+
+Facts are last-value-wins per `kind`, kept in memory, and the latest of each is persisted in the session index so a reopened session shows them before the CLI starts.
+
+### Capabilities
+
+Each provider declares what it supports. The UI shows a control only when the capability is present, so new providers and new features meet without special cases.
+
+```ts
+type Capability =
+  | 'resume'          // continue a past session's agent context
+  | 'interrupt'
+  | 'models' | 'setModel'
+  | 'modes' | 'setMode'
+  | 'images'          // image attachments in prompts
+  | 'commands'        // slash commands / skills list
+  | 'mcpStatus'
+  | 'quota'           // emits quota facts
+  | 'context'         // emits context-usage facts
+```
+
+ACP agents get capabilities from their `initialize` response and the session updates they advertise; built-in providers declare theirs statically.
 
 ### Provider contract
 
 ```ts
-interface Provider {
-  readonly id: 'claude' | 'codex' | string        // ACP agents use their spec id, e.g. 'grok'
-  readonly label: string
-  authStatus(): Promise<AuthStatus>                // 'signed-in' | 'signed-out' | 'not-installed' | 'unknown'
-  signIn(ui: SignInUi): Promise<void>
-  models(): Promise<{ id: string; label: string }[]>
-  permissionModes(): { id: PermissionMode; label: string }[]
-  open(opts: { cwd: string; model?: string; mode?: PermissionMode; resumeId?: string }): Promise<ProviderSession>
+interface ProviderDefinition {
+  id: string                                       // 'claude' | 'codex' | ACP spec id
+  label: string
+  cli: { command: string; installUrl: string }
+  capabilities: ReadonlySet<Capability>
+  authStatus(env: Env): Promise<'signed-in' | 'signed-out' | 'not-installed' | 'unknown'>
+  signIn(env: Env, ui: SignInUi): Promise<void>
+  open(opts: { env: Env; cwd: string; model?: string; mode?: PermissionMode; resumeId?: string }): Promise<ProviderSession>
 }
 
 interface ProviderSession {
   readonly nativeId: string                        // Claude session id | Codex thread id | ACP session id
-  prompt(text: string): Promise<void>              // resolves when the turn ends
-  cancel(): Promise<void>                          // interrupt the current turn
-  setModel(id: string): Promise<void>
-  setMode(mode: PermissionMode): Promise<void>
-  dispose(): Promise<void>                         // stop the CLI process tree
-  onItem: Event<SessionItem>
-  onExit: Event<{ error?: string }>
+  prompt(input: { text: string; context?: EditorContextBlock; images?: ImageAttachment[] }): Promise<void>
+  cancel(): Promise<void>
+  setModel?(id: string): Promise<void>
+  setMode?(mode: PermissionMode): Promise<void>
   answer(itemId: string, response: string | string[][]): void   // approval option id or question answers
+  dispose(): Promise<void>
+  onItem: Event<SessionItem>
+  onFact: Event<SessionFact>
+  onExit: Event<{ error?: string }>
 }
 
 type PermissionMode = 'ask' | 'accept-edits' | 'full-access'
 ```
 
-Approvals and questions are items the provider emits and then waits on; `answer()` settles them. This keeps the permission round-trip inside one channel instead of a separate callback API.
+Approvals and questions are items the provider emits and then waits on; `answer()` settles them.
 
 ## Providers
 
-### ClaudeProvider
+### Claude (built-in)
 
-- `query()` from `@anthropic-ai/claude-agent-sdk` in streaming-input mode: the prompt is an async queue the session pushes user messages into, so one CLI process serves the whole session.
-- Options (from Orca's tested base): `pathToClaudeCodeExecutable`, `cwd`, `includePartialMessages: true`, `systemPrompt: { type: 'preset', preset: 'claude_code' }`, `settingSources: ['user', 'project', 'local']`, `resume` when resuming, and `permissionMode` mapped `ask→default`, `accept-edits→acceptEdits`. `full-access` passes the CLI flag `--dangerously-skip-permissions` through `extraArgs` (Orca found the SDK's typed bypass emits a flag older binaries reject).
-- **Environment:** inherit the login-shell env. If `ANTHROPIC_API_KEY` is set and the user rejected that key in Claude's global config (`customApiKeyResponses.rejected`, matched by the key's last 20 characters), drop it. Otherwise the headless CLI bills the API key instead of the subscription.
-- **Permissions:** `canUseTool` emits an `approval` item (Allow once / Allow always / Deny) and resolves with the user's answer. `AskUserQuestion` arrives through `canUseTool` too; it is emitted as a `question` item and answered via `updatedInput`.
-- **Translation:** `stream_event` text/thinking deltas → streaming `message`/`thought`; assistant `tool_use` blocks → `tool` (running); user `tool_result` blocks → `tool` (done/failed); `Edit`/`Write`/`MultiEdit` inputs → `diff`; `TodoWrite` → `plan`; `result` → `turn` ended with usage.
-- Controls: `interrupt()`, `setModel()`, `setPermissionMode()` on the query object.
-- Models: `supportedModels()` from the query object once open; before a session exists, a static list of aliases (`default`, `opus`, `sonnet`, `haiku`).
+- `query()` from `@anthropic-ai/claude-agent-sdk` in streaming-input mode: one CLI process per session; prompts are pushed into its input queue.
+- Options: `pathToClaudeCodeExecutable`, `cwd`, `env` (login-shell env without `ANTHROPIC_API_KEY`), `includePartialMessages: true`, `systemPrompt: { type: 'preset', preset: 'claude_code' }`, `settingSources: ['user', 'project', 'local']`, `resume` when resuming. Modes: `ask→default`, `accept-edits→acceptEdits`, `full-access` via `extraArgs: { 'dangerously-skip-permissions': null }`.
+- `canUseTool` → `approval` item (Allow once / Always allow / Deny; "Always allow" returns the call's `suggestions` as `updatedPermissions`). `AskUserQuestion` → `question` item, answered through `updatedInput`.
+- Items: `stream_event` text/thinking deltas → `message`/`thought`; `tool_use` → `tool`; `tool_result` → tool done/failed; `Edit`/`Write`/`MultiEdit` input → `diff`; `TodoWrite` → `plan`; `result` → `turn` ended. Messages with `parent_tool_use_id` set `parentId`.
+- Facts: `system/init` → model; `supportedModels()` → model list; `rate_limit_event` → quota; `getContextUsage()` after each turn → context; `supportedCommands()` → commands; `mcpServerStatus()` → mcp.
+- Capabilities: all.
 
-### CodexProvider
+### Codex (built-in)
 
-- Spawns `codex app-server` and speaks JSON-RPC 2.0 over stdio (a ~150-line client; no extra dependency). Request/notification types are generated with `codex app-server generate-ts`, pinned to a tested Codex version, and committed.
-- Handshake: `initialize` (clientInfo, `experimentalApi: true`) → `initialized` notification.
-- Session: `thread/start { cwd, model, approvalPolicy, sandbox }` or `thread/resume { threadId }`; `turn/start` per prompt; `turn/interrupt` to cancel; `thread/read` is not needed because replay comes from the Journal.
-- Modes: `ask` → approval policy `on-request` + `workspace-write` sandbox; `accept-edits` → the same, but the provider answers `item/fileChange/requestApproval` with approve itself instead of emitting an `approval` item; `full-access` → approval policy `never` + `danger-full-access` sandbox.
-- **Translation:** `item/agentMessage/delta` → streaming `message`; `item/reasoning/summaryTextDelta` → `thought`; `item/started`/`item/completed` for command executions → `tool` (execute) with `item/commandExecution/outputDelta` appended; file-change items and `item/fileChange/patchUpdated` → `diff`; `turn/plan/updated` → `plan`; `turn/started`/`turn/completed` → `turn`; `thread/tokenUsage/updated` → usage on the turn item.
-- **Server requests:** `item/commandExecution/requestApproval` and `item/fileChange/requestApproval` → `approval`; `item/tool/requestUserInput` → `question`.
-- Models: `model/list`.
+- Spawns `codex app-server`; JSON-RPC 2.0 over stdio with a small in-repo client. Types generated by `codex app-server generate-ts` against a pinned Codex version and committed.
+- `initialize` (`experimentalApi: true`) → `initialized`; `thread/start { cwd, model, approvalPolicy, sandbox }` or `thread/resume { threadId }`; `turn/start` per prompt; `turn/interrupt`.
+- Modes: `ask` → `on-request` + `workspace-write`; `accept-edits` → same, but file-change approvals are answered by the adapter; `full-access` → `never` + `danger-full-access`.
+- Items: `item/agentMessage/delta` → `message`; `item/reasoning/summaryTextDelta` → `thought`; command execution items + `outputDelta` → `tool` (execute); file-change items + `patchUpdated` → `diff`; `turn/plan/updated` → `plan`; `turn/started|completed` → `turn`. Server requests `item/commandExecution/requestApproval`, `item/fileChange/requestApproval` → `approval`; `item/tool/requestUserInput` → `question`.
+- Facts: `model/list` → models; `account/rateLimits/updated` → quota; `thread/tokenUsage/updated` → context; `skills/list` → commands; `mcpServer/startupStatus/updated` → mcp.
+- Capabilities: all except `images` until verified.
 
-### AcpProvider
+### ACP agents (registry)
 
-- Generic client built on `@agentclientprotocol/sdk` (`ClientSideConnection` over the child's stdio). One provider instance per `AcpAgentSpec`:
+A generic client on `@agentclientprotocol/sdk` (`ClientSideConnection` over stdio), parameterised by a spec:
 
 ```ts
 type AcpAgentSpec = {
   id: string; label: string
-  command: string; args: (o: { fullAccess: boolean }) => string[]
+  command: string; installUrl: string
+  args: (o: { fullAccess: boolean }) => string[]
   env?: Record<string, string>
-  loginCommand: string[]                              // run in a terminal by signIn()
+  loginCommand: string[]                                   // run in a terminal by signIn()
   authMethod: (advertised: string[], env: NodeJS.ProcessEnv) => string | undefined
+  quirks?: AcpQuirks                                       // optional hooks for agent-specific extensions
 }
 ```
 
-- v1 ships one spec. Grok: `grok agent [--always-approve] stdio`, login `grok login`, auth method `xai.api_key` if `XAI_API_KEY` is set and advertised, else `cached_token`. More agents (OpenCode, Gemini) are new spec entries.
-- Flow: `initialize` (client capabilities: no `fs`, no `terminal`, so the agent uses its own tools) → `authenticate` with the spec's method → `session/new { cwd }` or `session/load` when the agent advertises `loadSession` → `session/prompt` per turn → `session/cancel`.
-- `session/update` maps almost directly onto `SessionItem`. `session/request_permission` → `approval`, answered with the chosen option id. Unknown extension notifications are ignored (Orca's per-agent "dialects" are deferred until a concrete gap appears).
-- If the agent lacks `loadSession`, resume opens a new session and the chat shows the replayed history with a note that the agent's context was not restored.
+- Flow: `initialize` (no `fs`/`terminal` client capabilities; agents use their own tools) → `authenticate` with the spec's method → `session/new { cwd }` or `session/load` if `loadSession` is advertised → `session/prompt` → `session/cancel`.
+- `session/update` → items and facts: message/thought chunks, `tool_call`/`tool_call_update`, `plan`; `available_commands_update` → commands; `current_mode_update` → mode; `config_option_update` → model; `usage_update` → context/quota. `session/request_permission` → `approval`.
+- `quirks` is the extension point Orca calls "dialects": hooks to map an agent's non-standard notifications. Empty for v1; added per agent when a fixture shows a gap.
+- If `loadSession` is absent, resume opens a new session; history stays visible with a notice that the agent's context was not restored.
 
-## Auth
+**Ramp-up path.** Ships with **Grok** (`grok agent [--always-approve] stdio`, login `grok login`, auth `xai.api_key` if `XAI_API_KEY` is set and advertised, else `cached_token`). Next, in order: OpenCode, Gemini CLI, OMP, Antigravity, then Cursor if it supports ACP. Adding one is: a spec entry, a recorded fixture of a real session, a translator test against it, and quirks only if the test shows a gap.
 
-| Provider | Status check | Sign-in |
+## Editor context
+
+Each prompt carries the current file and selection as a provider-agnostic block appended to the prompt text: `<editor-context file="src/a.ts" selection="12-30">…selected text…</editor-context>` (selection text capped at 200 lines). The file comes from the active editor, else the last focused file, else any visible file. The composer shows what will be attached, with a toggle to drop it for one prompt.
+
+## Sessions
+
+- **Store** (workspaceState): `{ id, providerId, nativeId, title, createdAt, updatedAt, model, mode, facts }[]`. Title is the first prompt's first line, truncated.
+- **Journal**: `<storageUri>/sessions/<id>.jsonl`, one upserted item per line. Streaming upserts are coalesced and flushed at most every 250 ms and at turn end. A truncated last line is ignored on read.
+- **Open**: fold the journal and render. The CLI starts on the first prompt, with `resumeId = nativeId`.
+- **Status**: `idle`, `running`, `needs-input` (pending approval/question), `error`, `stopped`.
+- **Attention**: when a session that is not the focused tab enters `needs-input` or finishes a turn, show a VS Code notification with "Open"; the tree badge updates either way.
+- Closing a tab keeps a running turn alive and stops the process once idle. On deactivate, all CLI processes stop.
+
+## Sign-in (minimal; sub-project 3 adds the guided flow)
+
+| Provider | Status | Sign-in |
 |---|---|---|
-| Claude | `claude auth status` (JSON: `loggedIn`, `authMethod`) | spawn `claude auth login --claudeai` |
-| Codex | `account/read` on a short-lived app-server | spawn `codex login` (local) or `codex login --device-auth` (remote) |
-| ACP | `initialize` + `authenticate`; an auth-required error means signed out | `loginCommand` in a VS Code terminal |
+| Claude | `claude auth status` (JSON) | `claude auth login --claudeai`, link captured via a `BROWSER` helper and opened with `vscode.env.openExternal` |
+| Codex | `account/read` on a short-lived app-server | `codex login` (local) or `codex login --device-auth` (remote), link/code parsed from output |
+| ACP | `initialize` + `authenticate`; auth-required error → signed out | `loginCommand` in a VS Code terminal |
 
-**Link capture.** Sign-in links are opened with `vscode.env.openExternal`, which reaches the user's local browser even when the extension host is remote. For Claude, the login process gets `BROWSER` set to a small helper script that writes its URL argument to a temp file the extension watches (Claude discards the helper's stdout). For Codex, the link (or device code) is parsed from the process output. A progress notification shows "Waiting for sign-in…" with Cancel, which kills the login process. On exit, status is re-checked.
+## Env and process lifecycle
 
-## CLI resolution
-
-VS Code launched from the Dock does not have the shell's PATH. `CliResolver` runs `$SHELL -ilc 'command -v <cli>'` once per CLI, caches the absolute path, and re-resolves on the "Refresh providers" command. The same login-shell environment is captured once and used as the base env for every child process. Settings `agentdeck.<provider>.path` override resolution.
-
-## Sessions, persistence, and replay
-
-- **SessionStore** (workspaceState): `{ id, providerId, nativeId, title, createdAt, updatedAt, model, mode }[]`. Title is the first prompt's first line, truncated.
-- **Journal**: `<storageUri>/sessions/<id>.jsonl`, one upserted `SessionItem` per line, appended as items arrive (streaming upserts are coalesced and flushed at most every 250 ms and at turn end).
-- **Opening a session** folds its journal into the item list and renders it. The CLI process is not started until the user sends a prompt; then the provider opens with `resumeId = nativeId`.
-- **Status** (shown in the tree and tab title): `idle`, `running`, `needs-input` (pending approval/question), `error`, `stopped`.
-- Closing a chat tab keeps the CLI process alive if a turn is running and stops it once the session is idle. "Stop session" stops it immediately.
-- On extension deactivate, all CLI processes are stopped.
-
-## Process lifecycle
-
-Children are spawned with `detached: true` on POSIX so the whole process group can be signalled. Stop is SIGTERM to the group, then SIGKILL after 2 s. On Windows, `taskkill /T /F`. This is a deliberate simplification of Orca's exit-proof ladder; revisit if orphaned processes show up in practice.
+- `Env` runs `$SHELL -ilc` once to capture PATH and environment; CLIs resolve against it, overridable per provider in settings. Refreshed by the "Refresh providers" command.
+- Children spawn with `detached: true` on POSIX; stop is SIGTERM to the process group, then SIGKILL after 2 s. Windows uses `taskkill /T /F`.
 
 ## Error handling
 
 | Situation | Behaviour |
 |---|---|
-| CLI not found | Provider node shows "Not installed" with a link to install docs; new-session action disabled. |
-| Signed out | Provider node shows "Sign in"; opening a session for it prompts sign-in first. |
-| Auth fails mid-session | `error` item with a Sign in button; session status `error`. |
-| CLI exits unexpectedly | `error` item with the last 20 lines of stderr; next prompt reopens with resume. |
-| Resume target missing (transcript deleted) | Open a fresh native session; `error` item notes the agent's context was lost; history stays visible. |
-| Malformed provider message | Logged to the AgentDeck output channel and skipped; the session continues. |
+| CLI not found | Provider shows "Not installed" with its install link; new-session disabled. |
+| Signed out | Provider shows "Sign in"; new sessions prompt sign-in first. |
+| Auth fails mid-session | `notice` (error, action `sign-in`); status `error`. |
+| CLI exits unexpectedly | `notice` with the last 20 stderr lines and action `retry`; next prompt reopens with resume. |
+| Resume target missing | Fresh native session; `notice` that agent context was lost; history stays. |
+| Malformed provider message | Logged to the AgentDeck output channel and skipped. |
 
-## UI (functional v1)
+## UI (functional; sub-project 4 replaces the surface)
 
-- **SessionsView** (activity bar): one node per provider showing auth state, with inline actions *New session* and *Sign in*; sessions listed under their provider, newest first, with status icon. Context menu: Open, Rename, Stop, Delete (removes the index entry and journal only).
-- **ChatPanel**: webview editor tab per session. Header: provider, model picker, mode picker. Body: item list. Footer: prompt box with Send / Stop. Approval and question items render inline buttons. `diff` items have an "Open diff" action that opens VS Code's native diff editor.
-- Webview built with Preact, bundled by esbuild. On reveal it requests the current item list; afterwards it receives incremental upserts.
+- **Sidebar**: providers with auth state and *New session* / *Sign in*; sessions under each provider, newest first, with status icon. Context menu: Open, Rename, Stop, Delete.
+- **Chat tab**: React webview bundled by esbuild. Header with model and mode pickers (shown per capability); item list; approval/question cards with buttons; diff items with "Open diff" (native diff editor); composer with editor-context chip, Send, Stop. React is chosen now so sub-project 4 extends this surface rather than replacing it, and so Orca's React components are a direct reference.
 
 ## Repo layout
 
 ```
 src/
-  extension.ts            activation, wiring
-  cli/resolver.ts         login-shell PATH + env capture
-  auth/                   AuthService, browser-capture helper
+  extension.ts
+  env.ts
+  editor-context.ts
   providers/
-    types.ts              Provider, ProviderSession, SessionItem
-    claude/               provider, translate.ts
-    codex/                provider, rpc.ts, translate.ts, generated/
-    acp/                  provider, specs.ts, translate.ts
-  sessions/               manager.ts, store.ts, journal.ts
-  process/                spawn + process-group stop
-  ui/                     sessions-view.ts, chat-panel.ts
-webview/                  Preact chat UI
-test/
-  fixtures/<provider>/    recorded raw provider streams
+    types.ts            ProviderDefinition, ProviderSession, SessionItem, SessionFact, Capability
+    registry.ts
+    claude/             provider.ts, translate.ts
+    codex/              provider.ts, rpc.ts, translate.ts, generated/
+    acp/                provider.ts, translate.ts, specs.ts
+  sessions/             manager.ts, journal.ts, store.ts
+  process/              spawn + group stop
+  ui/                   sessions-view.ts, chat-panel.ts
+webview/                React chat UI
+scripts/smoke.ts        live check per installed, signed-in provider
+test/fixtures/<provider>/
 ```
 
 ## Testing
 
-- **Translators** (the riskiest code): unit tests that feed recorded raw streams from `test/fixtures/<provider>/` into each `translate.ts` and assert the resulting `SessionItem` upserts. Fixtures are captured once from real CLI runs.
-- **ACP provider**: tested end to end against a fake in-repo ACP agent that scripts updates and permission requests.
-- **Codex JSON-RPC client**: tested against a scripted fake stdio peer.
-- **Journal**: write/fold round-trip, coalescing, truncated last line tolerated.
-- **Activation smoke test** with `@vscode/test-electron`.
-- **Live smoke script** (opt-in, not CI): for each installed and signed-in CLI, open a session, send a prompt, confirm a `turn` end item, resume, send again.
+- **Translators**: recorded raw streams from real CLI sessions in `test/fixtures/<provider>/` → expected items and facts. Every provider, including each ACP spec, needs a fixture.
+- **ACP client**: end to end against a fake in-repo ACP agent (updates, permission requests, auth-required, missing `loadSession`).
+- **Codex RPC client**: against a scripted fake stdio peer.
+- **Journal**: write/fold round trip, coalescing, truncated last line.
+- **Session manager**: status transitions, resume path, attention events, with a fake provider.
+- **Live smoke** (opt-in): for each installed, signed-in provider: open, prompt, approve an edit, second turn remembers the first, resume after dispose.
 
-Tooling: TypeScript, esbuild, vitest, pnpm.
+Tooling: TypeScript, esbuild, vitest, pnpm, `@vscode/vsce` for sideloadable builds.

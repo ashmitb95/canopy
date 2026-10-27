@@ -272,7 +272,7 @@ The first build ships a plain textarea that produces `text` parts plus the edito
 
 - **Editor**: TipTap (React, ProseMirror) with a minimal schema — paragraph, hard break, history, placeholder — plus inline atom nodes for `file`, `command`, `image`, and `pasted` parts. This mirrors Orca's prompt editor (skill, file-reference, and image-reference nodes).
 - **Triggers**: `@` opens a shadcn Command popover backed by a workspace file search in the extension host (open and recent files first, then `findFiles` fuzzy matches); `/` opens one listing the session's `commands` fact (skills, commands, MCP prompts).
-- **Attachments**: paste images, drop files, the attach button (host file picker), and the editor selection pill. Whether drops from VS Code's Explorer reach the webview is verified during sub-project 4; the attach button is the fallback.
+- **Attachments**: the attach button opens a menu with *Upload from computer…* (host `showOpenDialog`, any file; images become `image` parts, other files are copied into the attachments store and sent as `file` parts) and *Add file from workspace…* (same picker as `@`); pasting an image from the clipboard; and the editor selection pill. Drag and drop is not supported: VS Code opens dropped files as editors, matching the official extensions' behaviour.
 - **Large pastes** over 40 lines become a `pasted` pill that expands on click.
 - **Drafts** persist per session (webview state, mirrored to the extension on change) so switching sessions or reloading keeps unsent text and attachments.
 - **Serialization**: the document maps one to one onto `PromptPart[]`; adjacent text nodes merge.

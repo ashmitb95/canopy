@@ -272,6 +272,8 @@ Layout reference: the "AgentDeck UX mockups" canvas (first run, chat tab, provid
 ### Component stack and theming
 
 - **React + shadcn/ui** (Radix primitives) + **Tailwind v4**, bundled by esbuild into the webview. Orca also uses shadcn, so its chat components are a close reference.
+- **AI Elements** (Vercel's shadcn registry of AI chat components) for the chat surface: Conversation, Message (+ actions), Reasoning, Tool, CodeBlock, Plan/Task, Queue, Confirmation, Context, PromptInput, Loader/Shimmer, Suggestion. Components are copied into `webview/components/ai/` like any shadcn component and adapted to `SessionItem` rather than AI SDK message types.
+- **Look and feel** is locked by the "AgentDeck UX mockups" canvas: Dark Modern tokens, 26–34 px provider monogram avatars with a per-provider tint, pill status badges, collapsible tool cards with status badges, tinted diff rows, approval cards with keyboard hints, composer with in-toolbar model/mode pickers and context ring.
 - **Theme bridge.** shadcn's CSS variables are defined from VS Code theme variables, so every theme (light, dark, high contrast) applies without per-theme code:
 
 | shadcn token | VS Code variable |
@@ -288,7 +290,7 @@ Layout reference: the "AgentDeck UX mockups" canvas (first run, chat tab, provid
 | `--ring` | `--vscode-focusBorder` |
 | `--destructive` | `--vscode-errorForeground` |
 
-- **Native proportions**: `--vscode-font-family` / `--vscode-font-size` for UI text, `--vscode-editor-font-family` for code; `--radius` 4 px; dense spacing matching VS Code's lists and widgets.
+- **Native proportions**: `--vscode-font-family` / `--vscode-font-size` for UI text, `--vscode-editor-font-family` for code; `--radius` 8 px (shadcn derives 6 px for controls, 10 px for the composer); dense spacing matching VS Code's lists and widgets.
 - **Icons**: `@vscode/codicons`, not lucide.
 - **High contrast**: `--vscode-contrastBorder` outlines on cards, inputs, and focus states when set.
 - **CSP**: scripts by nonce only; Radix sets styles through the CSSOM, which CSP allows; any library that injects `<style>` elements gets the nonce.
@@ -312,6 +314,7 @@ src/
 webview/
   app/                  React chat app (shared by sidebar and tab)
   components/ui/        shadcn components
+  components/ai/        AI Elements components, adapted to SessionItem
   theme.css             VS Code → shadcn token bridge
 scripts/smoke.ts        live check per installed, signed-in provider
 test/fixtures/<provider>/

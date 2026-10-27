@@ -98,7 +98,8 @@ The UI renders an ordered list of items. Providers emit **upserts**: an item wit
 
 ```ts
 type SessionItem =
-  | { kind: 'message'; id; role: 'user' | 'assistant'; text: string; streaming: boolean }
+  | { kind: 'message'; id; role: 'assistant'; text: string; streaming: boolean }
+  | { kind: 'message'; id; role: 'user'; parts: PromptPart[]; queued?: boolean }
   | { kind: 'thought'; id; text: string; streaming: boolean }
   | { kind: 'tool'; id; title: string; toolKind: ToolKind; status: 'pending' | 'running' | 'done' | 'failed';
       input?: unknown; output?: string; paths?: string[]; parentId?: string }
@@ -113,6 +114,23 @@ type ToolKind = 'read' | 'edit' | 'execute' | 'search' | 'fetch' | 'think' | 'ot
 ```
 
 `parentId` links a subagent's tools to the tool call that spawned it, so sub-project 4 can group them; this spec stores it but renders flat. Vocabulary follows ACP's `session/update`, so ACP maps almost one to one.
+
+### Prompt parts and attachments
+
+A prompt is a list of parts, so mentions, commands, and attachments survive from composer to provider to transcript:
+
+```ts
+type PromptPart =
+  | { type: 'text'; text: string }
+  | { type: 'file'; path: string; range?: [number, number] }       // @-mention or editor selection
+  | { type: 'image'; attachmentId: string; mimeType: string }
+  | { type: 'command'; name: string; args?: string }               // slash command or skill
+  | { type: 'pasted'; text: string }                               // large paste, shown collapsed
+```
+
+- **Encoding is the adapter's job.** Claude: text blocks plus image blocks; commands as a leading `/name args`; files as workspace-relative paths in an `<editor-context>`/reference block. ACP: `resource_link` blocks for files, image blocks only when `promptCapabilities.image` is advertised, otherwise the part is dropped with a notice. Codex: its image input and skill invocation forms. An adapter that cannot represent a part degrades it to text and says so.
+- **Attachments store.** Images are written once to `<storageUri>/attachments/<id>.<ext>` and referenced by id; the journal never inlines image data. The webview loads them through `asWebviewUri` (the storage folder is in `localResourceRoots`).
+- **Transcript rendering.** User messages render their parts: file pills open the file at the range; image parts show thumbnails with a lightbox; command parts show as pills; pasted text is collapsible.
 
 ### Session facts
 
@@ -183,7 +201,7 @@ interface ProviderDefinition {
 
 interface ProviderSession {
   readonly nativeId: string                        // Claude session id | Codex thread id | ACP session id
-  prompt(input: { text: string; context?: EditorContextBlock; images?: ImageAttachment[] }): Promise<void>
+  prompt(parts: PromptPart[]): Promise<void>
   cancel(): Promise<void>
   setModel?(id: string): Promise<void>
   setMode?(mode: PermissionMode): Promise<void>
@@ -246,7 +264,18 @@ type AcpAgentSpec = {
 
 ## Editor context
 
-Each prompt carries the current file and selection as a provider-agnostic block appended to the prompt text: `<editor-context file="src/a.ts" selection="12-30">…selected text…</editor-context>` (selection text capped at 200 lines). The file comes from the active editor, else the last focused file, else any visible file. The composer shows what will be attached, with a toggle to drop it for one prompt.
+Each prompt carries the current file and selection as a `file` part (with `range` when there is a selection); adapters encode it, for Claude as `<editor-context file="src/a.ts" selection="12-30">…selected text…</editor-context>` (selection text capped at 200 lines). The file comes from the active editor, else the last focused file, else any visible file. The composer shows it as a removable pill.
+
+## Composer
+
+The first build ships a plain textarea that produces `text` parts plus the editor-context `file` part. Sub-project 4 replaces it with the rich composer below; the `PromptPart` contract does not change.
+
+- **Editor**: TipTap (React, ProseMirror) with a minimal schema — paragraph, hard break, history, placeholder — plus inline atom nodes for `file`, `command`, `image`, and `pasted` parts. This mirrors Orca's prompt editor (skill, file-reference, and image-reference nodes).
+- **Triggers**: `@` opens a shadcn Command popover backed by a workspace file search in the extension host (open and recent files first, then `findFiles` fuzzy matches); `/` opens one listing the session's `commands` fact (skills, commands, MCP prompts).
+- **Attachments**: paste images, drop files, the attach button (host file picker), and the editor selection pill. Whether drops from VS Code's Explorer reach the webview is verified during sub-project 4; the attach button is the fallback.
+- **Large pastes** over 40 lines become a `pasted` pill that expands on click.
+- **Drafts** persist per session (webview state, mirrored to the extension on change) so switching sessions or reloading keeps unsent text and attachments.
+- **Serialization**: the document maps one to one onto `PromptPart[]`; adjacent text nodes merge.
 
 ## Sessions
 

@@ -99,12 +99,29 @@ type SessionFact =
   | { kind: 'model'; current: string; available?: { id: string; label: string }[] }
   | { kind: 'mode'; current: PermissionMode; available: { id: PermissionMode; label: string }[] }
   | { kind: 'context'; usedTokens: number; maxTokens?: number }
-  | { kind: 'quota'; windows: { label: string; usedPercent?: number; resetsAt?: string; status: 'ok' | 'warning' | 'limited' }[] }
   | { kind: 'commands'; items: { name: string; description?: string; source: 'skill' | 'command' | 'mcp' }[] }
   | { kind: 'mcp'; servers: { name: string; status: 'connected' | 'failed' | 'pending' | 'needs-auth'; tools?: string[] }[] }
 ```
 
 Facts are last-value-wins per `kind`, kept in memory, and the latest of each is persisted in the session index so a reopened session shows them before the CLI starts.
+
+### Provider state
+
+Quota belongs to the account, not the session: two Claude chats share one 5-hour window. Sessions report quota upward; the registry keeps the latest per provider and every chat for that provider shows it, including chats whose CLI is not running.
+
+```ts
+type ProviderState = {
+  status: 'signed-in' | 'signed-out' | 'not-installed' | 'unknown'
+  version?: string                                 // CLI version, for display and minimum-version warnings
+  account?: string                                 // e.g. the email `claude auth status` reports
+  quota?: {
+    observedAt: string                             // shown as "as of 3 min ago"
+    windows: { label: string; usedPercent?: number; resetsAt?: string; status: 'ok' | 'warning' | 'limited' }[]
+  }
+}
+```
+
+Quota is persisted per provider in globalState so it survives reloads, always shown with its age.
 
 ### Capabilities
 
@@ -133,7 +150,8 @@ interface ProviderDefinition {
   label: string
   cli: { command: string; installUrl: string }
   capabilities: ReadonlySet<Capability>
-  authStatus(env: Env): Promise<'signed-in' | 'signed-out' | 'not-installed' | 'unknown'>
+  minVersion?: string                              // below this, warn (e.g. CLI quirks the adapter does not handle)
+  probe(env: Env): Promise<Omit<ProviderState, 'quota'>>
   signIn(env: Env, ui: SignInUi): Promise<void>
   open(opts: { env: Env; cwd: string; model?: string; mode?: PermissionMode; resumeId?: string }): Promise<ProviderSession>
 }
@@ -148,6 +166,7 @@ interface ProviderSession {
   dispose(): Promise<void>
   onItem: Event<SessionItem>
   onFact: Event<SessionFact>
+  onQuota: Event<NonNullable<ProviderState['quota']>>
   onExit: Event<{ error?: string }>
 }
 
@@ -164,7 +183,7 @@ Approvals and questions are items the provider emits and then waits on; `answer(
 - Options: `pathToClaudeCodeExecutable`, `cwd`, `env` (login-shell env without `ANTHROPIC_API_KEY`), `includePartialMessages: true`, `systemPrompt: { type: 'preset', preset: 'claude_code' }`, `settingSources: ['user', 'project', 'local']`, `resume` when resuming. Modes: `ask→default`, `accept-edits→acceptEdits`, `full-access` via `extraArgs: { 'dangerously-skip-permissions': null }`.
 - `canUseTool` → `approval` item (Allow once / Always allow / Deny; "Always allow" returns the call's `suggestions` as `updatedPermissions`). `AskUserQuestion` → `question` item, answered through `updatedInput`.
 - Items: `stream_event` text/thinking deltas → `message`/`thought`; `tool_use` → `tool`; `tool_result` → tool done/failed; `Edit`/`Write`/`MultiEdit` input → `diff`; `TodoWrite` → `plan`; `result` → `turn` ended. Messages with `parent_tool_use_id` set `parentId`.
-- Facts: `system/init` → model; `supportedModels()` → model list; `rate_limit_event` → quota; `getContextUsage()` after each turn → context; `supportedCommands()` → commands; `mcpServerStatus()` → mcp.
+- Facts: `system/init` → model; `supportedModels()` → model list; `rate_limit_event` → `onQuota`; `getContextUsage()` after each turn → context; `supportedCommands()` → commands; `mcpServerStatus()` → mcp.
 - Capabilities: all.
 
 ### Codex (built-in)
@@ -173,7 +192,7 @@ Approvals and questions are items the provider emits and then waits on; `answer(
 - `initialize` (`experimentalApi: true`) → `initialized`; `thread/start { cwd, model, approvalPolicy, sandbox }` or `thread/resume { threadId }`; `turn/start` per prompt; `turn/interrupt`.
 - Modes: `ask` → `on-request` + `workspace-write`; `accept-edits` → same, but file-change approvals are answered by the adapter; `full-access` → `never` + `danger-full-access`.
 - Items: `item/agentMessage/delta` → `message`; `item/reasoning/summaryTextDelta` → `thought`; command execution items + `outputDelta` → `tool` (execute); file-change items + `patchUpdated` → `diff`; `turn/plan/updated` → `plan`; `turn/started|completed` → `turn`. Server requests `item/commandExecution/requestApproval`, `item/fileChange/requestApproval` → `approval`; `item/tool/requestUserInput` → `question`.
-- Facts: `model/list` → models; `account/rateLimits/updated` → quota; `thread/tokenUsage/updated` → context; `skills/list` → commands; `mcpServer/startupStatus/updated` → mcp.
+- Facts: `model/list` → models; `account/rateLimits/updated` → `onQuota`; `thread/tokenUsage/updated` → context; `skills/list` → commands; `mcpServer/startupStatus/updated` → mcp.
 - Capabilities: all except `images` until verified.
 
 ### ACP agents (registry)
@@ -209,14 +228,15 @@ Each prompt carries the current file and selection as a provider-agnostic block 
 - **Journal**: `<storageUri>/sessions/<id>.jsonl`, one upserted item per line. Streaming upserts are coalesced and flushed at most every 250 ms and at turn end. A truncated last line is ignored on read.
 - **Open**: fold the journal and render. The CLI starts on the first prompt, with `resumeId = nativeId`.
 - **Status**: `idle`, `running`, `needs-input` (pending approval/question), `error`, `stopped`.
+- **Prompting while running** queues the message; it is sent when the turn ends. Claude's streaming input and Codex's `turn/steer` can accept it mid-turn, but v1 holds it client-side for uniform behaviour across providers. Queued messages show as pending items and can be removed before they send (editing them is sub-project 4).
 - **Attention**: when a session that is not the focused tab enters `needs-input` or finishes a turn, show a VS Code notification with "Open"; the tree badge updates either way.
 - Closing a tab keeps a running turn alive and stops the process once idle. On deactivate, all CLI processes stop.
 
 ## Sign-in (minimal; sub-project 3 adds the guided flow)
 
-| Provider | Status | Sign-in |
+| Provider | Status (`probe`) | Sign-in |
 |---|---|---|
-| Claude | `claude auth status` (JSON) | `claude auth login --claudeai`, link captured via a `BROWSER` helper and opened with `vscode.env.openExternal` |
+| Claude | `claude auth status` (JSON: `loggedIn`, `email`) + `claude --version` | `claude auth login --claudeai`, link captured via a `BROWSER` helper and opened with `vscode.env.openExternal` |
 | Codex | `account/read` on a short-lived app-server | `codex login` (local) or `codex login --device-auth` (remote), link/code parsed from output |
 | ACP | `initialize` + `authenticate`; auth-required error → signed out | `loginCommand` in a VS Code terminal |
 
@@ -236,10 +256,42 @@ Each prompt carries the current file and selection as a provider-agnostic block 
 | Resume target missing | Fresh native session; `notice` that agent context was lost; history stays. |
 | Malformed provider message | Logged to the AgentDeck output channel and skipped. |
 
-## UI (functional; sub-project 4 replaces the surface)
+## UI (functional; sub-project 4 builds out the chat surface)
 
-- **Sidebar**: providers with auth state and *New session* / *Sign in*; sessions under each provider, newest first, with status icon. Context menu: Open, Rename, Stop, Delete.
-- **Chat tab**: React webview bundled by esbuild. Header with model and mode pickers (shown per capability); item list; approval/question cards with buttons; diff items with "Open diff" (native diff editor); composer with editor-context chip, Send, Stop. React is chosen now so sub-project 4 extends this surface rather than replacing it, and so Orca's React components are a direct reference.
+Layout reference: the "AgentDeck UX mockups" canvas (first run, chat tab, providers and sign-in, side by side with attention, chat in the sidebar).
+
+- **Sessions tree** (activity bar container): providers with state (version, account, sign-in action); sessions under each provider, newest first, with status icon and a badge on the container for `needs-input`. Context menu: Open in sidebar, Open in tab, Rename, Stop, Delete.
+- **Chat surfaces.** One React chat app renders a session in either place:
+  - **Sidebar chat** (`WebviewView`): one session at a time, with a top bar holding the session switcher (new chat per provider + recent sessions), *New chat*, *Open in editor*, and overflow; a compact one-line strip for model, mode, context, and quota.
+  - **Editor tab** (`WebviewPanel`): one session per tab, full header; tabs can be split to watch sessions side by side.
+  - A session can be shown in several surfaces at once. `SessionManager` keeps a subscriber list per session and fans out every upsert and fact; moving a chat between sidebar and tab changes only which surfaces subscribe, never the running session.
+  - The view container is contributed to the activity bar; whether a third-party extension can default it to the secondary sidebar (as the official Claude and Codex extensions appear) is verified during implementation, otherwise users drag it there once.
+- **Chat content (v1):** item list; approval/question cards; diff items with "Open diff" (native diff editor); queued messages; composer with editor-context chip, Send, Stop. Layout adapts below ~480 px (compact header).
+- **Status bar**: running / needs-input counts; click focuses the sessions tree.
+
+### Component stack and theming
+
+- **React + shadcn/ui** (Radix primitives) + **Tailwind v4**, bundled by esbuild into the webview. Orca also uses shadcn, so its chat components are a close reference.
+- **Theme bridge.** shadcn's CSS variables are defined from VS Code theme variables, so every theme (light, dark, high contrast) applies without per-theme code:
+
+| shadcn token | VS Code variable |
+|---|---|
+| `--background` | `--vscode-editor-background` (tab) / `--vscode-sideBar-background` (sidebar) |
+| `--foreground` | `--vscode-foreground` |
+| `--card`, `--popover` | `--vscode-editorWidget-background` |
+| `--primary` / `--primary-foreground` | `--vscode-button-background` / `--vscode-button-foreground` |
+| `--secondary` | `--vscode-button-secondaryBackground` |
+| `--muted-foreground` | `--vscode-descriptionForeground` |
+| `--accent` | `--vscode-list-hoverBackground` |
+| `--border` | `--vscode-widget-border`, falling back to `--vscode-panel-border` |
+| `--input` | `--vscode-input-background` |
+| `--ring` | `--vscode-focusBorder` |
+| `--destructive` | `--vscode-errorForeground` |
+
+- **Native proportions**: `--vscode-font-family` / `--vscode-font-size` for UI text, `--vscode-editor-font-family` for code; `--radius` 4 px; dense spacing matching VS Code's lists and widgets.
+- **Icons**: `@vscode/codicons`, not lucide.
+- **High contrast**: `--vscode-contrastBorder` outlines on cards, inputs, and focus states when set.
+- **CSP**: scripts by nonce only; Radix sets styles through the CSSOM, which CSP allows; any library that injects `<style>` elements gets the nonce.
 
 ## Repo layout
 
@@ -256,8 +308,11 @@ src/
     acp/                provider.ts, translate.ts, specs.ts
   sessions/             manager.ts, journal.ts, store.ts
   process/              spawn + group stop
-  ui/                   sessions-view.ts, chat-panel.ts
-webview/                React chat UI
+  ui/                   sessions-tree.ts, chat-surfaces.ts (WebviewView + WebviewPanel hosts), status-bar.ts
+webview/
+  app/                  React chat app (shared by sidebar and tab)
+  components/ui/        shadcn components
+  theme.css             VS Code → shadcn token bridge
 scripts/smoke.ts        live check per installed, signed-in provider
 test/fixtures/<provider>/
 ```
@@ -268,7 +323,7 @@ test/fixtures/<provider>/
 - **ACP client**: end to end against a fake in-repo ACP agent (updates, permission requests, auth-required, missing `loadSession`).
 - **Codex RPC client**: against a scripted fake stdio peer.
 - **Journal**: write/fold round trip, coalescing, truncated last line.
-- **Session manager**: status transitions, resume path, attention events, with a fake provider.
+- **Session manager**: status transitions, resume path, attention events, queued prompts, fan-out to multiple surfaces, provider quota aggregation, with a fake provider.
 - **Live smoke** (opt-in): for each installed, signed-in provider: open, prompt, approve an edit, second turn remembers the first, resume after dispose.
 
 Tooling: TypeScript, esbuild, vitest, pnpm, `@vscode/vsce` for sideloadable builds.

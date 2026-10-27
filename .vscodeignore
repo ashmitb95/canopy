@@ -1,0 +1,4 @@
+**
+!dist/extension.js
+!media/**
+!package.json

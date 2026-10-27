@@ -118,7 +118,7 @@ export class ClaudeChat {
   }
 
   private async start(): Promise<void> {
-    // The SDK is ESM-only; the extension host loads it through dynamic import.
+    // Loaded on first prompt so opening a chat stays fast.
     const { query } = await import('@anthropic-ai/claude-agent-sdk')
     this.query = query({
       prompt: this.messages(),

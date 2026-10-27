@@ -10,8 +10,10 @@ const options = {
   format: 'cjs',
   target: 'node20',
   sourcemap: true,
-  // The SDK is ESM-only and loaded at runtime with import(); vscode is provided by the host.
-  external: ['vscode', '@anthropic-ai/claude-agent-sdk']
+  // The Agent SDK is ESM and reads import.meta.url, which a CJS bundle lacks; point it at the bundle file.
+  define: { 'import.meta.url': '__importMetaUrl' },
+  banner: { js: 'const __importMetaUrl = require("url").pathToFileURL(__filename).href;' },
+  external: ['vscode']
 }
 
 if (watch) {

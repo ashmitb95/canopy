@@ -289,6 +289,18 @@ Layout reference: the "AgentDeck UX mockups" canvas (first run, chat tab, provid
 | `--input` | `--vscode-input-background` |
 | `--ring` | `--vscode-focusBorder` |
 | `--destructive` | `--vscode-errorForeground` |
+| success / warning / info | `--vscode-testing-iconPassed` / `--vscode-editorWarning-foreground` / `--vscode-charts-blue` |
+| status pill backgrounds | the status color via `color-mix(in srgb, <color> 14%, transparent)` |
+| diff added / removed rows | `--vscode-diffEditor-insertedLineBackground` / `--vscode-diffEditor-removedLineBackground` |
+| code block background | `--vscode-textCodeBlock-background` |
+| sidebar list selection | `--vscode-list-activeSelectionBackground` / `--vscode-list-activeSelectionForeground` |
+| badges | `--vscode-badge-background` / `--vscode-badge-foreground` |
+
+**The IDE's theme is the only source of color.** The hex values in the mockups are Dark Modern stand-ins; the webview defines no colors of its own except the provider tints. Theme switches apply live: VS Code updates the variables in open webviews.
+
+- **Provider tints** (the monogram avatars) are the one brand-ish color: each provider declares a hue, rendered as `color-mix()` against `--background` so it stays legible on light, dark, and high-contrast themes.
+- **Syntax highlighting** in code blocks and diffs: webviews cannot read the active theme's token colors, so code is highlighted with Shiki using a bundled light or dark theme chosen from the `vscode-light` / `vscode-dark` / `vscode-high-contrast` body class. Backgrounds and fonts still come from the IDE theme. Matching the user's exact token colors is a later refinement.
+- Verified against Dark Modern, Light Modern, one high-contrast theme, and one popular third-party theme before sub-project 4 is considered done.
 
 - **Native proportions**: `--vscode-font-family` / `--vscode-font-size` for UI text, `--vscode-editor-font-family` for code; `--radius` 8 px (shadcn derives 6 px for controls, 10 px for the composer); dense spacing matching VS Code's lists and widgets.
 - **Icons**: `@vscode/codicons`, not lucide.

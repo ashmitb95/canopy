@@ -27,7 +27,7 @@ export function App() {
 
   useApprovalKeys(state.items)
 
-  if (state.empty) return <EmptyState provider={state.provider} />
+  if (state.empty) return <EmptyState providers={state.providers} />
 
   return (
     <TooltipProvider>

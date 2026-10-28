@@ -22,10 +22,14 @@ export function SessionSwitcher({ state }: { state: ChatState }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuItem onSelect={() => send({ type: 'newChat' })}>
-          <Codicon name="add" />
-          New chat
-        </DropdownMenuItem>
+        {state.providers
+          .filter((provider) => provider.state.status !== 'not-installed')
+          .map((provider) => (
+            <DropdownMenuItem key={provider.id} onSelect={() => send({ type: 'newChat', providerId: provider.id })}>
+              <ProviderAvatar providerId={provider.id} className="size-5 text-[10px]" />
+              New {provider.label} chat
+            </DropdownMenuItem>
+          ))}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">Recent</DropdownMenuLabel>
         {state.sessions.map((session) => (

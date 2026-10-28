@@ -6,7 +6,7 @@ import type { Env } from '../env'
 import type { SessionManager } from '../sessions/manager'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
-import type { HostMessage, WebviewMessage } from './protocol'
+import type { HostMessage, ProviderInfo, WebviewMessage } from './protocol'
 
 export const PANEL_TYPE = 'agentdeck.chatPanel'
 export const SIDEBAR_VIEW = 'agentdeck.chat'
@@ -19,6 +19,7 @@ type SurfaceKind = 'panel' | 'view'
 type Surface = {
   readonly webview: vscode.Webview
   readonly kind: SurfaceKind
+  panel?: vscode.WebviewPanel
   sessionId?: string
   subscription?: Disposable
   listener?: vscode.Disposable
@@ -30,6 +31,8 @@ export class ChatSurfaces
 {
   private readonly panels = new Map<string, { panel: vscode.WebviewPanel; surface: Surface }>()
   private sidebar: Surface | undefined
+  /** Editor tabs showing the provider chooser, before a session exists. */
+  private readonly blankPanels = new Set<Surface>()
   private readonly states = new Map<string, ProviderState>()
   private readonly subscriptions: { dispose(): void }[] = []
 
@@ -50,21 +53,45 @@ export class ChatSurfaces
     )
   }
 
+  /** Starts a chat with a provider, or shows the in-app provider chooser when none is given. */
   async newChat(where: SurfaceKind, providerId?: string): Promise<void> {
-    const chosen = providerId ?? (await this.pickProvider())
-    if (!chosen) return
-    const record = await this.manager.create(chosen)
-    if (where === 'panel') this.openPanel(record.id)
-    else await this.showInSidebar(record.id)
+    if (providerId) {
+      const record = await this.manager.create(providerId)
+      if (where === 'panel') this.openPanel(record.id)
+      else await this.showInSidebar(record.id)
+      return
+    }
+    if (where === 'panel') return this.openBlankPanel()
+    await this.context.workspaceState.update(SIDEBAR_SESSION_KEY, undefined)
+    await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
+    if (this.sidebar) this.clear(this.sidebar)
   }
 
-  private async pickProvider(): Promise<string | undefined> {
-    if (this.providers.size === 1) return [...this.providers.keys()][0]
-    const picked = await vscode.window.showQuickPick(
-      [...this.providers.values()].map((provider) => ({ label: provider.label, id: provider.id })),
-      { placeHolder: 'Start a chat with…' }
-    )
-    return picked?.id
+  private openBlankPanel(): void {
+    const panel = vscode.window.createWebviewPanel(PANEL_TYPE, 'New chat', vscode.ViewColumn.Beside, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [this.assets()]
+    })
+    this.attachPanel(panel)
+  }
+
+  private clear(surface: Surface): void {
+    surface.subscription?.dispose()
+    surface.subscription = undefined
+    surface.sessionId = undefined
+    this.post(surface, { type: 'empty' })
+  }
+
+  /** A chat started from a surface's chooser opens in that surface. */
+  private async startIn(surface: Surface, providerId: string): Promise<void> {
+    const record = await this.manager.create(providerId)
+    if (surface.kind === 'view') return this.showInSidebar(record.id)
+    if (surface.sessionId || !surface.panel) return this.openPanel(record.id)
+    this.blankPanels.delete(surface)
+    this.panels.set(record.id, { panel: surface.panel, surface })
+    surface.panel.title = this.title(record.id)
+    this.show(surface, record.id)
   }
 
   openPanel(sessionId: string): void {
@@ -107,18 +134,22 @@ export class ChatSurfaces
   dispose(): void {
     for (const subscription of this.subscriptions) subscription.dispose()
     for (const { surface } of this.panels.values()) this.release(surface)
+    for (const surface of this.blankPanels) this.release(surface)
     if (this.sidebar) this.release(this.sidebar)
   }
 
-  private attachPanel(panel: vscode.WebviewPanel, sessionId: string): void {
+  private attachPanel(panel: vscode.WebviewPanel, sessionId?: string): void {
     panel.webview.options = { enableScripts: true, localResourceRoots: [this.assets()] }
     panel.webview.html = this.html(panel.webview, 'panel')
-    panel.title = this.title(sessionId)
+    panel.title = sessionId ? this.title(sessionId) : 'New chat'
     const surface = this.surface(panel.webview, 'panel', sessionId)
-    this.panels.set(sessionId, { panel, surface })
+    surface.panel = panel
+    if (sessionId) this.panels.set(sessionId, { panel, surface })
+    else this.blankPanels.add(surface)
     panel.onDidDispose(() => {
       this.release(surface)
-      this.panels.delete(sessionId)
+      if (surface.sessionId) this.panels.delete(surface.sessionId)
+      this.blankPanels.delete(surface)
     })
   }
 
@@ -143,7 +174,7 @@ export class ChatSurfaces
       case 'ready':
         this.post(surface, { type: 'editorContext', context: this.editor.current() })
         this.postSessions(surface)
-        await this.postProvider(surface)
+        await this.postProviders(surface)
         if (sessionId) this.show(surface, sessionId)
         else this.post(surface, { type: 'empty' })
         return
@@ -164,9 +195,10 @@ export class ChatSurfaces
         if (sessionId) this.manager.removeQueued(sessionId, message.queuedId)
         return
       case 'newChat':
+        if (message.providerId) return this.startIn(surface, message.providerId)
         return this.newChat(surface.kind)
       case 'signIn':
-        return this.signIn(surface)
+        return this.signIn(surface, message.providerId)
       case 'setModel':
         if (sessionId) await this.manager.setModel(sessionId, message.model)
         return
@@ -207,33 +239,37 @@ export class ChatSurfaces
       this.post(surface, { type: 'session', sessionId, event })
     )
     void this.manager.warm(sessionId)
+    void this.postProvider(surface)
   }
 
   private async createFor(surface: Surface): Promise<string> {
-    const providerId = await this.pickProvider()
-    if (!providerId) throw new Error('No provider was chosen.')
-    const record = await this.manager.create(providerId)
-    if (surface.kind === 'view') await this.showInSidebar(record.id)
-    else this.show(surface, record.id)
-    return record.id
+    await this.startIn(surface, DEFAULT_PROVIDER)
+    if (!surface.sessionId) throw new Error('Could not start a chat.')
+    return surface.sessionId
   }
 
   private async postProvider(surface: Surface): Promise<void> {
-    const providerId = this.providerOf(surface.sessionId)
-    const provider = this.providers.get(providerId)
-    if (!provider) return
-    const state = this.states.get(providerId) ?? (await this.probe(provider))
-    this.post(surface, {
-      type: 'provider',
-      provider: {
-        id: provider.id,
-        label: provider.label,
-        installUrl: provider.cli.installUrl,
-        capabilities: [...provider.capabilities],
-        modes: provider.modes,
-        state
-      }
-    })
+    const provider = this.providers.get(this.providerOf(surface.sessionId))
+    if (provider) this.post(surface, { type: 'provider', provider: await this.info(provider) })
+  }
+
+  /** The chooser lists every provider; sent on ready and after a sign-in. */
+  private async postProviders(target?: Surface): Promise<void> {
+    const providers = await Promise.all([...this.providers.values()].map((provider) => this.info(provider)))
+    if (target) this.post(target, { type: 'providers', providers })
+    else this.broadcast({ type: 'providers', providers })
+  }
+
+  private async info(provider: ProviderDefinition): Promise<ProviderInfo> {
+    const state = this.states.get(provider.id) ?? (await this.probe(provider))
+    return {
+      id: provider.id,
+      label: provider.label,
+      installUrl: provider.cli.installUrl,
+      capabilities: [...provider.capabilities],
+      modes: provider.modes,
+      state
+    }
   }
 
   private async probe(provider: ProviderDefinition): Promise<ProviderState> {
@@ -243,8 +279,8 @@ export class ChatSurfaces
   }
 
   /** Runs the provider's own login in a terminal, then re-checks once the terminal closes. */
-  private async signIn(surface: Surface): Promise<void> {
-    const provider = this.providers.get(this.providerOf(surface.sessionId))
+  private async signIn(surface: Surface, providerId?: string): Promise<void> {
+    const provider = this.providers.get(providerId ?? this.providerOf(surface.sessionId))
     if (!provider) return
     const terminal = vscode.window.createTerminal({ name: `${provider.label} sign-in` })
     terminal.show()
@@ -253,7 +289,8 @@ export class ChatSurfaces
       if (closedTerminal !== terminal) return
       closed.dispose()
       this.states.delete(provider.id)
-      void this.postProvider(surface)
+      void this.postProviders()
+      if (surface.sessionId) void this.postProvider(surface)
     })
   }
 
@@ -303,6 +340,7 @@ export class ChatSurfaces
 
   private broadcast(message: HostMessage): void {
     for (const { surface } of this.panels.values()) this.post(surface, message)
+    for (const surface of this.blankPanels) this.post(surface, message)
     if (this.sidebar) this.post(this.sidebar, message)
   }
 

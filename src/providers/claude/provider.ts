@@ -24,7 +24,7 @@ import type {
 } from '../../core/types'
 import { type Env, findOnPath } from '../../env'
 import { refreshUntilSettled } from '../mcp-settle'
-import { encodePrompt } from './encode'
+import { encodePrompt } from '../encode'
 import { approvalDetail } from './tools'
 import { ClaudeTranslator } from './translate'
 

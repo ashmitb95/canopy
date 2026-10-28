@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
-import type { PromptPart } from '../../core/types'
+import type { PromptPart } from '../core/types'
 
 const MAX_SELECTION_LINES = 200
 

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { encodePrompt } from '../../src/providers/claude/encode'
+import { encodePrompt } from '../../src/providers/encode'
 
 function workspace(): string {
   const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-encode-'))

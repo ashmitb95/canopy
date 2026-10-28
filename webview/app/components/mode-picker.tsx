@@ -22,9 +22,9 @@ export function ModePicker({ current, available }: { current: PermissionMode; av
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="xs" variant="ghost" className="text-muted-foreground">
+        <Button size="xs" variant="ghost" className="text-muted-foreground" title={MODES[current].label}>
           <Codicon name={MODES[current].icon} size={12} />
-          {MODES[current].label}
+          <span className="hidden @[26rem]:inline">{MODES[current].label}</span>
           <Codicon name="chevron-down" size={12} />
         </Button>
       </DropdownMenuTrigger>

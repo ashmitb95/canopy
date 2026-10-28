@@ -20,8 +20,8 @@ export function ModelPicker({ fact }: { fact?: Extract<SessionFact, { kind: 'mod
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="xs" variant="ghost" className="text-muted-foreground">
-          {label}
+        <Button size="xs" variant="ghost" className="min-w-0 shrink text-muted-foreground">
+          <span className="truncate">{label}</span>
           <Codicon name="chevron-down" size={12} />
         </Button>
       </DropdownMenuTrigger>

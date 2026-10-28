@@ -26,7 +26,7 @@ export function Composer({ state }: { state: ChatState }) {
   }
 
   return (
-    <div className="rounded-xl border bg-input/40 focus-within:border-ring">
+    <div className="@container rounded-xl border bg-input/40 focus-within:border-ring">
       {context && (
         <div className="px-3 pt-2">
           <FilePill
@@ -51,20 +51,28 @@ export function Composer({ state }: { state: ChatState }) {
         }}
       />
       <div className="flex items-center gap-1 px-2 pb-2">
-        <ModelPicker fact={state.facts.model?.kind === 'model' ? state.facts.model : undefined} />
-        <ModePicker
-          current={state.facts.mode?.kind === 'mode' ? state.facts.mode.current : (state.record?.mode ?? 'ask')}
-          available={state.provider?.modes ?? []}
-        />
-        <McpPopover fact={state.facts.mcp?.kind === 'mcp' ? state.facts.mcp : undefined} />
-        <div className="flex-1" />
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
+          <ModelPicker fact={state.facts.model?.kind === 'model' ? state.facts.model : undefined} />
+          <ModePicker
+            current={state.facts.mode?.kind === 'mode' ? state.facts.mode.current : (state.record?.mode ?? 'ask')}
+            available={state.provider?.modes ?? []}
+          />
+          <McpPopover fact={state.facts.mcp?.kind === 'mcp' ? state.facts.mcp : undefined} />
+        </div>
         <ContextMeter fact={state.facts.context?.kind === 'context' ? state.facts.context : undefined} />
         {busy ? (
-          <Button key="stop" size="icon-sm" variant="secondary" aria-label="Stop" onClick={() => send({ type: 'cancel' })}>
+          <Button
+            key="stop"
+            size="icon-sm"
+            variant="secondary"
+            className="shrink-0"
+            aria-label="Stop"
+            onClick={() => send({ type: 'cancel' })}
+          >
             <Codicon name="debug-stop" />
           </Button>
         ) : (
-          <Button key="send" size="icon-sm" aria-label="Send" disabled={!text.trim()} onClick={submit}>
+          <Button key="send" size="icon-sm" className="shrink-0" aria-label="Send" disabled={!text.trim()} onClick={submit}>
             <Codicon name="send" />
           </Button>
         )}

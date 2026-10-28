@@ -25,7 +25,7 @@ export function ContextMeter({ fact }: { fact?: Extract<SessionFact, { kind: 'co
               strokeDashoffset={CIRCUMFERENCE * (1 - ratio)}
             />
           </svg>
-          {Math.round(ratio * 100)}%
+          <span className="hidden @[20rem]:inline">{Math.round(ratio * 100)}%</span>
         </span>
       </TooltipTrigger>
       <TooltipContent>

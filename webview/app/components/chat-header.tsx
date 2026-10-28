@@ -5,15 +5,18 @@ import { StatusBadge } from './status-badge'
 
 export function ChatHeader({ state }: { state: ChatState }) {
   if (!state.record) return null
+  const compact = document.body.dataset.surface === 'view'
   return (
-    <header className="flex items-center gap-2.5 border-b px-4 py-2.5">
-      <ProviderAvatar providerId={state.record.providerId} />
+    <header className={compact ? 'flex items-center gap-2 border-b px-3 py-1.5' : 'flex items-center gap-2.5 border-b px-4 py-2.5'}>
+      <ProviderAvatar providerId={state.record.providerId} className={compact ? 'size-6 text-[11px]' : undefined} />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold">{state.record.title}</div>
-        <div className="truncate text-xs text-muted-foreground">{state.provider?.label ?? state.record.providerId}</div>
+        <div className={compact ? 'truncate text-sm font-semibold' : 'truncate font-semibold'}>{state.record.title}</div>
+        {!compact && (
+          <div className="truncate text-xs text-muted-foreground">{state.provider?.label ?? state.record.providerId}</div>
+        )}
       </div>
       <StatusBadge status={state.status} />
-      {document.body.dataset.surface === 'view' && <SessionSwitcher state={state} />}
+      {compact && <SessionSwitcher state={state} />}
     </header>
   )
 }

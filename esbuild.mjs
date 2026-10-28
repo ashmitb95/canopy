@@ -3,7 +3,7 @@ import * as esbuild from 'esbuild'
 const watch = process.argv.includes('--watch')
 
 const options = {
-  entryPoints: { extension: 'src/extension.ts', smoke: 'scripts/smoke.ts' },
+  entryPoints: { extension: 'src/extension.ts', smoke: 'scripts/smoke.ts', 'record-claude': 'scripts/record-claude.ts' },
   outdir: 'dist',
   bundle: true,
   platform: 'node',

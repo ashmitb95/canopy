@@ -2450,7 +2450,8 @@ describe('Claude fixture: an edit turn', () => {
   })
 
   it('ends the turn successfully', () => {
-    expect(items.at(-1)).toMatchObject({ kind: 'turn', state: 'ended', stopReason: 'success' })
+    // Started and ended share an id, so the folded turn item sits where the turn began.
+    expect(items.find((item) => item.kind === 'turn')).toMatchObject({ kind: 'turn', state: 'ended', stopReason: 'success' })
   })
 })
 ```

@@ -67,8 +67,8 @@ export type McpServer = {
   tools: string[]
 }
 
-/** A model the picker offers; the description carries notes such as extra-usage billing. */
-export type ModelOption = { id: string; label: string; description?: string }
+/** A model the picker offers; the description carries notes such as extra-usage billing. `resolved` is the concrete model id an alias such as `opus` maps to. */
+export type ModelOption = { id: string; label: string; description?: string; resolved?: string }
 
 /** Session state shown outside the transcript. The latest fact of each kind wins. */
 export type SessionFact =

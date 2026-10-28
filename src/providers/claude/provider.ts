@@ -257,7 +257,12 @@ class ClaudeSession implements ProviderSession {
   private async loadFacts(): Promise<void> {
     try {
       const models = await this.query.supportedModels()
-      this.models = models.map((model) => ({ id: model.value, label: model.displayName, description: model.description }))
+      this.models = models.map((model) => ({
+        id: model.value,
+        label: model.displayName,
+        description: model.description,
+        resolved: model.resolvedModel
+      }))
     } catch {
       // The model picker then offers only the current model.
     }

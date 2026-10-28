@@ -20,6 +20,8 @@ export type HostMessage =
   | { type: 'session'; sessionId: string; event: SessionEvent }
   | { type: 'title'; sessionId: string; title: string }
   | { type: 'provider'; provider: ProviderInfo }
+  /** Every provider with its install and sign-in state, for the chooser. */
+  | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'editorContext'; context: EditorContext | null }
   /** Recent sessions, for the sidebar's session switcher. */
   | { type: 'sessions'; sessions: SessionSummary[] }
@@ -33,8 +35,8 @@ export type WebviewMessage =
   | { type: 'cancel' }
   | { type: 'answer'; itemId: string; optionId: string }
   | { type: 'removeQueued'; queuedId: string }
-  | { type: 'newChat' }
-  | { type: 'signIn' }
+  | { type: 'newChat'; providerId?: string }
+  | { type: 'signIn'; providerId?: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'setModel'; model: string }
   | { type: 'setMode'; mode: PermissionMode }

@@ -12,7 +12,11 @@ import { Codicon } from './codicon'
 
 export function ModelPicker({ fact }: { fact?: Extract<SessionFact, { kind: 'model' }> }) {
   if (!fact) return null
-  const label = fact.available.find((model) => model.id === fact.current)?.label ?? fact.current
+  // The CLI reports the concrete model id; the picker lists aliases that resolve to it.
+  const selected =
+    fact.available.find((model) => model.id === fact.current) ??
+    fact.available.find((model) => model.resolved === fact.current)
+  const label = selected?.label ?? fact.current
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -22,7 +26,7 @@ export function ModelPicker({ fact }: { fact?: Extract<SessionFact, { kind: 'mod
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-w-80">
-        <DropdownMenuRadioGroup value={fact.current} onValueChange={(model) => send({ type: 'setModel', model })}>
+        <DropdownMenuRadioGroup value={selected?.id ?? fact.current} onValueChange={(model) => send({ type: 'setModel', model })}>
           {fact.available.map((model) => (
             <DropdownMenuRadioItem key={model.id} value={model.id} className="items-start">
               <div className="min-w-0">

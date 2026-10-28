@@ -86,6 +86,21 @@ describe('chat state', () => {
     expect(state.sessionId).toBeUndefined()
   })
 
+  it('keeps the provider list for the chooser, also across an empty surface', () => {
+    const providers = [
+      {
+        id: 'codex',
+        label: 'Codex',
+        installUrl: 'u',
+        capabilities: [],
+        modes: ['ask' as const],
+        state: { status: 'signed-out' as const }
+      }
+    ]
+    const state = run({ type: 'providers', providers }, { type: 'empty' })
+    expect(state.providers).toEqual(providers)
+  })
+
   it('keeps the session list for the switcher', () => {
     const sessions = [{ id: 's1', title: 'Chat', providerId: 'claude', status: 'idle' as const, updatedAt: 't' }]
     expect(run({ type: 'sessions', sessions }).sessions).toEqual(sessions)

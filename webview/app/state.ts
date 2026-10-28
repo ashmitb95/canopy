@@ -11,6 +11,7 @@ export type ChatState = {
   queue: QueuedPrompt[]
   facts: SessionRecord['facts']
   provider?: ProviderInfo
+  providers: ProviderInfo[]
   editorContext: EditorContext | null
   sessions: SessionSummary[]
   /** The sidebar has no session to show. */
@@ -22,6 +23,7 @@ export const initialState: ChatState = {
   items: [],
   queue: [],
   facts: {},
+  providers: [],
   editorContext: null,
   sessions: [],
   empty: false
@@ -29,12 +31,14 @@ export const initialState: ChatState = {
 
 export function reduce(state: ChatState, message: HostMessage): ChatState {
   switch (message.type) {
+    case 'providers':
+      return { ...state, providers: message.providers }
     case 'provider':
       return { ...state, provider: message.provider }
     case 'editorContext':
       return { ...state, editorContext: message.context }
     case 'empty':
-      return { ...initialState, provider: state.provider, editorContext: state.editorContext, sessions: state.sessions, empty: true }
+      return { ...initialState, provider: state.provider, providers: state.providers, editorContext: state.editorContext, sessions: state.sessions, empty: true }
     case 'title':
       if (message.sessionId !== state.sessionId || !state.record) return state
       return { ...state, record: { ...state.record, title: message.title } }

@@ -13,12 +13,14 @@ import type {
   ProviderSession,
   ProviderState,
   SessionFact,
-  SessionItem
+  SessionItem,
+  SignInEvent
 } from '../../core/types'
 import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
 import { encodePrompt } from '../encode'
 import { RpcPeer, type ServerRequest } from '../rpc'
+import { deviceLink, runLoginCli } from '../sign-in'
 import { type AcpAgentSpec, findAgentCli } from './spec'
 import { AcpTranslator, type SessionUpdate } from './translate'
 
@@ -47,6 +49,11 @@ export function acpProvider(spec: AcpAgentSpec): ProviderDefinition {
     label: spec.label,
     cli: { command: spec.command, installUrl: spec.installUrl },
     signInCommand: (env) => [`"${findAgentCli(spec, env, home(env)) ?? spec.command}"`, ...spec.loginArgs].join(' '),
+    async startSignIn(env: Env, onEvent: (event: SignInEvent) => void) {
+      const path = findAgentCli(spec, env, home(env))
+      if (!path) throw new Error(`The ${spec.command} CLI was not found.`)
+      return runLoginCli(path, spec.loginArgs, env, onEvent, deviceLink)
+    },
     capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'context']),
     modes: MODE_LIST,
 

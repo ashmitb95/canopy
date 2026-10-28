@@ -22,12 +22,14 @@ import type {
   ProviderState,
   Quota,
   SessionFact,
-  SessionItem
+  SessionItem,
+  SignInEvent
 } from '../../core/types'
 import type { Env } from '../../env'
 import { refreshUntilSettled } from '../mcp-settle'
 import { encodePrompt } from '../encode'
 import { findClaude } from './locate'
+import { claudeSignIn } from './sign-in'
 import { claudeQuota, type RateLimitInfo } from './quota'
 import { approvalDetail } from './tools'
 import { ClaudeTranslator } from './translate'
@@ -63,6 +65,11 @@ export const claudeProvider: ProviderDefinition = {
   label: 'Claude',
   cli: { command: 'claude', installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' },
   signInCommand: () => 'claude auth login --claudeai',
+  async startSignIn(env: Env, onEvent: (event: SignInEvent) => void) {
+    const path = await findClaude(env)
+    if (!path) throw new Error('The claude CLI was not found.')
+    return claudeSignIn(path, claudeEnv(env), onEvent)
+  },
   capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context']),
   modes: MODE_LIST,
 

@@ -14,13 +14,15 @@ import type {
   ProviderState,
   Quota,
   SessionFact,
-  SessionItem
+  SessionItem,
+  SignInEvent
 } from '../../core/types'
 import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
 import { encodePrompt } from '../encode'
 import { refreshUntilSettled } from '../mcp-settle'
 import { findCodex } from './locate'
+import { codexSignIn } from './sign-in'
 import { codexQuota } from './quota'
 import type { ApprovalPolicy, McpServerStatus, ModelInfo, SandboxMode, SandboxPolicy, TokenUsage } from './protocol'
 import { RpcPeer, type ServerRequest } from '../rpc'
@@ -66,6 +68,11 @@ export const codexProvider: ProviderDefinition = {
   label: 'Codex',
   cli: { command: 'codex', installUrl: 'https://developers.openai.com/codex/cli' },
   signInCommand: (env: Env) => `"${findCodex(env) ?? 'codex'}" login`,
+  async startSignIn(env: Env, onEvent: (event: SignInEvent) => void) {
+    const path = findCodex(env)
+    if (!path) throw new Error('The codex CLI was not found.')
+    return codexSignIn(path, env, onEvent)
+  },
   capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context']),
   modes: MODE_LIST,
 

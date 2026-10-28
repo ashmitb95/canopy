@@ -6,10 +6,10 @@
 
 **Architecture:** The editor is TipTap 3 with a stripped StarterKit, one `Mention` extension with two triggers (`@` → file, `/` → command), and two inline atom nodes (`imageAttachment`, `pastedText`). Suggestion menus are React components mounted by TipTap's own `props.mount()` (Floating UI positioning). Enter sends unless a menu is open. `toParts()` turns the editor's JSON into `PromptPart[]` (pure, tested). The webview asks the host for file matches and attachments through a small request/reply channel. Images are copied into the extension's storage (`<storage>/attachments/<uuid>.<ext>`) and referenced by path; the transcript shows them through a webview URI of that folder. Each provider lists its commands as a `commands` fact.
 
-**Tech Stack:** TipTap 3.32.1 (`@tiptap/core`, `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/extension-mention`, `@tiptap/extension-placeholder`, `@tiptap/suggestion`).
+**Tech Stack:** TipTap 3.32.0 (`@tiptap/core`, `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/extension-mention`, `@tiptap/extension-placeholder`, `@tiptap/suggestion`).
 
 **Verified before writing** (2026-10-29, scratch project):
-- The editor code in Task 4 type-checks against TipTap 3.32.1 and renders in headless Chromium: `Mention.configure({ suggestions: [...] })` takes several triggers, each with its own `pluginKey`; inserted mentions carry `mentionSuggestionChar`; the atom node renders as a non-editable pill. `@tiptap/core` must be a direct dependency (pnpm is strict).
+- The editor code in Task 4 type-checks against TipTap 3.32.0 and renders in headless Chromium: `Mention.configure({ suggestions: [...] })` takes several triggers, each with its own `pluginKey`; inserted mentions carry `mentionSuggestionChar`; the atom node renders as a non-editable pill. `@tiptap/core` must be a direct dependency (pnpm is strict).
 - `SuggestionProps.mount(element)` positions the popup and returns an unmount function; `ReactRenderer` renders the menu.
 - Claude's `supportedCommands()` returns `{ name, description, argumentHint }[]`. Codex's `skills/list { cwds }` returns `{ data: [{ skills: [{ name, description, shortDescription?, path, enabled }] }] }`, and a skill is invoked with the input `{ type: 'skill', name, path }`; images go as `{ type: 'localImage', path }`. ACP agents send `available_commands_update { availableCommands: [{ name, description }] }`; Grok advertises `promptCapabilities.image: true` and takes `{ type: 'image', mimeType, data }` blocks.
 - Codicons used: `attach`, `cloud-upload`, `mention`, `file-media`.
@@ -588,7 +588,7 @@ git commit -m "feat(ui): file search, attachment store, and request/reply for th
 - [ ] **Step 1: Install TipTap**
 
 ```bash
-pnpm add @tiptap/core@3.32.1 @tiptap/react@3.32.1 @tiptap/pm@3.32.1 @tiptap/starter-kit@3.32.1 @tiptap/extension-mention@3.32.1 @tiptap/extension-placeholder@3.32.1 @tiptap/suggestion@3.32.1
+pnpm add @tiptap/core@3.32.0 @tiptap/react@3.32.0 @tiptap/pm@3.32.0 @tiptap/starter-kit@3.32.0 @tiptap/extension-mention@3.32.0 @tiptap/extension-placeholder@3.32.0 @tiptap/suggestion@3.32.0
 ```
 
 If pnpm writes `^` ranges, change them to exact versions by editing those seven lines in `package.json` (do not re-serialize the file).

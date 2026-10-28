@@ -10,6 +10,7 @@ A VS Code extension for chatting with coding agents — Claude Code, Codex, and 
 - [Decisions](docs/decisions.md) — what was decided and why
 - [Look and feel](docs/design/README.md) — mockups that lock the visual direction
 - [Orca reference notes](docs/research/orca.md) — what we learned from Orca's implementation
+- [MVP plans](docs/superpowers/plans/2026-10-28-mvp-overview.md) — the build order and the step-by-step plans
 
 ## Try the proof of concept
 

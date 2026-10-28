@@ -40,6 +40,24 @@ The bar is what the official Claude Code and Codex extensions offer, extended to
 
 **This spec covers sub-projects 1 and 2.** It ends with Claude, Codex, and Grok usable from a persistent session list. Sub-projects 3–5 build on the contracts defined here; the capability model is what lets them add features without per-provider special cases.
 
+### MVP
+
+The first release is a cut across sub-projects 1, 2, 4, and 5, sized for daily use rather than parity. It is built in the plans under `docs/superpowers/plans/` (see the [MVP overview](../plans/2026-10-28-mvp-overview.md)).
+
+| In the MVP | Deferred |
+|---|---|
+| Claude and Codex providers on the shared item model | ACP and Grok (the ACP adapter follows the MVP) |
+| Sessions: journal, resume after reload, queued prompts, sessions tree | Attention notifications beyond a tree badge |
+| Chat in the sidebar and in editor tabs, built on React, shadcn, and AI Elements with the theme bridge: messages, reasoning, tool cards, diffs, approvals, plan | Subagent grouping, rewind, find, per-turn change rollup |
+| Composer: styled prompt box producing `text` and editor-context `file` parts | TipTap, `@` mentions, `/` commands, attachments |
+| Model and permission-mode pickers, Stop, context usage | Effort, quota display, skills browser |
+| MCP status popover: per-server state, tools, scope, error; sign-in handoff; reconnect | Adding, removing, or editing MCP servers |
+| Sign-in check per provider with a button that runs the CLI's login in a terminal | Guided sign-in screens |
+
+AskUserQuestion is not rendered in the MVP: Claude's call is denied with a message asking it to ask in plain text.
+
+**MCP sign-in handoff.** The CLIs own MCP configuration and tokens, so a server connected for the official extension is connected in AgentDeck too (verified: an AgentDeck-style session lists the same servers and states as `claude mcp list`). For a server in `needs-auth`, AgentDeck sends the user to where that sign-in happens and never sees the token: servers with scope `claudeai` open claude.ai's connector settings; other Claude servers open a terminal running `claude` for its `/mcp` flow; Codex servers run `codex mcp login <name>`. A *Reconnect* action then calls the provider's reconnect (`reconnectMcpServer` for Claude) without restarting the chat.
+
 Orca (`stablyai/orca`, MIT) is the reference for behaviour and feature scope, not a dependency. Adapted code carries Orca's license notice in `NOTICE`.
 
 ## Goals
@@ -281,7 +299,7 @@ The first build ships a plain textarea that produces `text` parts plus the edito
 
 - **Store** (workspaceState): `{ id, providerId, nativeId, title, createdAt, updatedAt, model, mode, facts }[]`. Title is the first prompt's first line, truncated.
 - **Journal**: `<storageUri>/sessions/<id>.jsonl`, one upserted item per line. Streaming upserts are coalesced and flushed at most every 250 ms and at turn end. A truncated last line is ignored on read.
-- **Open**: fold the journal and render. The CLI starts on the first prompt, with `resumeId = nativeId`.
+- **Open**: fold the journal and render. The CLI starts when the chat is opened (so models and MCP status show before the first prompt), with `resumeId = nativeId` once the session has had a turn.
 - **Status**: `idle`, `running`, `needs-input` (pending approval/question), `error`, `stopped`.
 - **Prompting while running** queues the message; it is sent when the turn ends. Claude's streaming input and Codex's `turn/steer` can accept it mid-turn, but v1 holds it client-side for uniform behaviour across providers. Queued messages show as pending items and can be removed before they send (editing them is sub-project 4).
 - **Attention**: when a session that is not the focused tab enters `needs-input` or finishes a turn, show a VS Code notification with "Open"; the tree badge updates either way.

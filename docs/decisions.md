@@ -22,6 +22,9 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 | 16 | Attachments via *Upload from computer*, workspace picker, and clipboard paste; no drag and drop | VS Code opens dropped files as editors, as in the official extensions. |
 | 17 | Voice dictation is an extension feature, not a provider one | No agent protocol offers it; Orca also runs its own speech-to-text. Microphone access from VS Code needs a spike. |
 | 18 | Parity target is the official Claude Code and Codex extensions, extended to every capable provider | See the parity table in the spec. |
+| 19 | Ship an MVP first: Claude and Codex, sessions, the real UI stack, MCP status with sign-in handoff | A daily-usable build in weeks; building on the final UI stack from the start avoids a throwaway UI. Scope table in the spec. |
+| 20 | MCP sign-in is a handoff to the CLI or claude.ai, followed by a reconnect | Follows from 2. The CLIs already share MCP config and tokens with the official extensions, so nothing needs reconnecting in AgentDeck. |
+| 21 | The CLI starts when a chat is opened, not on the first prompt | Models and MCP status are available before the first message, which the pickers and the MCP popover need. |
 
 ## Findings from the proof of concept
 

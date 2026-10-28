@@ -35,7 +35,15 @@ export type ApprovalItem = {
   options: ApprovalOption[]
   resolved?: string
 }
-export type TurnItem = { kind: 'turn'; id: string; state: 'started' | 'ended'; stopReason?: string; durationMs?: number }
+export type TurnItem = {
+  kind: 'turn'
+  id: string
+  state: 'started' | 'ended'
+  stopReason?: string
+  durationMs?: number
+  /** When the turn ended (ISO), stamped by the session manager. */
+  at?: string
+}
 export type NoticeItem = {
   kind: 'notice'
   id: string

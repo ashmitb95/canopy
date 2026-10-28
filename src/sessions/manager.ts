@@ -8,6 +8,7 @@ import type {
   PromptPart,
   ProviderDefinition,
   ProviderSession,
+  Quota,
   SessionFact,
   SessionItem
 } from '../core/types'
@@ -26,6 +27,8 @@ export type SessionEvent =
   | { type: 'queue'; queue: QueuedPrompt[] }
 
 export type Attention = { sessionId: string; reason: 'needs-input' | 'turn-ended' }
+
+export type QuotaReport = { providerId: string; quota: Quota }
 
 export type SessionManagerDeps = {
   providers: ReadonlyMap<string, ProviderDefinition>
@@ -58,10 +61,13 @@ export class SessionManager {
   private readonly live = new Map<string, Live>()
   private readonly changed = new Emitter<void>()
   private readonly attention = new Emitter<Attention>()
+  private readonly quotas = new Emitter<QuotaReport>()
   /** Fires when the session list, a title, or a status changes. */
   readonly onDidChange = this.changed.event
   /** Fires when a session needs the user or finishes a turn. */
   readonly onAttention = this.attention.event
+  /** Fires when a provider's CLI reports its account's usage limits. */
+  readonly onQuota = this.quotas.event
 
   constructor(private readonly deps: SessionManagerDeps) {}
 
@@ -269,7 +275,10 @@ export class SessionManager {
         this.upsert(live, item)
       }),
       session.onFact((fact) => this.fact(live, fact)),
-      session.onExit(({ error }) => this.exited(live, session, error))
+      session.onExit(({ error }) => this.exited(live, session, error)),
+      ...(session.onQuota
+        ? [session.onQuota((quota) => this.quotas.fire({ providerId: live.record.providerId, quota }))]
+        : [])
     ]
     live.record.nativeId = session.nativeId
     await this.save(live)
@@ -277,6 +286,7 @@ export class SessionManager {
   }
 
   private upsert(live: Live, item: SessionItem): void {
+    if (item.kind === 'turn' && item.state === 'ended' && !item.at) item = { ...item, at: new Date().toISOString() }
     live.items.set(item.id, item)
     live.journal.append(item)
     this.broadcast(live, { type: 'item', item })

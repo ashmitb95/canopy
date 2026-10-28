@@ -6,6 +6,7 @@ import type {
   PromptPart,
   ProviderDefinition,
   ProviderSession,
+  Quota,
   SessionFact,
   SessionItem
 } from '../src/core/types'
@@ -21,6 +22,8 @@ export class FakeSession implements ProviderSession {
   readonly onItem = this.items.event
   readonly onFact = this.facts.event
   readonly onExit = this.exits.event
+  private readonly quotas = new Emitter<Quota>()
+  readonly onQuota = this.quotas.event
 
   constructor(
     readonly nativeId: string,
@@ -44,6 +47,10 @@ export class FakeSession implements ProviderSession {
   async dispose(): Promise<void> {
     this.disposed = true
     this.exits.fire({})
+  }
+
+  quota(quota: Quota): void {
+    this.quotas.fire(quota)
   }
 
   emit(item: SessionItem): void {

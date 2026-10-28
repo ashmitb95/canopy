@@ -230,4 +230,25 @@ describe('SessionManager', () => {
     expect(manager.item(id, 'n1')).toMatchObject({ text: 'hello' })
     expect(manager.item(id, 'missing')).toBeUndefined()
   })
+
+  it('relays quota with the provider id', async () => {
+    const { manager, sessions } = setup()
+    const seen: unknown[] = []
+    manager.onQuota((event) => seen.push(event))
+    const { id } = await manager.create('fake')
+    await manager.warm(id)
+    const quota = { observedAt: 't', windows: [{ label: '5-hour', usedPercent: 40, status: 'ok' as const }] }
+    sessions[0].quota(quota)
+    expect(seen).toEqual([{ providerId: 'fake', quota }])
+  })
+
+  it('stamps when a turn ended', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    const events = watch(manager, id)
+    await manager.prompt(id, text('go'))
+    sessions[0].endTurn()
+    const ended = events.find((event) => event.type === 'item' && event.item.kind === 'turn')
+    expect(ended).toMatchObject({ item: { state: 'ended', at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) } })
+  })
 })

@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream'
 import { describe, expect, it } from 'vitest'
-import { RpcPeer } from '../../src/providers/codex/rpc'
+import { RpcPeer } from '../../src/providers/rpc'
 
 function connect() {
   const fromServer = new PassThrough()
@@ -74,5 +74,21 @@ describe('RpcPeer', () => {
     const result = peer.request('model/list', {})
     peer.close(new Error('codex exited'))
     await expect(result).rejects.toThrow('codex exited')
+  })
+
+  it('adds the envelope to every outgoing message', async () => {
+    const fromServer = new PassThrough()
+    const toServer = new PassThrough()
+    const peer = new RpcPeer(fromServer, toServer, { envelope: { jsonrpc: '2.0' } })
+    const sent: unknown[] = []
+    toServer.setEncoding('utf8')
+    toServer.on('data', (chunk: string) => sent.push(...chunk.split('\n').filter(Boolean).map((line) => JSON.parse(line))))
+    void peer.request('initialize', { protocolVersion: 1 })
+    peer.notify('session/cancel', { sessionId: 's' })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(sent).toEqual([
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1 } },
+      { jsonrpc: '2.0', method: 'session/cancel', params: { sessionId: 's' } }
+    ])
   })
 })

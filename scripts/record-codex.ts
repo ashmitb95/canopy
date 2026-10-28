@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { captureEnv } from '../src/env'
 import { spawnGroup, stopGroup } from '../src/process'
 import { findCodex } from '../src/providers/codex/locate'
-import { RpcPeer } from '../src/providers/codex/rpc'
+import { RpcPeer } from '../src/providers/rpc'
 
 const OUT = 'test/fixtures/codex/edit-turn.jsonl'
 const KEEP = /^(item\/|turn\/(started|completed|plan\/updated)$|thread\/tokenUsage\/updated$)/

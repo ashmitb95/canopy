@@ -21,7 +21,7 @@ import { encodePrompt } from '../encode'
 import { refreshUntilSettled } from '../mcp-settle'
 import { findCodex } from './locate'
 import type { ApprovalPolicy, McpServerStatus, ModelInfo, SandboxMode, SandboxPolicy, TokenUsage } from './protocol'
-import { RpcPeer, type ServerRequest } from './rpc'
+import { RpcPeer, type ServerRequest } from '../rpc'
 import { unwrapShell } from './text'
 import { CodexTranslator } from './translate'
 

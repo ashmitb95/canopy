@@ -1,5 +1,5 @@
 import type { Readable, Writable } from 'node:stream'
-import { Emitter } from '../../core/emitter'
+import { Emitter } from '../core/emitter'
 
 export type Notification = { method: string; params: unknown }
 export type ServerRequest = { id: number | string; method: string; params: unknown }
@@ -13,7 +13,7 @@ type Incoming = {
   error?: { message?: string }
 }
 
-/** JSON-RPC as `codex app-server` speaks it: one JSON object per line, no "jsonrpc" field. */
+/** Newline-delimited JSON-RPC over a child's stdio. Codex omits the "jsonrpc" field; ACP agents expect it via the envelope. */
 export class RpcPeer {
   private seq = 0
   private buffer = ''
@@ -24,11 +24,16 @@ export class RpcPeer {
     throw new Error(`Unsupported request: ${request.method}`)
   }
 
+  private readonly log: (message: string) => void
+  private readonly envelope: Record<string, string>
+
   constructor(
     input: Readable,
     private readonly output: Writable,
-    private readonly log: (message: string) => void = () => {}
+    options: { log?: (message: string) => void; envelope?: Record<string, string> } = {}
   ) {
+    this.log = options.log ?? (() => {})
+    this.envelope = options.envelope ?? {}
     input.setEncoding('utf8')
     input.on('data', (chunk: string) => this.receive(chunk))
   }
@@ -56,7 +61,7 @@ export class RpcPeer {
   }
 
   private write(message: object): void {
-    this.output.write(`${JSON.stringify(message)}\n`)
+    this.output.write(`${JSON.stringify({ ...this.envelope, ...message })}\n`)
   }
 
   private receive(chunk: string): void {

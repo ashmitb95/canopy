@@ -1385,6 +1385,93 @@ Stop and ask the user to check, after `code --install-extension agentdeck-0.0.1.
 
 ---
 
+### Task 9: MCP servers that appear late
+
+Found by the live smoke after Task 8: right after startup, Claude's first MCP reading listed only `screenscribe`; the claude.ai connectors join the list a moment later, and since nothing in the first reading was `pending`, re-reading stopped. Fix: keep reading for a minimum number of attempts, and re-read whenever Claude re-sends `system/init`.
+
+**Files:**
+- Modify: `src/providers/mcp-settle.ts`, `src/providers/claude/provider.ts`, `scripts/smoke.ts`
+- Test: `test/providers/mcp-settle.test.ts` (one test added)
+
+- [ ] **Step 1: Write the failing test**
+
+In `test/providers/mcp-settle.test.ts`, add inside the `describe` block:
+
+```ts
+  it('keeps reading for the minimum attempts, since servers can appear late', async () => {
+    const { read, calls } = reader([], [server('connected')])
+    const emitted: McpServer[][] = []
+    await refreshUntilSettled(read, (servers) => emitted.push(servers), { intervalMs: 0, attempts: 10, minAttempts: 3 })
+    expect(calls()).toBe(3)
+    expect(emitted.at(-1)).toEqual([server('connected')])
+  })
+```
+
+Run: `pnpm test test/providers/mcp-settle.test.ts`
+Expected: FAIL (one read instead of three).
+
+- [ ] **Step 2: Implement `minAttempts`**
+
+`src/providers/mcp-settle.ts` (full replacement):
+
+```ts
+import type { McpServer } from '../core/types'
+
+type Options = { intervalMs: number; attempts: number; minAttempts?: number; closed?: () => boolean }
+
+/**
+ * Servers report `pending` while they connect, and some (claude.ai connectors) join the list late.
+ * Re-read for at least `minAttempts`, then until none is pending, so the UI settles on real states.
+ */
+export async function refreshUntilSettled(
+  read: () => Promise<McpServer[]>,
+  emit: (servers: McpServer[]) => void,
+  { intervalMs, attempts, minAttempts = 1, closed = () => false }: Options
+): Promise<void> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const servers = await read()
+    emit(servers)
+    const settled = attempt >= minAttempts && !servers.some((server) => server.status === 'pending')
+    if (settled || attempt === attempts) return
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    if (closed()) return
+  }
+}
+```
+
+- [ ] **Step 3: Use it in the Claude provider**
+
+In `src/providers/claude/provider.ts`:
+- in `refreshMcp`, change `{ intervalMs: 1000, attempts: 30, closed: () => this.closed }` to `{ intervalMs: 1000, attempts: 30, minAttempts: 5, closed: () => this.closed }`;
+- in `pump`, right after `this.translator.feed(message)`, add:
+
+```ts
+        if (message.type === 'system' && message.subtype === 'init') void this.refreshMcp().catch(() => undefined)
+```
+
+- [ ] **Step 4: Show the settled list in the smoke**
+
+In `scripts/smoke.ts`, right after the line that checks `edit was not applied`, add:
+
+```ts
+  const settled = first.list().find(({ record }) => record.id === id)?.record.facts.mcp
+  console.log('mcp after first turn:', settled?.kind === 'mcp' ? settled.servers.map((s) => `${s.name}=${s.status}`) : [])
+```
+
+- [ ] **Step 5: Verify**
+
+Run: `pnpm test && pnpm typecheck && pnpm build && node dist/smoke.js`
+Expected: PASS; clean; `mcp after first turn:` lists the same servers as `claude mcp list` (including any claude.ai connectors) with settled states; `SMOKE OK`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/providers/mcp-settle.ts src/providers/claude/provider.ts scripts/smoke.ts test/providers/mcp-settle.test.ts
+git commit -m "fix(providers): keep reading MCP status while late servers join"
+```
+
+---
+
 ## Done when
 
 - `pnpm typecheck`, `pnpm test`, and `node dist/smoke.js` pass.

@@ -20,6 +20,7 @@ import type {
   ProviderDefinition,
   ProviderSession,
   ProviderState,
+  Quota,
   SessionFact,
   SessionItem
 } from '../../core/types'
@@ -27,6 +28,7 @@ import type { Env } from '../../env'
 import { refreshUntilSettled } from '../mcp-settle'
 import { encodePrompt } from '../encode'
 import { findClaude } from './locate'
+import { claudeQuota, type RateLimitInfo } from './quota'
 import { approvalDetail } from './tools'
 import { ClaudeTranslator } from './translate'
 
@@ -120,6 +122,8 @@ class ClaudeSession implements ProviderSession {
   readonly onItem = this.items.event
   readonly onFact = this.facts.event
   readonly onExit = this.exits.event
+  private readonly quotas = new Emitter<Quota>()
+  readonly onQuota = this.quotas.event
   private readonly translator = new ClaudeTranslator((item) => this.items.fire(item))
   private readonly query: Query
   private readonly inbox: SDKUserMessage[] = []
@@ -247,6 +251,10 @@ class ClaudeSession implements ProviderSession {
           this.facts.fire({ kind: 'model', current: this.model, available: this.models })
         }
         if (message.type === 'result') void this.refreshContext()
+        if (message.type === 'rate_limit_event') {
+          const quota = claudeQuota(message.rate_limit_info as RateLimitInfo)
+          if (quota) this.quotas.fire(quota)
+        }
       }
     } catch (caught) {
       if (!this.closed) error = caught instanceof Error ? caught.message : String(caught)

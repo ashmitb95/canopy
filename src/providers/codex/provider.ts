@@ -12,6 +12,7 @@ import type {
   ProviderDefinition,
   ProviderSession,
   ProviderState,
+  Quota,
   SessionFact,
   SessionItem
 } from '../../core/types'
@@ -20,6 +21,7 @@ import { spawnGroup, stopGroup } from '../../process'
 import { encodePrompt } from '../encode'
 import { refreshUntilSettled } from '../mcp-settle'
 import { findCodex } from './locate'
+import { codexQuota } from './quota'
 import type { ApprovalPolicy, McpServerStatus, ModelInfo, SandboxMode, SandboxPolicy, TokenUsage } from './protocol'
 import { RpcPeer, type ServerRequest } from '../rpc'
 import { unwrapShell } from './text'
@@ -100,6 +102,8 @@ class CodexSession implements ProviderSession {
   readonly onItem = this.items.event
   readonly onFact = this.facts.event
   readonly onExit = this.exits.event
+  private readonly quotas = new Emitter<Quota>()
+  readonly onQuota = this.quotas.event
   private readonly translator = new CodexTranslator((item) => this.items.fire(item))
   private readonly approvals = new Map<string, { item: ApprovalItem; resolve: (decision: string) => void }>()
   private readonly startup = new Map<string, McpServer['status']>()
@@ -251,6 +255,11 @@ class CodexSession implements ProviderSession {
         if (tokenUsage.modelContextWindow) {
           this.facts.fire({ kind: 'context', usedTokens: tokenUsage.last.totalTokens, maxTokens: tokenUsage.modelContextWindow })
         }
+        return
+      }
+      case 'account/rateLimits/updated': {
+        const quota = codexQuota((params as { rateLimits: Parameters<typeof codexQuota>[0] }).rateLimits)
+        if (quota) this.quotas.fire(quota)
         return
       }
       case 'mcpServer/startupStatus/updated': {

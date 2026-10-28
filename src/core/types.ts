@@ -79,6 +79,12 @@ export type SessionFact =
 
 export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context'
 
+/** An account's usage limits as its CLI last reported them; shown with their age. */
+export type Quota = {
+  observedAt: string
+  windows: { label: string; usedPercent: number; resetsAt?: string; status: 'ok' | 'warning' | 'limited' }[]
+}
+
 export type ProviderState = {
   status: 'signed-in' | 'signed-out' | 'not-installed' | 'unknown'
   version?: string
@@ -124,4 +130,6 @@ export interface ProviderSession {
   readonly onItem: Event<SessionItem>
   readonly onFact: Event<SessionFact>
   readonly onExit: Event<{ error?: string }>
+  /** Usage limits, for providers whose CLI reports them. */
+  readonly onQuota?: Event<Quota>
 }

@@ -15,6 +15,12 @@ export type ProviderInfo = {
 
 export type SessionSummary = { id: string; title: string; providerId: string; status: SessionStatus; updatedAt: string; inTab: boolean }
 
+/** Where a sign-in flow is; `null` clears it. */
+export type SignInProgress =
+  | { step: 'starting' }
+  | { step: 'link'; url: string; code?: string }
+  | { step: 'failed'; message: string }
+
 /** Extension host → webview. */
 export type HostMessage =
   | { type: 'session'; sessionId: string; event: SessionEvent }
@@ -28,6 +34,7 @@ export type HostMessage =
   | { type: 'quota'; providerId: string; quota: Quota }
   /** The sidebar has no session yet. */
   | { type: 'empty' }
+  | { type: 'signInProgress'; providerId: string; progress: SignInProgress | null }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -38,6 +45,9 @@ export type WebviewMessage =
   | { type: 'removeQueued'; queuedId: string }
   | { type: 'newChat'; providerId?: string }
   | { type: 'signIn'; providerId?: string }
+  | { type: 'cancelSignIn'; providerId: string }
+  | { type: 'signInInTerminal'; providerId: string }
+  | { type: 'refreshProviders' }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'setModel'; model: string }
   | { type: 'setMode'; mode: PermissionMode }

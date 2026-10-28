@@ -58,6 +58,12 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "agentdeck.manageProviders",
+        "title": "Manage Providers",
+        "category": "AgentDeck",
+        "icon": "$(account)"
+      },
+      {
         "command": "agentdeck.openSession",
         "title": "Open in Editor",
         "category": "AgentDeck"
@@ -94,6 +100,11 @@
           "command": "agentdeck.openInEditor",
           "when": "view == agentdeck.chat",
           "group": "navigation@2"
+        },
+        {
+          "command": "agentdeck.manageProviders",
+          "when": "view == agentdeck.chat",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [

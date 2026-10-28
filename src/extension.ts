@@ -36,6 +36,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('agentdeck.newChat', () => surfaces.newChat('panel')),
     vscode.commands.registerCommand('agentdeck.sidebar.newChat', () => surfaces.newChat('view')),
     vscode.commands.registerCommand('agentdeck.openInEditor', () => surfaces.openSidebarInEditor()),
+    vscode.commands.registerCommand('agentdeck.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
     new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label]))),
     new SessionsStatusBar(sessionManager),
@@ -51,6 +52,12 @@ export function activate(context: vscode.ExtensionContext): void {
       if (choice === 'Delete') await sessionManager.delete(node.id)
     })
   )
+
+  // First run: show the providers and how to start, once.
+  if (!context.globalState.get('agentdeck.welcomed') && sessionManager.list().length === 0) {
+    void context.globalState.update('agentdeck.welcomed', true)
+    surfaces.openProviders('Welcome to AgentDeck')
+  }
 }
 
 export async function deactivate(): Promise<void> {

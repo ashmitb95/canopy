@@ -1,12 +1,12 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import type { Disposable } from '../core/emitter'
-import type { PromptPart, ProviderDefinition, ProviderState, Quota } from '../core/types'
+import type { PromptPart, ProviderDefinition, ProviderState, Quota, SignInFlow } from '../core/types'
 import type { Env } from '../env'
 import type { Attention, SessionManager } from '../sessions/manager'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
-import type { HostMessage, ProviderInfo, WebviewMessage } from './protocol'
+import type { HostMessage, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
 
 export const PANEL_TYPE = 'agentdeck.chatPanel'
 export const SIDEBAR_VIEW = 'agentdeck.chat'
@@ -38,6 +38,7 @@ export class ChatSurfaces
   /** Latest usage per provider; kept across reloads and shown with its age. */
   private readonly quotas: Record<string, Quota>
   private readonly states = new Map<string, ProviderState>()
+  private readonly signIns = new Map<string, { flow?: SignInFlow; progress: SignInProgress }>()
   private readonly subscriptions: { dispose(): void }[] = []
 
   constructor(
@@ -85,6 +86,17 @@ export class ChatSurfaces
       localResourceRoots: [this.assets()]
     })
     this.attachPanel(panel)
+  }
+
+  /** The provider chooser in its own tab: the welcome screen and the providers page. */
+  openProviders(title = 'AgentDeck: Providers'): void {
+    const panel = vscode.window.createWebviewPanel(PANEL_TYPE, title, vscode.ViewColumn.Active, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [this.assets()]
+    })
+    this.attachPanel(panel)
+    panel.title = title
   }
 
   private clear(surface: Surface): void {
@@ -148,6 +160,7 @@ export class ChatSurfaces
 
   dispose(): void {
     for (const subscription of this.subscriptions) subscription.dispose()
+    for (const { flow } of this.signIns.values()) flow?.cancel()
     for (const { surface } of this.panels.values()) this.release(surface)
     for (const surface of this.blankPanels) this.release(surface)
     if (this.sidebar) this.release(this.sidebar)
@@ -191,6 +204,7 @@ export class ChatSurfaces
         this.postSessions(surface)
         await this.postProviders(surface)
         for (const [providerId, quota] of Object.entries(this.quotas)) this.post(surface, { type: 'quota', providerId, quota })
+        for (const [providerId, { progress }] of this.signIns) this.post(surface, { type: 'signInProgress', providerId, progress })
         if (sessionId) this.show(surface, sessionId)
         else this.post(surface, { type: 'empty' })
         return
@@ -242,6 +256,15 @@ export class ChatSurfaces
       case 'openSession':
         this.openPanel(message.sessionId)
         return
+      case 'cancelSignIn':
+        this.signIns.get(message.providerId)?.flow?.cancel()
+        this.setSignIn(message.providerId, null)
+        return
+      case 'signInInTerminal':
+        return this.signInInTerminal(surface, message.providerId)
+      case 'refreshProviders':
+        this.states.clear()
+        return this.postProviders()
       case 'openFile': {
         const document = await vscode.workspace.openTextDocument(message.path)
         const line = Math.max((message.line ?? 1) - 1, 0)
@@ -300,8 +323,46 @@ export class ChatSurfaces
     return state
   }
 
-  /** Runs the provider's own login in a terminal, then re-checks once the terminal closes. */
+  /** Runs the provider's login inside AgentDeck when it can; otherwise in a terminal. */
   private async signIn(surface: Surface, providerId?: string): Promise<void> {
+    const provider = this.providers.get(providerId ?? this.providerOf(surface.sessionId))
+    if (!provider) return
+    if (!provider.startSignIn) return this.signInInTerminal(surface, provider.id)
+    this.signIns.get(provider.id)?.flow?.cancel()
+    this.setSignIn(provider.id, { step: 'starting' })
+    try {
+      const flow = await provider.startSignIn(await this.env(), (event) => {
+        if (event.kind === 'link') {
+          void vscode.env.openExternal(vscode.Uri.parse(event.url))
+          this.setSignIn(provider.id, { step: 'link', url: event.url, code: event.code })
+        } else if (event.kind === 'failed') {
+          this.setSignIn(provider.id, { step: 'failed', message: event.message })
+        } else {
+          this.setSignIn(provider.id, null)
+          this.states.delete(provider.id)
+          void this.postProviders()
+          for (const target of this.surfaces()) if (this.providerOf(target.sessionId) === provider.id) void this.postProvider(target)
+        }
+      })
+      const current = this.signIns.get(provider.id)
+      if (current) current.flow = flow
+    } catch (error) {
+      this.setSignIn(provider.id, { step: 'failed', message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  private setSignIn(providerId: string, progress: SignInProgress | null): void {
+    if (progress) this.signIns.set(providerId, { flow: this.signIns.get(providerId)?.flow, progress })
+    else this.signIns.delete(providerId)
+    this.broadcast({ type: 'signInProgress', providerId, progress })
+  }
+
+  private surfaces(): Surface[] {
+    return [...[...this.panels.values()].map(({ surface }) => surface), ...this.blankPanels, ...(this.sidebar ? [this.sidebar] : [])]
+  }
+
+  /** Runs the provider's own login in a terminal, then re-checks once the terminal closes. */
+  private async signInInTerminal(surface: Surface, providerId?: string): Promise<void> {
     const provider = this.providers.get(providerId ?? this.providerOf(surface.sessionId))
     if (!provider) return
     const terminal = vscode.window.createTerminal({ name: `${provider.label} sign-in` })

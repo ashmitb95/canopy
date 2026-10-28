@@ -111,4 +111,10 @@ describe('chat state', () => {
     const state = run({ type: 'quota', providerId: 'claude', quota }, { type: 'empty' })
     expect(state.quotas).toEqual({ claude: quota })
   })
+
+  it('tracks sign-in progress per provider and clears it when done', () => {
+    const started = run({ type: 'signInProgress', providerId: 'claude', progress: { step: 'link', url: 'https://claude.ai/x' } })
+    expect(started.signIns.claude).toEqual({ step: 'link', url: 'https://claude.ai/x' })
+    expect(reduce(started, { type: 'signInProgress', providerId: 'claude', progress: null }).signIns).toEqual({})
+  })
 })

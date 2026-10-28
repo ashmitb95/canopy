@@ -1,7 +1,7 @@
 import type { Quota, SessionItem } from '../../src/core/types'
 import type { QueuedPrompt, SessionEvent } from '../../src/sessions/manager'
 import type { SessionRecord, SessionStatus } from '../../src/sessions/store'
-import type { EditorContext, HostMessage, ProviderInfo, SessionSummary } from '../../src/ui/protocol'
+import type { EditorContext, HostMessage, ProviderInfo, SessionSummary, SignInProgress } from '../../src/ui/protocol'
 
 export type ChatState = {
   sessionId?: string
@@ -15,6 +15,7 @@ export type ChatState = {
   editorContext: EditorContext | null
   sessions: SessionSummary[]
   quotas: Record<string, Quota>
+  signIns: Record<string, SignInProgress>
   /** The sidebar has no session to show. */
   empty: boolean
 }
@@ -28,6 +29,7 @@ export const initialState: ChatState = {
   editorContext: null,
   sessions: [],
   quotas: {},
+  signIns: {},
   empty: false
 }
 
@@ -40,7 +42,7 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
     case 'editorContext':
       return { ...state, editorContext: message.context }
     case 'empty':
-      return { ...initialState, provider: state.provider, providers: state.providers, editorContext: state.editorContext, sessions: state.sessions, quotas: state.quotas, empty: true }
+      return { ...initialState, provider: state.provider, providers: state.providers, editorContext: state.editorContext, sessions: state.sessions, quotas: state.quotas, signIns: state.signIns, empty: true }
     case 'title':
       if (message.sessionId !== state.sessionId || !state.record) return state
       return { ...state, record: { ...state.record, title: message.title } }
@@ -48,6 +50,12 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
       return { ...state, sessions: message.sessions }
     case 'quota':
       return { ...state, quotas: { ...state.quotas, [message.providerId]: message.quota } }
+    case 'signInProgress': {
+      const signIns = { ...state.signIns }
+      if (message.progress) signIns[message.providerId] = message.progress
+      else delete signIns[message.providerId]
+      return { ...state, signIns }
+    }
     case 'session':
       return sessionEvent(state, message.sessionId, message.event)
   }

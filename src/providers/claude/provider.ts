@@ -23,9 +23,10 @@ import type {
   SessionFact,
   SessionItem
 } from '../../core/types'
-import { type Env, findOnPath } from '../../env'
+import type { Env } from '../../env'
 import { refreshUntilSettled } from '../mcp-settle'
 import { encodePrompt } from '../encode'
+import { findClaude } from './locate'
 import { approvalDetail } from './tools'
 import { ClaudeTranslator } from './translate'
 
@@ -64,7 +65,7 @@ export const claudeProvider: ProviderDefinition = {
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
-    const path = findOnPath(env, 'claude')
+    const path = await findClaude(env)
     if (!path) return { status: 'not-installed' }
     const options = { env: claudeEnv(env), timeout: 15_000 }
     try {
@@ -80,7 +81,7 @@ export const claudeProvider: ProviderDefinition = {
   },
 
   async open(options: OpenOptions): Promise<ProviderSession> {
-    const path = findOnPath(options.env, 'claude')
+    const path = await findClaude(options.env)
     if (!path) throw new Error('The claude CLI was not found on PATH.')
     // Loaded on first use so activating the extension stays fast.
     const { query } = await import('@anthropic-ai/claude-agent-sdk')

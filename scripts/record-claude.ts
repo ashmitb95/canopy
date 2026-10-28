@@ -2,14 +2,15 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { captureEnv, findOnPath } from '../src/env'
+import { captureEnv } from '../src/env'
+import { findClaude } from '../src/providers/claude/locate'
 import { claudeEnv } from '../src/providers/claude/provider'
 
 const OUT = 'test/fixtures/claude/edit-turn.jsonl'
 
 async function main(): Promise<void> {
   const env = await captureEnv()
-  const cli = findOnPath(env, 'claude')
+  const cli = await findClaude(env)
   if (!cli) throw new Error('claude CLI not found on the login-shell PATH')
   const { query } = await import('@anthropic-ai/claude-agent-sdk')
   const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-record-'))

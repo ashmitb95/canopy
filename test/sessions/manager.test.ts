@@ -214,4 +214,13 @@ describe('SessionManager', () => {
     await manager.delete(id)
     expect(manager.list()).toEqual([])
   })
+
+  it('looks up an item by id', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.warm(id)
+    sessions[0].emit({ kind: 'notice', id: 'n1', level: 'info', text: 'hello' })
+    expect(manager.item(id, 'n1')).toMatchObject({ text: 'hello' })
+    expect(manager.item(id, 'missing')).toBeUndefined()
+  })
 })

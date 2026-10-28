@@ -84,6 +84,9 @@ export type ProviderState = {
 
 export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?: string; resumeId?: string }
 
+/** Where a user signs in to an MCP server: a web page, or a CLI flow in a terminal. */
+export type McpSignIn = { kind: 'url'; url: string } | { kind: 'terminal'; command: string; hint: string }
+
 export interface ProviderDefinition {
   readonly id: string
   readonly label: string
@@ -94,6 +97,7 @@ export interface ProviderDefinition {
   readonly modes: readonly PermissionMode[]
   probe(env: Env): Promise<ProviderState>
   open(options: OpenOptions): Promise<ProviderSession>
+  mcpSignIn?(server: string, scope: string | undefined): McpSignIn
 }
 
 /**

@@ -12,6 +12,7 @@ import type {
 import { Emitter } from '../../core/emitter'
 import type {
   ApprovalItem,
+  McpSignIn,
   OpenOptions,
   PermissionMode,
   PromptPart,
@@ -83,6 +84,15 @@ export const claudeProvider: ProviderDefinition = {
     // Loaded on first use so activating the extension stays fast.
     const { query } = await import('@anthropic-ai/claude-agent-sdk')
     return new ClaudeSession(query, path, options)
+  },
+
+  mcpSignIn(server: string, scope: string | undefined): McpSignIn {
+    if (scope === 'claudeai') return { kind: 'url', url: 'https://claude.ai/settings/connectors' }
+    return {
+      kind: 'terminal',
+      command: 'claude',
+      hint: `In the terminal, run /mcp and choose ${server} to sign in. Then press Reconnect in AgentDeck.`
+    }
   }
 }
 

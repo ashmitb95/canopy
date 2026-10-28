@@ -136,6 +136,10 @@ export class SessionManager {
     this.live.get(id)?.session?.answer(itemId, optionId)
   }
 
+  item(id: string, itemId: string): SessionItem | undefined {
+    return this.live.get(id)?.items.get(itemId)
+  }
+
   async setModel(id: string, model: string): Promise<void> {
     const live = this.load(id)
     live.record.model = model

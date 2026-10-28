@@ -48,6 +48,15 @@ body[data-surface="view"] {
   --background: var(--vscode-sideBar-background);
 }
 
+/* High-contrast themes outline every widget with the contrast border. */
+body.vscode-high-contrast {
+  --border: var(--vscode-contrastBorder, var(--vscode-widget-border));
+  --ring: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+}
+body.vscode-high-contrast [data-slot="button"]:is([data-variant="default"], [data-variant="secondary"], [data-variant="outline"]) {
+  outline: 1px solid var(--vscode-contrastBorder);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -102,8 +111,5 @@ body[data-surface="view"] {
   pre,
   kbd {
     font-family: var(--vscode-editor-font-family);
-  }
-  .vscode-high-contrast [data-slot] {
-    outline-color: var(--vscode-contrastBorder);
   }
 }

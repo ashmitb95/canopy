@@ -88,6 +88,19 @@ const items: SessionItem[] = [
   }
 ]
 
+const earlier: SessionItem[] = [
+  { kind: 'message', id: 'u0', role: 'user', parts: [{ type: 'text', text: 'Add a retry helper with exponential backoff.' }] },
+  { kind: 'turn', id: 't0', state: 'ended', stopReason: 'success', at: '2026-10-28T09:58:00.000Z' },
+  {
+    kind: 'message',
+    id: 'a0',
+    role: 'assistant',
+    streaming: false,
+    text: 'Added `retry()` in `src/retry.ts` with exponential backoff, capped at 3 attempts.'
+  },
+  { kind: 'diff', id: 'd0', path: '/work/src/retry.ts', oldText: null, newText: 'export async function retry() {\n  // …\n}' }
+]
+
 const claude: ProviderInfo = {
   id: 'claude',
   label: 'Claude',
@@ -101,6 +114,17 @@ const providers: HostMessage = { type: 'providers', providers: [claude, codex] }
 
 const chat: HostMessage[] = [
   providers,
+  {
+    type: 'quota',
+    providerId: 'claude',
+    quota: {
+      observedAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+      windows: [
+        { label: '5-hour', usedPercent: 42, resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString(), status: 'ok' },
+        { label: 'Weekly', usedPercent: 18, status: 'ok' }
+      ]
+    }
+  },
   {
     type: 'sessions',
     sessions: [
@@ -117,7 +141,7 @@ const chat: HostMessage[] = [
       type: 'snapshot',
       record,
       status: 'needs-input',
-      items,
+      items: [...earlier, ...items],
       queue: [{ id: 'q1', parts: [{ type: 'text', text: 'Also add a regression test that runs the retry with real timers.' }] }]
     }
   }

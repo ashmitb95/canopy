@@ -10,12 +10,15 @@ import type { SessionFact } from '../../../src/core/types'
 import { send } from '../host'
 import { Codicon } from './codicon'
 
+/** The picker entry for the current model: the CLI reports a concrete id; the picker lists aliases. */
+export function selectedModel(fact: Extract<SessionFact, { kind: 'model' }>) {
+  return fact.available.find((model) => model.id === fact.current) ?? fact.available.find((model) => model.resolved === fact.current)
+}
+
 export function ModelPicker({ fact }: { fact?: Extract<SessionFact, { kind: 'model' }> }) {
   if (!fact) return null
   // The CLI reports the concrete model id; the picker lists aliases that resolve to it.
-  const selected =
-    fact.available.find((model) => model.id === fact.current) ??
-    fact.available.find((model) => model.resolved === fact.current)
+  const selected = selectedModel(fact)
   const label = selected?.label ?? fact.current
   return (
     <DropdownMenu>

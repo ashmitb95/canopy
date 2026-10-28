@@ -16,6 +16,12 @@ export function PlanCard({ item }: { item: PlanItem }) {
         </span>
         <Codicon name="chevron-down" className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
+      <div className="mx-3 mb-2 h-1 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-info transition-[width]"
+          style={{ width: `${item.entries.length ? (done / item.entries.length) * 100 : 0}%` }}
+        />
+      </div>
       <CollapsibleContent className="border-t px-3 py-2">
         <ul className="space-y-1 text-sm">
           {item.entries.map((entry, index) => (

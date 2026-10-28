@@ -40,7 +40,7 @@ export function Composer({ state }: { state: ChatState }) {
       <Textarea
         value={text}
         rows={1}
-        placeholder={`Ask ${state.provider?.label ?? 'the agent'}…`}
+        placeholder={busy ? 'Queue a follow-up…' : `Ask ${state.provider?.label ?? 'the agent'}…`}
         className="max-h-48 min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {

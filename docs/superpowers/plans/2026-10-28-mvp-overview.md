@@ -9,6 +9,11 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 | 3 | [Chat items and controls](2026-10-28-mvp-3-items-and-controls.md) | Tool cards, diff cards with *Open diff*, plan, model and mode pickers, context meter, MCP popover with sign-in handoff and reconnect, sessions tree, status bar, provider sign-in check | Done |
 | 4 | [Codex](2026-10-28-mvp-4-codex.md) | `codex app-server` client, Codex translator with a recorded fixture, Codex sign-in and MCP handoff | Done |
 | 5 | [Release](2026-10-28-mvp-5-release.md) | Theme check on Dark Modern, Light Modern, a high-contrast theme, and one third-party theme; packaging; README | Done |
+| 6 | [Sidebar layout and in-app provider choice](2026-10-29-6-sidebar-and-provider-choice.md) | Composer fits the sidebar; provider chooser instead of a quick pick | Done |
+| 7 | [ACP provider and Grok](2026-10-29-7-acp-and-grok.md) | Generic ACP provider; Grok with a recorded fixture and live smoke | Done |
+| 8 | [Chat and sidebar details](2026-10-29-8-chat-and-sidebar-polish.md) | Quota pill, searchable switcher, working timer, turn footers, approval toasts | Done |
+| 9 | [Guided sign-in and welcome](2026-10-29-9-guided-sign-in-and-welcome.md) | Sign-in steps for Claude, Codex, and Grok; welcome screen | Done |
+| 10 | [Rich composer](2026-10-29-10-rich-composer.md) | `@` files, `/` commands, attachments, pasted images and text | Done |
 
 ## Conventions for whoever executes a plan
 

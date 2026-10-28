@@ -1,11 +1,11 @@
 import type { SessionItem } from '../../../src/core/types'
 import { ApprovalCard } from './approval-card'
 import { AssistantMessageView } from './assistant-message'
-import { DiffLine } from './diff-line'
+import { DiffCard } from './diff-card'
 import { NoticeView } from './notice'
-import { PlanList } from './plan-list'
+import { PlanCard } from './plan-card'
 import { ThoughtView } from './thought'
-import { ToolLine } from './tool-line'
+import { ToolCard } from './tool-card'
 import { UserMessageView } from './user-message'
 
 export function ItemView({ item }: { item: SessionItem }) {
@@ -15,11 +15,11 @@ export function ItemView({ item }: { item: SessionItem }) {
     case 'thought':
       return <ThoughtView item={item} />
     case 'tool':
-      return <ToolLine item={item} />
+      return <ToolCard item={item} />
     case 'diff':
-      return <DiffLine item={item} />
+      return <DiffCard item={item} />
     case 'plan':
-      return <PlanList item={item} />
+      return <PlanCard item={item} />
     case 'approval':
       return <ApprovalCard item={item} />
     case 'notice':

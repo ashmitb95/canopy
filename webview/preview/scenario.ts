@@ -41,6 +41,15 @@ const items: SessionItem[] = [
     output: '✓ api.test.ts > parses response (3ms)\n× api.test.ts > retries with backoff'
   },
   {
+    kind: 'plan',
+    id: 'plan',
+    entries: [
+      { text: 'Find why the retry test is flaky', status: 'done' },
+      { text: 'Schedule the backoff synchronously', status: 'in_progress' },
+      { text: 'Run the test 20 times', status: 'pending' }
+    ]
+  },
+  {
     kind: 'message',
     id: 'a1',
     role: 'assistant',

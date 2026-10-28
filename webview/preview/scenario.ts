@@ -109,8 +109,9 @@ const claude: ProviderInfo = {
   modes: ['ask', 'accept-edits', 'plan', 'full-access'],
   state: { status: 'signed-in', account: 'me@example.com', version: '2.1.311' }
 }
-const codex: ProviderInfo = { ...claude, id: 'codex', label: 'Codex', state: { status: 'signed-out' } }
-const providers: HostMessage = { type: 'providers', providers: [claude, codex] }
+const codex: ProviderInfo = { ...claude, id: 'codex', label: 'Codex', state: { status: 'signed-out', version: '0.164.0' } }
+const grokInfo: ProviderInfo = { ...claude, id: 'grok', label: 'Grok', state: { status: 'not-installed' } }
+const providers: HostMessage = { type: 'providers', providers: [claude, codex, grokInfo] }
 
 const chat: HostMessage[] = [
   providers,
@@ -148,7 +149,13 @@ const chat: HostMessage[] = [
 ]
 
 // `?scenario=new` shows the provider chooser instead of a chat.
-const messages: HostMessage[] = new URLSearchParams(location.search).get('scenario') === 'new' ? [providers, { type: 'empty' }] : chat
+const messages: HostMessage[] = new URLSearchParams(location.search).get('scenario') === 'new'
+    ? [
+        providers,
+        { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
+        { type: 'empty' }
+      ]
+    : chat
 
 // Posted after the app has mounted and subscribed.
 setTimeout(() => {

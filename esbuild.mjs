@@ -1,8 +1,11 @@
+import { execFileSync } from 'node:child_process'
+import { cpSync, mkdirSync, rmSync } from 'node:fs'
 import * as esbuild from 'esbuild'
 
 const watch = process.argv.includes('--watch')
+const preview = process.argv.includes('--preview')
 
-const options = {
+const extension = {
   entryPoints: { extension: 'src/extension.ts', smoke: 'scripts/smoke.ts', 'record-claude': 'scripts/record-claude.ts' },
   outdir: 'dist',
   bundle: true,
@@ -16,8 +19,56 @@ const options = {
   external: ['vscode']
 }
 
-if (watch) {
-  await (await esbuild.context(options)).watch()
+const webview = {
+  entryPoints: { main: 'webview/main.tsx' },
+  outdir: 'dist/webview',
+  bundle: true,
+  format: 'esm',
+  // Shiki's grammars load on demand as separate chunks instead of inflating the entry script.
+  splitting: true,
+  platform: 'browser',
+  target: 'chrome120',
+  jsx: 'automatic',
+  tsconfig: 'webview/tsconfig.json',
+  entryNames: '[name]',
+  chunkNames: 'chunks/[name]-[hash]',
+  minify: !watch,
+  sourcemap: watch,
+  define: { 'process.env.NODE_ENV': watch ? '"development"' : '"production"' }
+}
+
+// Classic scripts, so the preview page works from a file:// URL in headless Chromium.
+const previewBuild = {
+  ...webview,
+  entryPoints: { main: 'webview/main.tsx', scenario: 'webview/preview/scenario.ts' },
+  outdir: 'dist/preview',
+  format: 'iife',
+  splitting: false,
+  minify: false
+}
+
+function styles(outdir) {
+  mkdirSync(outdir, { recursive: true })
+  execFileSync('node_modules/.bin/tailwindcss', ['-i', 'webview/theme.css', '-o', `${outdir}/webview.css`, '--minify'], {
+    stdio: 'inherit'
+  })
+  cpSync('node_modules/@vscode/codicons/dist/codicon.css', `${outdir}/codicon.css`)
+  cpSync('node_modules/@vscode/codicons/dist/codicon.ttf', `${outdir}/codicon.ttf`)
+}
+
+if (preview) {
+  rmSync('dist/preview', { recursive: true, force: true })
+  await esbuild.build(previewBuild)
+  styles('dist/preview')
+  cpSync('webview/preview/index.html', 'dist/preview/index.html')
+  cpSync('webview/preview/themes.css', 'dist/preview/themes.css')
+} else if (watch) {
+  styles('dist/webview')
+  await (await esbuild.context(extension)).watch()
+  await (await esbuild.context(webview)).watch()
 } else {
-  await esbuild.build(options)
+  // Chunk names carry hashes, so stale chunks would pile up without a clean build.
+  rmSync('dist/webview', { recursive: true, force: true })
+  await Promise.all([esbuild.build(extension), esbuild.build(webview)])
+  styles('dist/webview')
 }

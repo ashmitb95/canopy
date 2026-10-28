@@ -25,6 +25,8 @@
   "scripts": {
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
+    "build:preview": "node esbuild.mjs --preview",
+    "screenshot": "node scripts/screenshot.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p webview",
     "test": "vitest run",
     "package": "pnpm build && vsce package --no-dependencies --skip-license --allow-missing-repository --no-rewrite-relative-links"

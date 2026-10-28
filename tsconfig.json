@@ -9,5 +9,5 @@
     "noEmit": true,
     "types": ["node", "vscode"]
   },
-  "include": ["src", "scripts"]
+  "include": ["src", "scripts", "test"]
 }

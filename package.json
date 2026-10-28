@@ -26,6 +26,7 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "package": "pnpm build && vsce package --no-dependencies --skip-license --allow-missing-repository"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "@types/vscode": "1.95.0",
     "@vscode/vsce": "3.6.2",
     "esbuild": "0.25.12",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
   }
 }

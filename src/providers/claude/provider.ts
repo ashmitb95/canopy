@@ -22,6 +22,7 @@ import type {
   SessionItem
 } from '../../core/types'
 import { type Env, findOnPath } from '../../env'
+import { refreshUntilSettled } from '../mcp-settle'
 import { encodePrompt } from './encode'
 import { approvalDetail } from './tools'
 import { ClaudeTranslator } from './translate'
@@ -185,17 +186,18 @@ class ClaudeSession implements ProviderSession {
   }
 
   async refreshMcp(): Promise<void> {
-    const servers = await this.query.mcpServerStatus()
-    this.facts.fire({
-      kind: 'mcp',
-      servers: servers.map((server) => ({
-        name: server.name,
-        status: server.status,
-        scope: server.scope,
-        error: server.error,
-        tools: (server.tools ?? []).map((tool) => tool.name)
-      }))
-    })
+    await refreshUntilSettled(
+      async () =>
+        (await this.query.mcpServerStatus()).map((server) => ({
+          name: server.name,
+          status: server.status,
+          scope: server.scope,
+          error: server.error,
+          tools: (server.tools ?? []).map((tool) => tool.name)
+        })),
+      (servers) => this.facts.fire({ kind: 'mcp', servers }),
+      { intervalMs: 1000, attempts: 30, closed: () => this.closed }
+    )
   }
 
   async reconnectMcp(server: string): Promise<void> {

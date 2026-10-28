@@ -122,7 +122,7 @@ Run:
 npx -y shadcn@4.23.0 add button badge collapsible dropdown-menu popover separator textarea tooltip --yes
 ```
 
-Expected: files under `webview/components/ui/`. If the CLI asks to overwrite anything, answer no.
+Expected: files under `webview/components/ui/`. If the CLI asks to overwrite anything, answer no (in a non-interactive shell, prefix the command with `yes n |`).
 
 - [ ] **Step 7: Add the AI Elements components and move them under `webview/`**
 
@@ -130,11 +130,17 @@ Run:
 
 ```bash
 R=https://elements.ai-sdk.dev/api/registry
-npx -y shadcn@4.23.0 add $R/conversation.json $R/message.json $R/reasoning.json $R/shimmer.json --yes
-mkdir -p webview/components && mv components/ai-elements webview/components/ && rmdir components
+yes n | npx -y shadcn@4.23.0 add $R/conversation.json $R/message.json $R/reasoning.json $R/shimmer.json --yes
 ```
 
-Expected: `webview/components/ai-elements/{conversation,message,reasoning,shimmer}.tsx` exist and no top-level `components/` folder remains. The CLI also adds any shadcn components they depend on (for example `button-group`) to `webview/components/ui/`.
+The CLI asks to overwrite shadcn files that already exist; `yes n |` answers no. It writes the AI Elements files to `components/ai-elements/` or `src/components/ai-elements/` depending on the project layout it detects. Move them:
+
+```bash
+mkdir -p webview/components
+for dir in components src/components; do [ -d $dir/ai-elements ] && mv $dir/ai-elements webview/components/ && rmdir $dir; done
+```
+
+Expected: `webview/components/ai-elements/{conversation,message,reasoning,shimmer}.tsx` exist and neither `components/` nor `src/components/` remains. The CLI also adds any shadcn components they depend on (for example `button-group`) to `webview/components/ui/`.
 
 - [ ] **Step 8: Add `@/lib/utils` and keep only the code plugin**
 
@@ -148,9 +154,10 @@ In both `webview/components/ai-elements/message.tsx` and `webview/components/ai-
 - delete the three lines `import { cjk } from "@streamdown/cjk";`, `import { math } from "@streamdown/math";`, `import { mermaid } from "@streamdown/mermaid";`
 - change `const streamdownPlugins = { cjk, code, math, mermaid };` to `const streamdownPlugins = { code };`
 
-Then run:
+Then run (the shadcn components need `class-variance-authority`, which the CLI does not add):
 
 ```bash
+pnpm add class-variance-authority@0.7.1
 pnpm remove @streamdown/cjk @streamdown/math @streamdown/mermaid
 grep -rn "streamdown/cjk\|streamdown/math\|streamdown/mermaid" webview || echo CLEAN
 ```

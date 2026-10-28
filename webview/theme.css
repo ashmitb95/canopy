@@ -1,0 +1,109 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@source "./";
+@source "../node_modules/streamdown/dist/*.js";
+
+/* VS Code sets the theme kind as a class on <body>. */
+@custom-variant dark (&:is(.vscode-dark *, .vscode-high-contrast:not(.vscode-high-contrast-light) *));
+
+/*
+ * The active VS Code theme is the only source of color: every token maps to a theme variable.
+ * The last fallback on --border covers themes that define neither border variable.
+ */
+:root {
+  --background: var(--vscode-editor-background);
+  --foreground: var(--vscode-foreground);
+  --card: var(--vscode-editorWidget-background);
+  --card-foreground: var(--vscode-foreground);
+  --popover: var(--vscode-editorWidget-background);
+  --popover-foreground: var(--vscode-foreground);
+  --primary: var(--vscode-button-background);
+  --primary-foreground: var(--vscode-button-foreground);
+  --secondary: var(--vscode-button-secondaryBackground);
+  --secondary-foreground: var(--vscode-button-secondaryForeground);
+  --muted: var(--vscode-textCodeBlock-background);
+  --muted-foreground: var(--vscode-descriptionForeground);
+  --accent: var(--vscode-list-hoverBackground);
+  --accent-foreground: var(--vscode-foreground);
+  --destructive: var(--vscode-errorForeground);
+  --border: var(--vscode-widget-border, var(--vscode-panel-border, rgb(128 128 128 / 0.35)));
+  --input: var(--vscode-input-background);
+  --ring: var(--vscode-focusBorder);
+  --success: var(--vscode-testing-iconPassed);
+  --warning: var(--vscode-editorWarning-foreground);
+  --info: var(--vscode-charts-blue);
+  --code: var(--vscode-textCodeBlock-background);
+  --diff-added: var(--vscode-diffEditor-insertedLineBackground);
+  --diff-removed: var(--vscode-diffEditor-removedLineBackground);
+  --selection: var(--vscode-list-activeSelectionBackground);
+  --selection-foreground: var(--vscode-list-activeSelectionForeground);
+  --badge: var(--vscode-badge-background);
+  --badge-foreground: var(--vscode-badge-foreground);
+  --radius: 8px;
+}
+
+/* The sidebar chat sits on the sidebar's background. */
+body[data-surface="view"] {
+  --background: var(--vscode-sideBar-background);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-code: var(--code);
+  --color-diff-added: var(--diff-added);
+  --color-diff-removed: var(--diff-removed);
+  --color-selection: var(--selection);
+  --color-selection-foreground: var(--selection-foreground);
+  --color-badge: var(--badge);
+  --color-badge-foreground: var(--badge-foreground);
+  --font-sans: var(--vscode-font-family);
+  --font-mono: var(--vscode-editor-font-family);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-size: var(--vscode-font-size);
+  }
+  code,
+  pre,
+  kbd {
+    font-family: var(--vscode-editor-font-family);
+  }
+  .vscode-high-contrast [data-slot] {
+    outline-color: var(--vscode-contrastBorder);
+  }
+}

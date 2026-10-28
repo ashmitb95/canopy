@@ -7,7 +7,9 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node", "vscode"]
+    "types": ["node", "vscode"],
+    "baseUrl": ".",
+    "paths": { "@/*": ["./webview/*"] }
   },
   "include": ["src", "scripts", "test"]
 }

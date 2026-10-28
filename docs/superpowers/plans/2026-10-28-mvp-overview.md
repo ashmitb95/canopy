@@ -5,12 +5,10 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 | # | Plan | Delivers | Status |
 |---|---|---|---|
 | 1 | [Core and Claude](2026-10-28-mvp-1-core-and-claude.md) | Shared types, env, Claude provider on the item model, journal, session store, session manager, recorded fixture, live smoke through the manager | Done |
-| 2 | [Chat app foundation](2026-10-28-mvp-2-chat-app.md) | Webview build (React, Tailwind v4, shadcn, AI Elements), theme bridge, chat in editor tabs and the sidebar wired to the session manager, messages, reasoning, composer, approvals, Stop; removes the POC UI | Done; manual check pending |
-| 3 | [Chat items and controls](2026-10-28-mvp-3-items-and-controls.md) | Tool cards, diff cards with *Open diff*, plan, model and mode pickers, context meter, MCP popover with sign-in handoff and reconnect, sessions tree, status bar, provider sign-in check | Ready |
-| 4 | [Codex](2026-10-28-mvp-4-codex.md) | `codex app-server` client, Codex translator with a recorded fixture, Codex sign-in and MCP handoff | Ready (uses the Codex extension's bundled CLI) |
-| 5 | [Release](2026-10-28-mvp-5-release.md) | Theme check on Dark Modern, Light Modern, a high-contrast theme, and one third-party theme; packaging; README | Ready |
-
-Carried forward from plan 1's live run: right after the CLI starts, most MCP servers report `pending`, and the Claude provider reads MCP status once. Plan 3 must refresh it until no server is pending (and after a reconnect) so the popover settles on real states.
+| 2 | [Chat app foundation](2026-10-28-mvp-2-chat-app.md) | Webview build (React, Tailwind v4, shadcn, AI Elements), theme bridge, chat in editor tabs and the sidebar wired to the session manager, messages, reasoning, composer, approvals, Stop; removes the POC UI | Done |
+| 3 | [Chat items and controls](2026-10-28-mvp-3-items-and-controls.md) | Tool cards, diff cards with *Open diff*, plan, model and mode pickers, context meter, MCP popover with sign-in handoff and reconnect, sessions tree, status bar, provider sign-in check | Done |
+| 4 | [Codex](2026-10-28-mvp-4-codex.md) | `codex app-server` client, Codex translator with a recorded fixture, Codex sign-in and MCP handoff | Done |
+| 5 | [Release](2026-10-28-mvp-5-release.md) | Theme check on Dark Modern, Light Modern, a high-contrast theme, and one third-party theme; packaging; README | Done |
 
 ## Conventions for whoever executes a plan
 

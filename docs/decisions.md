@@ -25,6 +25,10 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 | 19 | Ship an MVP first: Claude and Codex, sessions, the real UI stack, MCP status with sign-in handoff | A daily-usable build in weeks; building on the final UI stack from the start avoids a throwaway UI. Scope table in the spec. |
 | 20 | MCP sign-in is a handoff to the CLI or claude.ai, followed by a reconnect | Follows from 2. The CLIs already share MCP config and tokens with the official extensions, so nothing needs reconnecting in AgentDeck. |
 | 21 | The CLI starts when a chat is opened, not on the first prompt | Models and MCP status are available before the first message, which the pickers and the MCP popover need. |
+| 22 | Codex runs from `codex` on PATH, else the binary bundled with the newest official Codex extension | Many users have Codex only through its extension; its bundled CLI is the same official binary, and it shares the user's `~/.codex` login. |
+| 23 | Codex MCP sign-in goes through `mcpServer/oauth/login`; AgentDeck only opens the returned link | Codex completes the OAuth and keeps the token, which keeps decision 2 intact while giving Codex servers a one-click sign-in. |
+| 24 | The webview loads as an ES module with code splitting | Shiki's grammars load on demand, keeping the entry script small. |
+| 25 | UI is checked from headless screenshots of a preview build with scripted sessions | Agents and reviewers can verify UI changes without a VS Code window; the manual check covers what the preview cannot (focus, real themes, reloads). |
 
 ## Findings from the proof of concept
 

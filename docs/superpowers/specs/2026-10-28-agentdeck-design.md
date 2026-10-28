@@ -54,6 +54,8 @@ The first release is a cut across sub-projects 1, 2, 4, and 5, sized for daily u
 | MCP status popover: per-server state, tools, scope, error; sign-in handoff; reconnect | Adding, removing, or editing MCP servers |
 | Sign-in check per provider with a button that runs the CLI's login in a terminal | Guided sign-in screens |
 
+The MVP shipped as 0.1.0. Codex is found on PATH or inside the official Codex extension (decision 22), and Codex MCP servers sign in through Codex's own OAuth flow (decision 23).
+
 AskUserQuestion is not rendered in the MVP: Claude's call is denied with a message asking it to ask in plain text.
 
 **MCP sign-in handoff.** The CLIs own MCP configuration and tokens, so a server connected for the official extension is connected in AgentDeck too (verified: an AgentDeck-style session lists the same servers and states as `claude mcp list`). For a server in `needs-auth`, AgentDeck sends the user to where that sign-in happens and never sees the token: servers with scope `claudeai` open claude.ai's connector settings; other Claude servers open a terminal running `claude` for its `/mcp` flow; Codex servers run `codex mcp login <name>`. A *Reconnect* action then calls the provider's reconnect (`reconnectMcpServer` for Claude) without restarting the chat.

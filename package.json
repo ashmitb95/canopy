@@ -2,7 +2,7 @@
   "name": "agentdeck",
   "displayName": "AgentDeck",
   "description": "Chat with coding agents on your own subscriptions.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "publisher": "ashmitb95",
   "engines": {

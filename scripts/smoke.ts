@@ -1,47 +1,93 @@
-// Live check outside VS Code: sign-in state, a chat turn, and an approved file edit.
+// Live check outside VS Code: sign-in, MCP status, an approved edit, memory across turns, and resume.
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ClaudeChat, claudeAuthStatus, resolveClaudeCli } from '../src/claude-session'
+import type { SessionFact } from '../src/core/types'
+import { captureEnv } from '../src/env'
+import { claudeProvider } from '../src/providers/claude/provider'
+import { SessionManager } from '../src/sessions/manager'
+import { SessionStore } from '../src/sessions/store'
+import { MemoryMemento } from '../test/memory-memento'
+
+const TIMEOUT_MS = 180_000
 
 async function main(): Promise<void> {
-  const cli = await resolveClaudeCli()
-  if (!cli) throw new Error('claude CLI not found on the login-shell PATH')
-  const auth = await claudeAuthStatus(cli)
-  console.log('cli:', cli.path)
-  console.log('auth:', auth.loggedIn, auth.authMethod)
+  const env = await captureEnv()
+  const state = await claudeProvider.probe(env)
+  console.log('claude:', state)
+  if (state.status !== 'signed-in') throw new Error('claude is not signed in')
 
-  const dir = mkdtempSync(join(tmpdir(), 'agentdeck-smoke-'))
-  const file = join(dir, 'notes.md')
+  const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-smoke-'))
+  const file = join(cwd, 'notes.md')
   writeFileSync(file, '# Notes\n\nhello world\n')
+  const memento = new MemoryMemento()
+  const manager = () =>
+    new SessionManager({
+      providers: new Map([[claudeProvider.id, claudeProvider]]),
+      store: new SessionStore(memento),
+      journalDir: join(cwd, '.journal'),
+      cwd,
+      env: async () => env
+    })
 
-  let done = (): void => {}
-  let reply = ''
-  const chat = new ClaudeChat(cli, dir, (event) => {
-    if (event.type === 'text') {
-      reply += event.delta
-      return process.stdout.write(event.delta)
-    }
-    console.log('\n[event]', JSON.stringify(event).slice(0, 1500))
-    if (event.type === 'permission') chat.respondToPermission(event.id, true)
-    if (event.type === 'turn_end' || event.type === 'error') done()
-  })
-  const turn = (text: string): Promise<void> => {
-    reply = ''
-    const ended = new Promise<void>((resolve) => (done = resolve))
-    chat.send(text)
-    return ended
-  }
-  await turn('In notes.md, replace "hello world" with "goodbye world". Use the Edit tool. Reply with one short sentence.')
-  // A second turn on the same process must remember the first.
-  await turn('What word did you just replace? Answer with that single word only.')
-  chat.close()
-  if (!/hello/i.test(reply)) throw new Error(`second turn lost context: ${JSON.stringify(reply)}`)
+  const first = manager()
+  const { id } = await first.create('claude')
+  const mcp = waitForFact(first, id, 'mcp')
+  await first.warm(id)
+  const servers = await mcp
+  console.log('mcp before first prompt:', servers.kind === 'mcp' ? servers.servers.map((s) => `${s.name}=${s.status}`) : [])
 
-  const after = readFileSync(file, 'utf8')
-  console.log('\nfile after:', JSON.stringify(after))
-  if (!after.includes('goodbye world')) throw new Error('edit was not applied')
+  await turn(first, id, 'In notes.md, replace "hello world" with "goodbye world". Use the Edit tool. Reply with one short sentence.')
+  if (!readFileSync(file, 'utf8').includes('goodbye world')) throw new Error('edit was not applied')
+  const recall = await turn(first, id, 'What word did you just replace? Answer with that single word only.')
+  if (!/hello/i.test(recall)) throw new Error(`second turn lost context: ${JSON.stringify(recall)}`)
+  await first.dispose()
+
+  // A new manager over the same storage stands in for a VS Code reload.
+  const second = manager()
+  const resumed = await turn(second, id, 'Earlier in this conversation you replaced one word in notes.md. Which word did you remove? Answer with that single word only.')
+  if (!/hello/i.test(resumed)) throw new Error(`resume lost context: ${JSON.stringify(resumed)}`)
+  await second.dispose()
   console.log('SMOKE OK')
+}
+
+/** Sends a prompt, approves every tool, and returns the turn's assistant text. */
+function turn(manager: SessionManager, id: string, text: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const replies = new Map<string, string>()
+    const timer = setTimeout(() => reject(new Error(`turn timed out: ${text}`)), TIMEOUT_MS)
+    const subscription = manager.subscribe(id, (event) => {
+      if (event.type !== 'item') return
+      const item = event.item
+      if (item.kind === 'message' && item.role === 'assistant') replies.set(item.id, item.text)
+      if (item.kind === 'approval' && !item.resolved) {
+        console.log('approving:', item.title, item.detail ?? '')
+        manager.answer(id, item.id, 'allow')
+      }
+      if (item.kind === 'tool' && item.status !== 'running') console.log(`tool ${item.status}:`, item.title)
+      if (item.kind === 'notice') console.log(`notice (${item.level}):`, item.text)
+      if (item.kind === 'turn' && item.state === 'ended') {
+        clearTimeout(timer)
+        subscription.dispose()
+        const reply = [...replies.values()].join('\n')
+        console.log('reply:', reply)
+        resolve(reply)
+      }
+    })
+    void manager.prompt(id, [{ type: 'text', text }])
+  })
+}
+
+function waitForFact(manager: SessionManager, id: string, kind: SessionFact['kind']): Promise<SessionFact> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`no ${kind} fact`)), TIMEOUT_MS)
+    const subscription = manager.subscribe(id, (event) => {
+      if (event.type !== 'fact' || event.fact.kind !== kind) return
+      clearTimeout(timer)
+      subscription.dispose()
+      resolve(event.fact)
+    })
+  })
 }
 
 main().catch((error) => {

@@ -89,7 +89,12 @@ const items: SessionItem[] = [
 ]
 
 const earlier: SessionItem[] = [
-  { kind: 'message', id: 'u0', role: 'user', parts: [{ type: 'text', text: 'Add a retry helper with exponential backoff.' }] },
+  { kind: 'message', id: 'u0', role: 'user', parts: [
+      { type: 'command', name: 'review' },
+      { type: 'text', text: 'Add a retry helper with exponential backoff.' },
+      { type: 'pasted', text: Array.from({ length: 48 }, (_, line) => `log line ${line + 1}`).join('\n') }
+    ]
+  },
   { kind: 'turn', id: 't0', state: 'ended', stopReason: 'success', at: '2026-10-28T09:58:00.000Z' },
   {
     kind: 'message',
@@ -115,6 +120,7 @@ const providers: HostMessage = { type: 'providers', providers: [claude, codex, g
 
 const chat: HostMessage[] = [
   providers,
+  { type: 'assets', attachments: 'about:blank' },
   {
     type: 'quota',
     providerId: 'claude',

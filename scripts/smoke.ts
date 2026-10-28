@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SessionFact } from '../src/core/types'
 import { captureEnv } from '../src/env'
-import { claudeProvider } from '../src/providers/claude/provider'
+import { providers } from '../src/providers/registry'
 import { SessionManager } from '../src/sessions/manager'
 import { SessionStore } from '../src/sessions/store'
 import { MemoryMemento } from '../test/memory-memento'
@@ -12,10 +12,13 @@ import { MemoryMemento } from '../test/memory-memento'
 const TIMEOUT_MS = 180_000
 
 async function main(): Promise<void> {
+  const providerId = process.argv[2] ?? 'claude'
+  const provider = providers.get(providerId)
+  if (!provider) throw new Error(`Unknown provider: ${providerId}`)
   const env = await captureEnv()
-  const state = await claudeProvider.probe(env)
-  console.log('claude:', state)
-  if (state.status !== 'signed-in') throw new Error('claude is not signed in')
+  const state = await provider.probe(env)
+  console.log(`${providerId}:`, state)
+  if (state.status !== 'signed-in') throw new Error(`${providerId} is not signed in`)
 
   const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-smoke-'))
   const file = join(cwd, 'notes.md')
@@ -23,7 +26,7 @@ async function main(): Promise<void> {
   const memento = new MemoryMemento()
   const manager = () =>
     new SessionManager({
-      providers: new Map([[claudeProvider.id, claudeProvider]]),
+      providers,
       store: new SessionStore(memento),
       journalDir: join(cwd, '.journal'),
       cwd,
@@ -31,13 +34,13 @@ async function main(): Promise<void> {
     })
 
   const first = manager()
-  const { id } = await first.create('claude')
+  const { id } = await first.create(providerId)
   const mcp = waitForFact(first, id, 'mcp')
   await first.warm(id)
   const servers = await mcp
   console.log('mcp before first prompt:', servers.kind === 'mcp' ? servers.servers.map((s) => `${s.name}=${s.status}`) : [])
 
-  await turn(first, id, 'In notes.md, replace "hello world" with "goodbye world". Use the Edit tool. Reply with one short sentence.')
+  await turn(first, id, 'In notes.md, replace "hello world" with "goodbye world". Reply with one short sentence.')
   if (!readFileSync(file, 'utf8').includes('goodbye world')) throw new Error('edit was not applied')
   const settled = first.list().find(({ record }) => record.id === id)?.record.facts.mcp
   console.log('mcp after first turn:', settled?.kind === 'mcp' ? settled.servers.map((s) => `${s.name}=${s.status}`) : [])

@@ -30,6 +30,6 @@ For development, open this folder in VS Code and press F5: an Extension Developm
 
 ## Live check
 
-`node dist/smoke.js` (after `pnpm build`) drives a real Claude session through the session manager against a temporary folder: it checks sign-in, lists MCP servers before the first prompt, approves an edit, confirms a second turn remembers the first, and resumes the session after a simulated reload.
+`node dist/smoke.js [claude|codex]` (after `pnpm build`) drives a real session through the session manager against a temporary folder: it checks sign-in, lists MCP servers before the first prompt, approves an edit, confirms a second turn remembers the first, and resumes the session after a simulated reload.
 
-`node dist/record-claude.js` re-records the translator fixture in `test/fixtures/claude/` from a real edit turn. Run `pnpm test` afterwards.
+`node dist/record-claude.js` re-records the translator fixture in `test/fixtures/claude/` from a real edit turn. Run `pnpm test` afterwards. `node dist/record-codex.js` does the same for Codex in `test/fixtures/codex/`.

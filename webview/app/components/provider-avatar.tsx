@@ -2,7 +2,8 @@ import { cn } from '@/lib/utils'
 
 const PROVIDERS: Record<string, { monogram: string; hue: string }> = {
   claude: { monogram: 'C', hue: '#d97757' },
-  codex: { monogram: 'Cx', hue: '#10a37f' }
+  codex: { monogram: 'Cx', hue: '#10a37f' },
+  grok: { monogram: 'G', hue: '#a1a1aa' }
 }
 
 export function ProviderAvatar({ providerId, className }: { providerId: string; className?: string }) {

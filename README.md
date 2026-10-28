@@ -1,6 +1,6 @@
 # AgentDeck
 
-Chat with coding agents — Claude Code and Codex — from one place in VS Code, on your own subscriptions.
+Chat with coding agents — Claude Code, Codex, and Grok — from one place in VS Code, on your own subscriptions.
 
 AgentDeck runs each provider through its official CLI: your installed `claude`, and `codex` (on your PATH or bundled with the official Codex extension). It never reads, stores, or forwards your credentials and never calls provider APIs itself. Sign-in, MCP servers, and their sign-ins stay with each CLI, so anything you set up for the official extensions works here too.
 
@@ -19,6 +19,7 @@ AgentDeck runs each provider through its official CLI: your installed `claude`, 
 - VS Code 1.95 or later.
 - For Claude: Claude Code installed and signed in with your claude.ai account (`claude auth status`).
 - For Codex: the Codex CLI or the official Codex extension, signed in (`codex login status`).
+- For Grok: the Grok CLI from https://x.ai/cli, signed in with `grok login`.
 
 ## Install
 
@@ -38,8 +39,8 @@ Open this folder in VS Code and press F5: an Extension Development Host opens on
 
 - `pnpm test` runs the unit tests; `pnpm typecheck` checks the extension and the webview.
 - `pnpm build:preview && pnpm screenshot dark` renders the chat UI with sample data to `dist/preview/` (needs Playwright's headless Chromium); `light` and `hc` render the other themes.
-- `node dist/smoke.js [claude|codex]` (after `pnpm build`) drives a real session through the session manager: sign-in check, MCP status, an approved edit, memory across turns, and resume after a simulated reload.
-- `node dist/record-claude.js` and `node dist/record-codex.js` re-record the translator fixtures in `test/fixtures/`.
+- `node dist/smoke.js [claude|codex|grok]` (after `pnpm build`) drives a real session through the session manager: sign-in check, MCP status, an approved edit, memory across turns, and resume after a simulated reload.
+- `node dist/record-claude.js`, `node dist/record-codex.js`, and `node dist/record-grok.js` re-record the translator fixtures in `test/fixtures/`.
 
 ## Docs
 

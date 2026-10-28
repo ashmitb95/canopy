@@ -35,10 +35,11 @@ async function main(): Promise<void> {
 
   const first = manager()
   const { id } = await first.create(providerId)
-  const mcp = waitForFact(first, id, 'mcp')
+  // Only providers that report MCP status send an mcp fact (ACP agents do not).
+  const mcp = provider.capabilities.has('mcpStatus') ? waitForFact(first, id, 'mcp') : undefined
   await first.warm(id)
   const servers = await mcp
-  console.log('mcp before first prompt:', servers.kind === 'mcp' ? servers.servers.map((s) => `${s.name}=${s.status}`) : [])
+  console.log('mcp before first prompt:', servers?.kind === 'mcp' ? servers.servers.map((s) => `${s.name}=${s.status}`) : [])
 
   await turn(first, id, 'In notes.md, replace "hello world" with "goodbye world". Reply with one short sentence.')
   if (!readFileSync(file, 'utf8').includes('goodbye world')) throw new Error('edit was not applied')

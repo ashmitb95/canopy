@@ -30,6 +30,8 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 | 24 | The webview loads as an ES module with code splitting | Shiki's grammars load on demand, keeping the entry script small. |
 | 25 | UI is checked from headless screenshots of a preview build with scripted sessions | Agents and reviewers can verify UI changes without a VS Code window; the manual check covers what the preview cannot (focus, real themes, reloads). |
 | 26 | Claude runs the newest official CLI: `claude` on PATH or the binary bundled with the Claude Code extension, whichever reports the higher version | The extension updates its CLI on its own; a standalone install can lag hundreds of releases behind and miss new models (seen: PATH 2.1.111 without Opus 5.5, extension 2.1.311 with it). |
+| 27 | ACP agents share one provider; each agent is an `AcpAgentSpec` (command, install folders, auth method, sign-in check). Grok is the first | Adding OpenCode, Gemini, or Cursor's `agent acp` becomes a spec entry plus a fixture. |
+| 28 | ACP permission modes are enforced by the adapter (it answers permission requests in *Accept edits* and *Full access*) | Modes switch mid-session without restarting the agent with flags such as Grok's `--always-approve`. |
 
 ## Findings from the proof of concept
 

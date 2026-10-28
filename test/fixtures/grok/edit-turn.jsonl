@@ -1,0 +1,100 @@
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"The"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" user"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" wants"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" me"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" to"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" replace"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" \""}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"hello"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" world"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"\""}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" with"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" \""}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"goodbye"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" world"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"\""}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" in"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" notes"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":".md"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":","}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" then"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" reply"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" with"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" one"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" short"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" sentence"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"."}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" This"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" is"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" a"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" simple"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" task"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"."}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" Let"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" me"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" find"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" and"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" edit"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" the"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" file"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":".\n"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"I'll"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" update"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" `"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"notes"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":".md"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"`"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" now"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"."}}}
+{"update":{"sessionUpdate":"tool_call","toolCallId":"call-ecd82e86-da8f-4131-816c-1bd1e747522f-0","title":"grep","rawInput":{"pattern":"hello world","glob":"notes.md"},"_meta":{"x.ai/tool":{"version":1,"name":"grep","kind":"search","namespace":"grok_build","label":"Search","read_only":true}}}}
+{"update":{"sessionUpdate":"tool_call_update","toolCallId":"call-ecd82e86-da8f-4131-816c-1bd1e747522f-0","kind":"search","title":"hello world","locations":[],"rawInput":{"variant":"Grep","pattern":"hello world","path":null,"glob":"notes.md","-i":false,"type":null,"multiline":false},"_meta":{"x.ai/tool":{"version":1,"name":"grep","kind":"search","namespace":"grok_build","label":"Search","read_only":true,"input":{"pattern":"hello world"}}}}}
+{"update":{"sessionUpdate":"tool_call_update","toolCallId":"call-ecd82e86-da8f-4131-816c-1bd1e747522f-0","status":"completed","content":[{"type":"content","content":{"type":"text","text":"found 1 matches"}}]}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"I"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" found"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" the"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" file"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"."}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" Let"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" me"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" replace"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" \""}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"hello"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" world"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"\""}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" with"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" \""}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"goodbye"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" world"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"\"."}}}
+{"update":{"sessionUpdate":"tool_call","toolCallId":"call-980714c8-9a55-473a-9294-feacee24c431-1","title":"search_replace","rawInput":{"file_path":"/work/notes.md","old_string":"hello world","new_string":"goodbye world"},"_meta":{"x.ai/tool":{"version":1,"name":"search_replace","kind":"edit","namespace":"grok_build","label":"Edit","read_only":false}}}}
+{"update":{"sessionUpdate":"tool_call_update","toolCallId":"call-980714c8-9a55-473a-9294-feacee24c431-1","kind":"edit","title":"Edit `/work/notes.md`","content":[{"type":"diff","path":"/work/notes.md","oldText":"hello world","newText":"goodbye world","_meta":{"old_line":3,"new_line":3}}],"locations":[{"path":"/work/notes.md"}],"rawInput":{"variant":"SearchReplace","file_path":"/work/notes.md","old_string":"hello world","new_string":"goodbye world","replace_all":false},"_meta":{"x.ai/tool":{"version":1,"name":"search_replace","kind":"edit","namespace":"grok_build","label":"Edit","read_only":false,"input":{"path":"/work/notes.md"}}}}}
+{"update":{"sessionUpdate":"tool_call_update","toolCallId":"call-980714c8-9a55-473a-9294-feacee24c431-1","status":"completed","content":[{"type":"diff","path":"/work/notes.md","oldText":"hello world","newText":"goodbye world","_meta":{"details":[{"old_string":"hello world","old_line":3,"new_string":"goodbye world","new_line":3,"context_before":"# Notes\n\n","context_after":"","line_prefix":""}]}}]}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"The"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" user"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" asked"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" me"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" to"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" reply"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" with"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" one"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" short"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" sentence"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"."}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":" Done"}}}
+{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"."}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Re"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"placed"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" \""}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hello"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" world"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"\""}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" with"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" \""}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"goodbye"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" world"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"\""}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" in"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" notes"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":".md"}}}
+{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"."}}}
+{"stopReason":"end_turn"}

@@ -1012,6 +1012,8 @@ Expected: PASS. If *shows the edit as a diff* fails, report how this Grok versio
 
 - [ ] **Step 5: Live smoke**
 
+First, make the smoke's MCP wait conditional, since ACP agents send no `mcp` fact: in `scripts/smoke.ts`, change `const mcp = waitForFact(first, id, 'mcp')` to `const mcp = provider.capabilities.has('mcpStatus') ? waitForFact(first, id, 'mcp') : undefined` (with the comment `// Only providers that report MCP status send an mcp fact (ACP agents do not).`) and `servers.kind` to `servers?.kind` on the following log line.
+
 Run: `pnpm typecheck && pnpm build && node dist/smoke.js grok`
 Expected: `grok: { status: 'signed-in', version: '1.0.70' … }`, an approval for the edit (`approving: Allow Grok to edit this file?`), tool lines, replies, and `SMOKE OK` (including the resume turn after the simulated reload). The `mcp` lines print `[]` for Grok, which does not report MCP status through ACP; that is expected. If the resume turn loses context, report it: `session/load` replay muting is the likely place to look.
 

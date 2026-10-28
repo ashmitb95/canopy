@@ -2,7 +2,7 @@
 
 A VS Code extension for chatting with coding agents — Claude Code, Codex, and ACP agents such as Grok — from one place, on your own subscriptions. Each provider runs through its own official CLI; AgentDeck never handles your credentials.
 
-**Status:** proof of concept. One command opens a Claude chat on your claude.ai login, with streamed replies, inline tool approvals, and file edits. The full design is in the spec.
+**Status:** MVP in progress. Claude chats run in editor tabs and in the AgentDeck sidebar, persist across reloads, and resume where they left off. Codex, the sessions list, and the model, mode, and MCP controls are next (see the MVP plans).
 
 ## Docs
 
@@ -22,7 +22,9 @@ pnpm run package
 code --install-extension agentdeck-0.0.1.vsix --force
 ```
 
-Reload VS Code, open a file, and run **AgentDeck: New Claude Chat** from the command palette.
+Reload VS Code, then open the AgentDeck view in the activity bar, or run **AgentDeck: New Claude Chat in Editor** from the command palette.
+
+`pnpm build:preview && pnpm screenshot dark` renders the chat UI with sample data to `dist/preview/screenshot-dark.png` (needs Playwright's headless Chromium).
 
 For development, open this folder in VS Code and press F5: an Extension Development Host opens on `playground/` with other extensions disabled.
 

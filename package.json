@@ -12,15 +12,31 @@
   "extensionKind": [
     "workspace"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onWebviewPanel:agentdeck.chatPanel"
+  ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "agentdeck", "title": "AgentDeck", "icon": "media/agentdeck.svg" }
+      ]
+    },
+    "views": {
+      "agentdeck": [
+        { "type": "webview", "id": "agentdeck.chat", "name": "Chat" }
+      ]
+    },
     "commands": [
-      {
-        "command": "agentdeck.newClaudeChat",
-        "title": "New Claude Chat",
-        "category": "AgentDeck"
-      }
-    ]
+      { "command": "agentdeck.newChat", "title": "New Claude Chat in Editor", "category": "AgentDeck", "icon": "$(add)" },
+      { "command": "agentdeck.sidebar.newChat", "title": "New Chat", "category": "AgentDeck", "icon": "$(add)" },
+      { "command": "agentdeck.openInEditor", "title": "Open Chat in Editor", "category": "AgentDeck", "icon": "$(link-external)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "agentdeck.sidebar.newChat", "when": "view == agentdeck.chat", "group": "navigation@1" },
+        { "command": "agentdeck.openInEditor", "when": "view == agentdeck.chat", "group": "navigation@2" }
+      ]
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs",

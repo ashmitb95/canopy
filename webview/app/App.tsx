@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useReducer, useState } from 'react'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { AttachmentsContext } from './assets'
 import { ChatHeader } from './components/chat-header'
 import { Composer } from './components/composer'
 import { EmptyState } from './components/empty-state'
@@ -40,6 +41,7 @@ export function App() {
   if (state.empty) return <EmptyState providers={state.providers} signIns={state.signIns} />
 
   return (
+    <AttachmentsContext.Provider value={state.attachmentsUri}>
     <TooltipProvider>
       <div className="flex h-screen flex-col">
         <ChatHeader state={state} />
@@ -65,5 +67,6 @@ export function App() {
         </div>
       </div>
     </TooltipProvider>
+    </AttachmentsContext.Provider>
   )
 }

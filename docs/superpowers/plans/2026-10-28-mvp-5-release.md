@@ -35,6 +35,11 @@ body.vscode-high-contrast {
   --border: var(--vscode-contrastBorder, var(--vscode-widget-border));
   --ring: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
 }
+
+/* Filled buttons have no border of their own; outline them so they stay distinguishable. */
+body.vscode-high-contrast [data-slot="button"]:is([data-variant="default"], [data-variant="secondary"], [data-variant="outline"]) {
+  outline: 1px solid var(--vscode-contrastBorder);
+}
 ```
 
 - [ ] **Step 2: Add a high-contrast preview theme**

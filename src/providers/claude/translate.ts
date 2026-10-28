@@ -5,6 +5,11 @@ import { toolKind, toolPaths, toolTitle } from './tools'
 
 type Message<T extends SDKMessage['type']> = Extract<SDKMessage, { type: T }>
 
+/** Claude's error when a 1M-context model is used without extra-usage credits. */
+const LONG_CONTEXT = /usage credits are required for long context/i
+const LONG_CONTEXT_HINT =
+  'This model needs extra usage credits. Choose a model without “1M context” in the model picker, or turn on extra usage in your claude.ai settings.'
+
 /** Tool output kept in the transcript; a Read result can be a whole file. */
 const MAX_OUTPUT = 20_000
 
@@ -131,7 +136,8 @@ export class ClaudeTranslator {
     const stopReason = this.interruptRequested ? 'interrupted' : message.subtype
     this.emit({ kind: 'turn', id: turnId, state: 'ended', stopReason, durationMs: message.duration_ms })
     if (message.is_error && !this.interruptRequested) {
-      const text = message.subtype === 'success' ? message.result : `The turn ended with ${message.subtype}.`
+      const result = message.subtype === 'success' ? message.result : `The turn ended with ${message.subtype}.`
+      const text = LONG_CONTEXT.test(result) ? `${result}\n${LONG_CONTEXT_HINT}` : result
       this.emit({ kind: 'notice', id: `${turnId}:error`, level: 'error', text })
     }
     this.turnId = ''

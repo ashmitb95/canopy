@@ -136,6 +136,14 @@ describe('ClaudeTranslator', () => {
     expect(final[1]).toMatchObject({ kind: 'notice', level: 'error', text: 'API Error: overloaded' })
   })
 
+  it('explains how to recover from the long-context usage error', () => {
+    const { final } = run(
+      [sdk({ type: 'result', subtype: 'success', is_error: true, duration_ms: 5, result: 'API Error: Usage credits are required for long context requests.' })],
+      (translator) => translator.startTurn()
+    )
+    expect(final[1]).toMatchObject({ kind: 'notice', text: expect.stringContaining('without “1M context”') })
+  })
+
   it('does not report an interrupted turn as an error', () => {
     const { final } = run(
       [sdk({ type: 'result', subtype: 'error_during_execution', is_error: true, duration_ms: 5 })],

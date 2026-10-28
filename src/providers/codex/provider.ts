@@ -5,6 +5,7 @@ import type {
   ApprovalItem,
   McpServer,
   McpSignIn,
+  ModelOption,
   OpenOptions,
   PermissionMode,
   PromptPart,
@@ -102,7 +103,7 @@ class CodexSession implements ProviderSession {
   private readonly translator = new CodexTranslator((item) => this.items.fire(item))
   private readonly approvals = new Map<string, { item: ApprovalItem; resolve: (decision: string) => void }>()
   private readonly startup = new Map<string, McpServer['status']>()
-  private models: { id: string; label: string }[] = []
+  private models: ModelOption[] = []
   private model: string | undefined
   private mode: PermissionMode
   private turnId: string | undefined
@@ -227,7 +228,7 @@ class CodexSession implements ProviderSession {
     this.ready = true
     try {
       const { data } = await this.rpc.request<{ data: ModelInfo[] }>('model/list', {})
-      this.models = data.filter((model) => !model.hidden).map((model) => ({ id: model.id, label: model.displayName }))
+      this.models = data.filter((model) => !model.hidden).map((model) => ({ id: model.id, label: model.displayName, description: model.description }))
     } catch {
       // The model picker then offers only the current model.
     }

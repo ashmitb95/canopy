@@ -13,6 +13,7 @@ import { Emitter } from '../../core/emitter'
 import type {
   ApprovalItem,
   McpSignIn,
+  ModelOption,
   OpenOptions,
   PermissionMode,
   PromptPart,
@@ -124,7 +125,7 @@ class ClaudeSession implements ProviderSession {
   private wake: (() => void) | null = null
   private closed = false
   private readonly approvals = new Map<string, PendingApproval>()
-  private models: { id: string; label: string }[] = []
+  private models: ModelOption[] = []
   private model: string
 
   constructor(
@@ -255,7 +256,7 @@ class ClaudeSession implements ProviderSession {
   private async loadFacts(): Promise<void> {
     try {
       const models = await this.query.supportedModels()
-      this.models = models.map((model) => ({ id: model.value, label: model.displayName }))
+      this.models = models.map((model) => ({ id: model.value, label: model.displayName, description: model.description }))
     } catch {
       // The model picker then offers only the current model.
     }

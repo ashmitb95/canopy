@@ -21,11 +21,14 @@ export function ModelPicker({ fact }: { fact?: Extract<SessionFact, { kind: 'mod
           <Codicon name="chevron-down" size={12} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
+      <DropdownMenuContent align="start" className="max-w-80">
         <DropdownMenuRadioGroup value={fact.current} onValueChange={(model) => send({ type: 'setModel', model })}>
           {fact.available.map((model) => (
-            <DropdownMenuRadioItem key={model.id} value={model.id}>
-              {model.label}
+            <DropdownMenuRadioItem key={model.id} value={model.id} className="items-start">
+              <div className="min-w-0">
+                <div>{model.label}</div>
+                {model.description && <div className="text-xs text-muted-foreground">{model.description}</div>}
+              </div>
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

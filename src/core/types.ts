@@ -67,9 +67,12 @@ export type McpServer = {
   tools: string[]
 }
 
+/** A model the picker offers; the description carries notes such as extra-usage billing. */
+export type ModelOption = { id: string; label: string; description?: string }
+
 /** Session state shown outside the transcript. The latest fact of each kind wins. */
 export type SessionFact =
-  | { kind: 'model'; current: string; available: { id: string; label: string }[] }
+  | { kind: 'model'; current: string; available: ModelOption[] }
   | { kind: 'mode'; current: PermissionMode; available: readonly PermissionMode[] }
   | { kind: 'context'; usedTokens: number; maxTokens: number }
   | { kind: 'mcp'; servers: McpServer[] }

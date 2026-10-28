@@ -4,6 +4,7 @@ import type { Disposable } from '../core/emitter'
 import type { PromptPart, ProviderDefinition, ProviderState } from '../core/types'
 import type { Env } from '../env'
 import type { SessionManager } from '../sessions/manager'
+import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
 import type { HostMessage, WebviewMessage } from './protocol'
 
@@ -37,10 +38,14 @@ export class ChatSurfaces
     private readonly manager: SessionManager,
     private readonly providers: ReadonlyMap<string, ProviderDefinition>,
     private readonly env: () => Promise<Env>,
-    private readonly editor: EditorContextTracker
+    private readonly editor: EditorContextTracker,
+    private readonly diffs: DiffDocuments
   ) {
     this.subscriptions.push(
-      manager.onDidChange(() => this.refreshTitles()),
+      manager.onDidChange(() => {
+        this.refreshTitles()
+        this.postSessions()
+      }),
       editor.onDidChange((editorContext) => this.broadcast({ type: 'editorContext', context: editorContext }))
     )
   }
@@ -126,6 +131,7 @@ export class ChatSurfaces
     switch (message.type) {
       case 'ready':
         this.post(surface, { type: 'editorContext', context: this.editor.current() })
+        this.postSessions(surface)
         await this.postProvider(surface)
         if (sessionId) this.show(surface, sessionId)
         else this.post(surface, { type: 'empty' })
@@ -150,6 +156,27 @@ export class ChatSurfaces
         return this.newChat(surface.kind)
       case 'signIn':
         return this.signIn(surface)
+      case 'setModel':
+        if (sessionId) await this.manager.setModel(sessionId, message.model)
+        return
+      case 'setMode':
+        if (sessionId) await this.manager.setMode(sessionId, message.mode)
+        return
+      case 'refreshMcp':
+        if (sessionId) await this.manager.refreshMcp(sessionId)
+        return
+      case 'reconnectMcp':
+        if (sessionId) await this.manager.reconnectMcp(sessionId, message.server)
+        return
+      case 'mcpSignIn':
+        return this.mcpSignIn(surface, message.server, message.scope)
+      case 'openDiff':
+        if (sessionId) await this.diffs.open(sessionId, message.itemId)
+        return
+      case 'switchSession':
+        if (surface.kind === 'view') await this.showInSidebar(message.sessionId)
+        else this.openPanel(message.sessionId)
+        return
       case 'openFile': {
         const document = await vscode.workspace.openTextDocument(message.path)
         const line = Math.max((message.line ?? 1) - 1, 0)
@@ -215,6 +242,37 @@ export class ChatSurfaces
       this.states.delete(provider.id)
       void this.postProvider(surface)
     })
+  }
+
+  /** Sends the user to where the MCP server's sign-in happens; the token stays with the provider. */
+  private async mcpSignIn(surface: Surface, server: string, scope: string | undefined): Promise<void> {
+    const provider = this.providers.get(this.providerOf(surface.sessionId))
+    const target = provider?.mcpSignIn?.(server, scope)
+    if (!target) return
+    if (target.kind === 'url') {
+      await vscode.env.openExternal(vscode.Uri.parse(target.url))
+      return
+    }
+    const terminal = vscode.window.createTerminal({ name: `${server} sign-in` })
+    terminal.show()
+    terminal.sendText(target.command)
+    void vscode.window.showInformationMessage(target.hint)
+  }
+
+  /** The sidebar's session switcher lists recent sessions. */
+  private postSessions(surface = this.sidebar): void {
+    if (!surface || surface.kind !== 'view') return
+    const sessions = this.manager
+      .list()
+      .slice(0, 20)
+      .map(({ record, status }) => ({
+        id: record.id,
+        title: record.title,
+        providerId: record.providerId,
+        status,
+        updatedAt: record.updatedAt
+      }))
+    this.post(surface, { type: 'sessions', sessions })
   }
 
   private refreshTitles(): void {

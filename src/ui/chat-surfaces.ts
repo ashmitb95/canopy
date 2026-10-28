@@ -235,7 +235,7 @@ export class ChatSurfaces
     if (!provider) return
     const terminal = vscode.window.createTerminal({ name: `${provider.label} sign-in` })
     terminal.show()
-    terminal.sendText(provider.signInCommand)
+    terminal.sendText(provider.signInCommand(await this.env()))
     const closed = vscode.window.onDidCloseTerminal((closedTerminal) => {
       if (closedTerminal !== terminal) return
       closed.dispose()
@@ -247,7 +247,8 @@ export class ChatSurfaces
   /** Sends the user to where the MCP server's sign-in happens; the token stays with the provider. */
   private async mcpSignIn(surface: Surface, server: string, scope: string | undefined): Promise<void> {
     const provider = this.providers.get(this.providerOf(surface.sessionId))
-    const target = provider?.mcpSignIn?.(server, scope)
+    const fromSession = surface.sessionId ? await this.manager.mcpSignIn(surface.sessionId, server) : undefined
+    const target = fromSession ?? provider?.mcpSignIn?.(server, scope)
     if (!target) return
     if (target.kind === 'url') {
       await vscode.env.openExternal(vscode.Uri.parse(target.url))

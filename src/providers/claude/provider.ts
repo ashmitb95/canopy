@@ -58,7 +58,7 @@ export const claudeProvider: ProviderDefinition = {
   id: 'claude',
   label: 'Claude',
   cli: { command: 'claude', installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup' },
-  signInCommand: 'claude auth login --claudeai',
+  signInCommand: () => 'claude auth login --claudeai',
   capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context']),
   modes: MODE_LIST,
 

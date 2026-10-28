@@ -72,6 +72,13 @@ describe('SessionManager', () => {
     expect(sessions).toHaveLength(1)
   })
 
+  it('starts MCP sign-in through the running session', async () => {
+    const { manager } = setup()
+    const { id } = await manager.create('fake')
+    await manager.warm(id)
+    await expect(manager.mcpSignIn(id, 'linear')).resolves.toEqual({ kind: 'url', url: 'https://example.invalid/oauth/linear' })
+  })
+
   it('queues prompts while running and sends them at turn end', async () => {
     const { manager, sessions } = setup()
     const { id } = await manager.create('fake')

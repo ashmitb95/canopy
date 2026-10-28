@@ -3,6 +3,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Disposable, Emitter } from '../core/emitter'
 import type {
+  McpSignIn,
   PermissionMode,
   PromptPart,
   ProviderDefinition,
@@ -160,6 +161,10 @@ export class SessionManager {
 
   async reconnectMcp(id: string, server: string): Promise<void> {
     await this.live.get(id)?.session?.reconnectMcp?.(server)
+  }
+
+  async mcpSignIn(id: string, server: string): Promise<McpSignIn | undefined> {
+    return this.live.get(id)?.session?.mcpSignIn?.(server)
   }
 
   async rename(id: string, title: string): Promise<void> {

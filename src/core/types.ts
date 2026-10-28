@@ -91,8 +91,8 @@ export interface ProviderDefinition {
   readonly id: string
   readonly label: string
   readonly cli: { command: string; installUrl: string }
-  /** Shell command the UI runs in a terminal to sign in. */
-  readonly signInCommand: string
+  /** Shell command the UI runs in a terminal to sign in; depends on where the CLI was found. */
+  signInCommand(env: Env): string
   readonly capabilities: ReadonlySet<Capability>
   readonly modes: readonly PermissionMode[]
   probe(env: Env): Promise<ProviderState>
@@ -115,6 +115,8 @@ export interface ProviderSession {
   answer(itemId: string, optionId: string): void
   refreshMcp?(): Promise<void>
   reconnectMcp?(server: string): Promise<void>
+  /** Starts an MCP server's sign-in from the running CLI, when the provider supports that. */
+  mcpSignIn?(server: string): Promise<McpSignIn>
   dispose(): Promise<void>
   readonly onItem: Event<SessionItem>
   readonly onFact: Event<SessionFact>

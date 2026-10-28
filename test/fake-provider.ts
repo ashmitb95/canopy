@@ -1,5 +1,6 @@
 import { Emitter } from '../src/core/emitter'
 import type {
+  McpSignIn,
   OpenOptions,
   PermissionMode,
   PromptPart,
@@ -57,6 +58,10 @@ export class FakeSession implements ProviderSession {
     this.exits.fire({ error })
   }
 
+  async mcpSignIn(server: string): Promise<McpSignIn> {
+    return { kind: 'url', url: `https://example.invalid/oauth/${server}` }
+  }
+
   endTurn(): void {
     this.items.fire({ kind: 'turn', id: `turn:${this.nativeId}:${this.prompts.length}`, state: 'ended' })
   }
@@ -68,7 +73,7 @@ export function fakeProvider(): { provider: ProviderDefinition; sessions: FakeSe
     id: 'fake',
     label: 'Fake',
     cli: { command: 'fake', installUrl: 'https://example.invalid' },
-    signInCommand: 'fake login',
+    signInCommand: () => 'fake login',
     capabilities: new Set(['resume', 'interrupt', 'modes', 'setMode']),
     modes: ['ask', 'accept-edits'],
     probe: async () => ({ status: 'signed-in' }),

@@ -13,7 +13,7 @@
 </script>
 </head>
 <body>
-<script>document.body.classList.add(window.previewTheme === 'light' ? 'vscode-light' : 'vscode-dark')</script>
+<script>document.body.classList.add(window.previewTheme === 'light' ? 'vscode-light' : 'vscode-dark'); document.body.dataset.surface = new URLSearchParams(location.search).get('surface') ?? 'panel'</script>
 <div id="root"></div>
 <script src="main.js"></script>
 <script src="scenario.js"></script>

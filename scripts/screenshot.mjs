@@ -4,9 +4,9 @@ import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-const [theme = 'dark', size = '900x1200'] = process.argv.slice(2)
+const [theme = 'dark', size = '900x1200', surface = 'panel'] = process.argv.slice(2)
 const [width, height] = size.split('x')
-const out = resolve(`dist/preview/screenshot-${theme}.png`)
+const out = resolve(`dist/preview/screenshot-${theme}-${surface}.png`)
 const browser = process.env.AGENTDECK_CHROME ?? findHeadlessShell()
 if (!browser) {
   console.error('No headless Chromium found. Run `npx playwright install chromium-headless-shell` or set AGENTDECK_CHROME.')
@@ -21,7 +21,7 @@ execFileSync(
     `--screenshot=${out}`,
     `--window-size=${width},${height}`,
     '--virtual-time-budget=5000',
-    `file://${resolve('dist/preview/index.html')}?theme=${theme}`
+    `file://${resolve('dist/preview/index.html')}?theme=${theme}&surface=${surface}`
   ],
   { stdio: 'ignore' }
 )

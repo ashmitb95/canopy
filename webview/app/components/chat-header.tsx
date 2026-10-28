@@ -1,5 +1,6 @@
 import type { ChatState } from '../state'
 import { ProviderAvatar } from './provider-avatar'
+import { SessionSwitcher } from './session-switcher'
 import { StatusBadge } from './status-badge'
 
 export function ChatHeader({ state }: { state: ChatState }) {
@@ -12,6 +13,7 @@ export function ChatHeader({ state }: { state: ChatState }) {
         <div className="truncate text-xs text-muted-foreground">{state.provider?.label ?? state.record.providerId}</div>
       </div>
       <StatusBadge status={state.status} />
+      {document.body.dataset.surface === 'view' && <SessionSwitcher state={state} />}
     </header>
   )
 }

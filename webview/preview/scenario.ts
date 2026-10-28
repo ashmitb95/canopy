@@ -90,6 +90,13 @@ const items: SessionItem[] = [
 
 const messages: HostMessage[] = [
   {
+    type: 'sessions',
+    sessions: [
+      { id: 's1', title: 'Fix flaky retry test', providerId: 'claude', status: 'needs-input', updatedAt: '2026-10-28T10:04:00.000Z' },
+      { id: 's2', title: 'Refactor auth middleware', providerId: 'claude', status: 'idle', updatedAt: '2026-10-28T09:00:00.000Z' }
+    ]
+  },
+  {
     type: 'provider',
     provider: {
       id: 'claude',

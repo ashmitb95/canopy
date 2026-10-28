@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import type {
   CanUseTool,
@@ -27,7 +28,7 @@ import type {
 } from '../../core/types'
 import type { Env } from '../../env'
 import { refreshUntilSettled } from '../mcp-settle'
-import { encodePrompt } from '../encode'
+import { encodePrompt, imageParts } from '../encode'
 import { findClaude } from './locate'
 import { claudeSignIn } from './sign-in'
 import { claudeQuota, type RateLimitInfo } from './quota'
@@ -170,11 +171,23 @@ class ClaudeSession implements ProviderSession {
 
   async prompt(parts: PromptPart[]): Promise<void> {
     this.translator.startTurn()
-    this.inbox.push({
-      type: 'user',
-      message: { role: 'user', content: encodePrompt(parts, this.options.cwd) },
-      parent_tool_use_id: null
-    })
+    const text = encodePrompt(parts, this.options.cwd)
+    const images = imageParts(parts)
+    const content =
+      images.length === 0
+        ? text
+        : [
+            { type: 'text' as const, text },
+            ...images.map((image) => ({
+              type: 'image' as const,
+              source: {
+                type: 'base64' as const,
+                media_type: image.mimeType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+                data: readFileSync(image.path).toString('base64')
+              }
+            }))
+          ]
+    this.inbox.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null })
     this.wake?.()
   }
 
@@ -283,6 +296,15 @@ class ClaudeSession implements ProviderSession {
     }
     this.facts.fire({ kind: 'mode', current: this.options.mode, available: MODE_LIST })
     this.facts.fire({ kind: 'model', current: this.model, available: this.models })
+    try {
+      const commands = await this.query.supportedCommands()
+      this.facts.fire({
+        kind: 'commands',
+        items: commands.map((command) => ({ name: command.name, description: command.description || undefined }))
+      })
+    } catch {
+      // The / menu then lists nothing.
+    }
     await this.refreshMcp().catch(() => undefined)
   }
 

@@ -19,7 +19,7 @@ import type {
 } from '../../core/types'
 import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
-import { encodePrompt } from '../encode'
+import { encodePrompt, imageParts } from '../encode'
 import { refreshUntilSettled } from '../mcp-settle'
 import { findCodex } from './locate'
 import { codexSignIn } from './sign-in'
@@ -116,6 +116,7 @@ class CodexSession implements ProviderSession {
   private readonly startup = new Map<string, McpServer['status']>()
   private models: ModelOption[] = []
   private model: string | undefined
+  private readonly skills = new Map<string, string>()
   private mode: PermissionMode
   private turnId: string | undefined
   private ready = false
@@ -160,7 +161,22 @@ class CodexSession implements ProviderSession {
   async prompt(parts: PromptPart[]): Promise<void> {
     await this.rpc.request('turn/start', {
       threadId: this.nativeId,
-      input: [{ type: 'text', text: encodePrompt(parts, this.options.cwd), text_elements: [] }],
+      input: [
+        ...parts.flatMap((part) =>
+          part.type === 'command' && this.skills.has(part.name)
+            ? [{ type: 'skill', name: part.name, path: this.skills.get(part.name) }]
+            : []
+        ),
+        {
+          type: 'text',
+          text: encodePrompt(
+            parts.filter((part) => !(part.type === 'command' && this.skills.has(part.name))),
+            this.options.cwd
+          ),
+          text_elements: []
+        },
+        ...imageParts(parts).map((image) => ({ type: 'localImage', path: image.path }))
+      ],
       approvalPolicy: policy(this.mode).approvalPolicy,
       sandboxPolicy: sandboxPolicy(this.mode, this.options.cwd),
       model: this.model ?? null
@@ -245,6 +261,19 @@ class CodexSession implements ProviderSession {
     }
     this.facts.fire({ kind: 'mode', current: this.mode, available: MODE_LIST })
     this.facts.fire({ kind: 'model', current: this.model ?? '', available: this.models })
+    try {
+      const { data } = await this.rpc.request<{
+        data: { skills: { name: string; description: string; shortDescription?: string; path: string; enabled: boolean }[] }[]
+      }>('skills/list', { cwds: [this.options.cwd] })
+      const skills = data.flatMap((entry) => entry.skills).filter((skill) => skill.enabled)
+      for (const skill of skills) this.skills.set(skill.name, skill.path)
+      this.facts.fire({
+        kind: 'commands',
+        items: skills.map((skill) => ({ name: skill.name, description: skill.shortDescription ?? skill.description }))
+      })
+    } catch {
+      // The / menu then lists nothing.
+    }
     await this.refreshMcp().catch(() => undefined)
   }
 

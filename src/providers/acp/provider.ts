@@ -1,10 +1,13 @@
 import { type ChildProcess, execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { Emitter } from '../../core/emitter'
 import type {
   ApprovalItem,
   ApprovalOption,
+  CommandOption,
   ModelOption,
   OpenOptions,
   PermissionMode,
@@ -18,7 +21,7 @@ import type {
 } from '../../core/types'
 import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
-import { encodePrompt } from '../encode'
+import { encodePrompt, imageParts } from '../encode'
 import { RpcPeer, type ServerRequest } from '../rpc'
 import { deviceLink, runLoginCli } from '../sign-in'
 import { type AcpAgentSpec, findAgentCli } from './spec'
@@ -91,6 +94,8 @@ class AcpSession implements ProviderSession {
   private model = ''
   private mode: PermissionMode
   private replaying = false
+  private imagesAccepted = false
+  private commands: CommandOption[] = []
   private closed = false
   private stderr = ''
 
@@ -118,8 +123,18 @@ class AcpSession implements ProviderSession {
   ) {
     this.mode = options.mode
     rpc.onNotification(({ method, params }) => {
-      // session/load replays the conversation; the journal already holds it.
-      if (method === 'session/update' && !this.replaying) this.translator.feed((params as { update: SessionUpdate }).update)
+      if (method !== 'session/update') return
+      const update = (params as { update: SessionUpdate }).update
+      if (update.sessionUpdate === 'available_commands_update') {
+        this.commands = (update.availableCommands ?? []).map((command) => ({
+          name: command.name,
+          description: command.description ?? undefined
+        }))
+        this.facts.fire({ kind: 'commands', items: this.commands })
+      } else if (!this.replaying) {
+        // session/load replays the conversation; the journal already holds it.
+        this.translator.feed(update)
+      }
     })
     rpc.onRequest((request) => this.serverRequest(request))
     child.stderr?.setEncoding('utf8')
@@ -133,11 +148,24 @@ class AcpSession implements ProviderSession {
   }
 
   async prompt(parts: PromptPart[]): Promise<void> {
+    if (imageParts(parts).length > 0 && !this.imagesAccepted) {
+      this.items.fire({
+        kind: 'notice',
+        id: `notice:${randomUUID()}`,
+        level: 'warning',
+        text: `${this.spec.label} does not accept images, so they were left out of this message.`
+      })
+    }
     this.translator.startTurn()
     this.rpc
       .request<{ stopReason: string; _meta?: { totalTokens?: number } | null }>('session/prompt', {
         sessionId: this.nativeId,
-        prompt: [{ type: 'text', text: encodePrompt(parts, this.options.cwd) }]
+        prompt: [
+          { type: 'text', text: encodePrompt(parts, this.options.cwd) },
+          ...(this.imagesAccepted
+            ? imageParts(parts).map((image) => ({ type: 'image', mimeType: image.mimeType, data: readFileSync(image.path).toString('base64') }))
+            : [])
+        ]
       })
       .then(
         (result) => {
@@ -187,7 +215,7 @@ class AcpSession implements ProviderSession {
   }
 
   private async handshake(): Promise<void> {
-    const init = await this.rpc.request<{ authMethods?: { id: string }[]; agentCapabilities?: { loadSession?: boolean } }>(
+    const init = await this.rpc.request<{ authMethods?: { id: string }[]; agentCapabilities?: { loadSession?: boolean; promptCapabilities?: { image?: boolean } } }>(
       'initialize',
       {
         protocolVersion: 1,
@@ -195,6 +223,7 @@ class AcpSession implements ProviderSession {
         clientInfo: { name: 'agentdeck', version: '0.1.0' }
       }
     )
+    this.imagesAccepted = init.agentCapabilities?.promptCapabilities?.image === true
     const method = this.spec.authMethod((init.authMethods ?? []).map((auth) => auth.id), this.options.env)
     if (method) await this.rpc.request('authenticate', { methodId: method })
     const params = { cwd: this.options.cwd, mcpServers: [] }
@@ -224,6 +253,7 @@ class AcpSession implements ProviderSession {
     if (this.options.model && this.options.model !== this.model) await this.setModel(this.options.model).catch(() => undefined)
     this.facts.fire({ kind: 'mode', current: this.mode, available: MODE_LIST })
     this.facts.fire({ kind: 'model', current: this.model, available: this.models })
+    if (this.commands.length > 0) this.facts.fire({ kind: 'commands', items: this.commands })
   }
 
   private serverRequest({ method, params }: ServerRequest): Promise<unknown> {

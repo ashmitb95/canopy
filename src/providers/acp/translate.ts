@@ -22,7 +22,8 @@ export type SessionUpdate =
   | { sessionUpdate: 'agent_message_chunk' | 'agent_thought_chunk'; content: TextBlock }
   | ({ sessionUpdate: 'tool_call' | 'tool_call_update' } & ToolFields)
   | { sessionUpdate: 'plan'; entries: { content: string; priority?: string; status: 'pending' | 'in_progress' | 'completed' }[] }
-  | { sessionUpdate: 'available_commands_update' | 'session_info_update' | 'current_mode_update' | 'usage_update' }
+  | { sessionUpdate: 'available_commands_update'; availableCommands?: { name: string; description?: string | null }[] }
+  | { sessionUpdate: 'session_info_update' | 'current_mode_update' | 'usage_update' }
 
 /** Tool output kept in the transcript. */
 const MAX_OUTPUT = 20_000

@@ -37,7 +37,7 @@ export function App() {
   const [since, setSince] = useState<number>()
   useEffect(() => setSince((started) => (busy ? (started ?? Date.now()) : undefined)), [busy])
 
-  if (state.empty) return <EmptyState providers={state.providers} />
+  if (state.empty) return <EmptyState providers={state.providers} signIns={state.signIns} />
 
   return (
     <TooltipProvider>

@@ -1,7 +1,7 @@
 import type { SessionItem } from '../../src/core/types'
 import type { QueuedPrompt, SessionEvent } from '../../src/sessions/manager'
 import type { SessionRecord, SessionStatus } from '../../src/sessions/store'
-import type { EditorContext, HostMessage, ProviderInfo } from '../../src/ui/protocol'
+import type { EditorContext, HostMessage, ProviderInfo, SessionSummary } from '../../src/ui/protocol'
 
 export type ChatState = {
   sessionId?: string
@@ -12,6 +12,7 @@ export type ChatState = {
   facts: SessionRecord['facts']
   provider?: ProviderInfo
   editorContext: EditorContext | null
+  sessions: SessionSummary[]
   /** The sidebar has no session to show. */
   empty: boolean
 }
@@ -22,6 +23,7 @@ export const initialState: ChatState = {
   queue: [],
   facts: {},
   editorContext: null,
+  sessions: [],
   empty: false
 }
 
@@ -32,10 +34,12 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
     case 'editorContext':
       return { ...state, editorContext: message.context }
     case 'empty':
-      return { ...initialState, provider: state.provider, editorContext: state.editorContext, empty: true }
+      return { ...initialState, provider: state.provider, editorContext: state.editorContext, sessions: state.sessions, empty: true }
     case 'title':
       if (message.sessionId !== state.sessionId || !state.record) return state
       return { ...state, record: { ...state.record, title: message.title } }
+    case 'sessions':
+      return { ...state, sessions: message.sessions }
     case 'session':
       return sessionEvent(state, message.sessionId, message.event)
   }

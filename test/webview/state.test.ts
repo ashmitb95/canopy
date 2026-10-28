@@ -85,4 +85,9 @@ describe('chat state', () => {
     expect(state).toMatchObject({ empty: true, items: [], provider, editorContext: { path: '/w/a.ts' } })
     expect(state.sessionId).toBeUndefined()
   })
+
+  it('keeps the session list for the switcher', () => {
+    const sessions = [{ id: 's1', title: 'Chat', providerId: 'claude', status: 'idle' as const, updatedAt: 't' }]
+    expect(run({ type: 'sessions', sessions }).sessions).toEqual(sessions)
+  })
 })

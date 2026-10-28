@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { encodePrompt } from '../../src/providers/encode'
+import { encodePrompt, imageParts } from '../../src/providers/encode'
 
 function workspace(): string {
   const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-encode-'))
@@ -36,5 +36,19 @@ describe('encodePrompt', () => {
     const encoded = encodePrompt([{ type: 'file', path: join(cwd, 'src', 'a.ts'), range: [1, 300] }], cwd)
     expect(encoded).toContain('line 200\n</editor-context>')
     expect(encoded).not.toContain('line 201')
+  })
+
+  it('puts slash commands first', () => {
+    expect(encodePrompt([{ type: 'command', name: 'review' }, { type: 'text', text: 'focus on the API' }], '/w')).toBe('/review focus on the API')
+  })
+
+  it('includes pasted text and leaves images out of the text', () => {
+    const parts = [
+      { type: 'text' as const, text: 'Why does this fail?' },
+      { type: 'pasted' as const, text: 'Error: boom\n  at x' },
+      { type: 'image' as const, path: '/s/a.png', mimeType: 'image/png', name: 'a.png' }
+    ]
+    expect(encodePrompt(parts, '/w')).toBe('Why does this fail?\n\nError: boom\n  at x')
+    expect(imageParts(parts)).toEqual([{ type: 'image', path: '/s/a.png', mimeType: 'image/png', name: 'a.png' }])
   })
 })

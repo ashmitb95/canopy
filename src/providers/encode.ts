@@ -4,9 +4,27 @@ import type { PromptPart } from '../core/types'
 
 const MAX_SELECTION_LINES = 200
 
-/** Claude takes one text prompt; files become editor-context blocks after the user's text. */
+/** The prompt as text: slash commands lead, files become editor-context blocks, images travel separately. */
 export function encodePrompt(parts: PromptPart[], cwd: string): string {
-  return parts.map((part) => (part.type === 'text' ? part.text : editorContext(part.path, part.range, cwd))).join('\n\n')
+  const commands = parts.flatMap((part) => (part.type === 'command' ? [`/${part.name}`] : []))
+  const body = parts
+    .flatMap((part) => {
+      switch (part.type) {
+        case 'text':
+        case 'pasted':
+          return [part.text]
+        case 'file':
+          return [editorContext(part.path, part.range, cwd)]
+        default:
+          return []
+      }
+    })
+    .join('\n\n')
+  return commands.length > 0 ? [commands.join(' '), body].filter(Boolean).join(' ') : body
+}
+
+export function imageParts(parts: PromptPart[]): Extract<PromptPart, { type: 'image' }>[] {
+  return parts.filter((part): part is Extract<PromptPart, { type: 'image' }> => part.type === 'image')
 }
 
 function editorContext(path: string, range: [number, number] | undefined, cwd: string): string {

@@ -4,6 +4,10 @@ import type { Event } from './emitter'
 export type PromptPart =
   | { type: 'text'; text: string }
   | { type: 'file'; path: string; range?: [number, number] }
+  | { type: 'command'; name: string }
+  | { type: 'pasted'; text: string }
+  /** An image in AgentDeck's attachment store. */
+  | { type: 'image'; path: string; mimeType: string; name: string }
 
 export type ToolKind = 'read' | 'edit' | 'execute' | 'search' | 'fetch' | 'mcp' | 'other'
 
@@ -78,12 +82,16 @@ export type McpServer = {
 /** A model the picker offers; the description carries notes such as extra-usage billing. `resolved` is the concrete model id an alias such as `opus` maps to. */
 export type ModelOption = { id: string; label: string; description?: string; resolved?: string }
 
+/** A slash command or skill the composer's `/` menu offers. */
+export type CommandOption = { name: string; description?: string }
+
 /** Session state shown outside the transcript. The latest fact of each kind wins. */
 export type SessionFact =
   | { kind: 'model'; current: string; available: ModelOption[] }
   | { kind: 'mode'; current: PermissionMode; available: readonly PermissionMode[] }
   | { kind: 'context'; usedTokens: number; maxTokens: number }
   | { kind: 'mcp'; servers: McpServer[] }
+  | { kind: 'commands'; items: CommandOption[] }
 
 export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context'
 

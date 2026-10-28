@@ -318,14 +318,21 @@ Expected: clean. If a vendored file fails to type-check, report the error before
 
 - [ ] **Step 12: Pin the versions the CLIs added**
 
-The shadcn CLI adds dependencies with `^` ranges. Pin them to what was installed:
+The shadcn CLI adds dependencies with `^` ranges. Pin them to what was installed, leaving `engines.vscode` a range (an exact engine makes every other VS Code version refuse the VSIX):
 
 ```bash
-sed -i '' 's/": "\^/": "/' package.json
+python3 - <<'PY'
+import json
+pkg = json.load(open('package.json'))
+for section in ('dependencies', 'devDependencies'):
+    pkg[section] = {name: version.lstrip('^') for name, version in pkg[section].items()}
+json.dump(pkg, open('package.json', 'w'), indent=2)
+open('package.json', 'a').write('\n')
+PY
 pnpm install
 ```
 
-Expected: no `^` left in `package.json` (`grep -c '\^' package.json` prints `0`), and `pnpm install` succeeds. On Linux use `sed -i` without `''`.
+Expected: no `^` left in `dependencies` or `devDependencies`, `engines.vscode` is still `^1.95.0`, and `pnpm install` succeeds.
 
 - [ ] **Step 13: Commit**
 

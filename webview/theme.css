@@ -113,3 +113,38 @@ body.vscode-high-contrast [data-slot="button"]:is([data-variant="default"], [dat
     font-family: var(--vscode-editor-font-family);
   }
 }
+
+@layer components {
+  .prompt-editor {
+    max-height: 12rem;
+    min-height: 2.5rem;
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem;
+    font-size: var(--vscode-font-size);
+    outline: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .prompt-editor p {
+    margin: 0;
+  }
+  .prompt-editor p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    color: var(--muted-foreground);
+  }
+  .prompt-editor [data-pill] {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--muted);
+    padding: 0 4px;
+    font-size: 0.9em;
+    white-space: nowrap;
+  }
+  .prompt-editor [data-pill] .codicon {
+    font-size: 12px;
+    vertical-align: -1px;
+  }
+}

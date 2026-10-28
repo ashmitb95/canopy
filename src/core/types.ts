@@ -104,12 +104,19 @@ export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?:
 /** Where a user signs in to an MCP server: a web page, or a CLI flow in a terminal. */
 export type McpSignIn = { kind: 'url'; url: string } | { kind: 'terminal'; command: string; hint: string }
 
+/** Progress of a provider's own login. The CLI completes the OAuth and keeps the token. */
+export type SignInEvent = { kind: 'link'; url: string; code?: string } | { kind: 'done' } | { kind: 'failed'; message: string }
+
+export type SignInFlow = { cancel(): void }
+
 export interface ProviderDefinition {
   readonly id: string
   readonly label: string
   readonly cli: { command: string; installUrl: string }
   /** Shell command the UI runs in a terminal to sign in; depends on where the CLI was found. */
   signInCommand(env: Env): string
+  /** Runs the login inside AgentDeck, reporting the link to open; without it, sign-in runs in a terminal. */
+  startSignIn?(env: Env, onEvent: (event: SignInEvent) => void): Promise<SignInFlow>
   readonly capabilities: ReadonlySet<Capability>
   readonly modes: readonly PermissionMode[]
   probe(env: Env): Promise<ProviderState>

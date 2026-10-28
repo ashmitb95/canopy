@@ -1328,11 +1328,11 @@ export function Composer({ state }: { state: ChatState }) {
       <div className="flex items-center gap-1 px-2 pb-2">
         <div className="flex-1" />
         {busy ? (
-          <Button size="icon-sm" variant="secondary" aria-label="Stop" onClick={() => send({ type: 'cancel' })}>
+          <Button key="stop" size="icon-sm" variant="secondary" aria-label="Stop" onClick={() => send({ type: 'cancel' })}>
             <Codicon name="debug-stop" />
           </Button>
         ) : (
-          <Button size="icon-sm" aria-label="Send" disabled={!text.trim()} onClick={submit}>
+          <Button key="send" size="icon-sm" aria-label="Send" disabled={!text.trim()} onClick={submit}>
             <Codicon name="send" />
           </Button>
         )}
@@ -1342,7 +1342,7 @@ export function Composer({ state }: { state: ChatState }) {
 }
 ```
 
-While a turn runs, Enter still submits: the host queues the prompt.
+While a turn runs, Enter still submits: the host queues the prompt. The `key`s make React remount the button when it switches, instead of animating the disabled Send style into Stop.
 
 - [ ] **Step 4: Item components**
 

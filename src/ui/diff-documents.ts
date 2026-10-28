@@ -21,8 +21,22 @@ export class DiffDocuments implements vscode.TextDocumentContentProvider {
     const item = this.manager.item(sessionId, itemId)
     if (item?.kind !== 'diff') return
     const name = basename(item.path)
-    const uri = (side: Side) =>
-      vscode.Uri.from({ scheme: DIFF_SCHEME, path: `/${name}`, query: JSON.stringify({ sessionId, itemId, side }) })
-    await vscode.commands.executeCommand('vscode.diff', uri('before'), uri('after'), `${name} (agent change)`)
+    await vscode.commands.executeCommand('vscode.diff', this.uri(sessionId, itemId, name, 'before'), this.uri(sessionId, itemId, name, 'after'), `${name} (agent change)`)
+  }
+
+  /** Several diffs at once, in VS Code's multi-diff editor. */
+  async openAll(sessionId: string, itemIds: string[]): Promise<void> {
+    if (itemIds.length === 1) return this.open(sessionId, itemIds[0])
+    const resources = itemIds.flatMap((itemId) => {
+      const item = this.manager.item(sessionId, itemId)
+      if (item?.kind !== 'diff') return []
+      const name = basename(item.path)
+      return [[vscode.Uri.file(item.path), this.uri(sessionId, itemId, name, 'before'), this.uri(sessionId, itemId, name, 'after')]]
+    })
+    await vscode.commands.executeCommand('vscode.changes', 'Agent changes', resources)
+  }
+
+  private uri(sessionId: string, itemId: string, name: string, side: Side): vscode.Uri {
+    return vscode.Uri.from({ scheme: DIFF_SCHEME, path: `/${name}`, query: JSON.stringify({ sessionId, itemId, side }) })
   }
 }

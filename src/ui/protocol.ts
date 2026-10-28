@@ -1,4 +1,4 @@
-import type { Capability, PermissionMode, ProviderState } from '../core/types'
+import type { Capability, PermissionMode, ProviderState, Quota } from '../core/types'
 import type { SessionEvent } from '../sessions/manager'
 import type { SessionStatus } from '../sessions/store'
 
@@ -13,7 +13,7 @@ export type ProviderInfo = {
   state: ProviderState
 }
 
-export type SessionSummary = { id: string; title: string; providerId: string; status: SessionStatus; updatedAt: string }
+export type SessionSummary = { id: string; title: string; providerId: string; status: SessionStatus; updatedAt: string; inTab: boolean }
 
 /** Extension host → webview. */
 export type HostMessage =
@@ -25,6 +25,7 @@ export type HostMessage =
   | { type: 'editorContext'; context: EditorContext | null }
   /** Recent sessions, for the sidebar's session switcher. */
   | { type: 'sessions'; sessions: SessionSummary[] }
+  | { type: 'quota'; providerId: string; quota: Quota }
   /** The sidebar has no session yet. */
   | { type: 'empty' }
 
@@ -45,3 +46,5 @@ export type WebviewMessage =
   | { type: 'mcpSignIn'; server: string; scope?: string }
   | { type: 'openDiff'; itemId: string }
   | { type: 'switchSession'; sessionId: string }
+  | { type: 'reviewChanges'; itemIds: string[] }
+  | { type: 'openSession'; sessionId: string }

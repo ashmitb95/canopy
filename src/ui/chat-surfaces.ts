@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import type { Disposable } from '../core/emitter'
-import type { PromptPart, ProviderDefinition, ProviderState } from '../core/types'
+import type { PromptPart, ProviderDefinition, ProviderState, Quota } from '../core/types'
 import type { Env } from '../env'
-import type { SessionManager } from '../sessions/manager'
+import type { Attention, SessionManager } from '../sessions/manager'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
 import type { HostMessage, ProviderInfo, WebviewMessage } from './protocol'
@@ -11,6 +11,7 @@ import type { HostMessage, ProviderInfo, WebviewMessage } from './protocol'
 export const PANEL_TYPE = 'agentdeck.chatPanel'
 export const SIDEBAR_VIEW = 'agentdeck.chat'
 const SIDEBAR_SESSION_KEY = 'agentdeck.sidebarSession'
+const QUOTA_KEY = 'agentdeck.quota'
 const DEFAULT_PROVIDER = 'claude'
 
 type SurfaceKind = 'panel' | 'view'
@@ -33,6 +34,9 @@ export class ChatSurfaces
   private sidebar: Surface | undefined
   /** Editor tabs showing the provider chooser, before a session exists. */
   private readonly blankPanels = new Set<Surface>()
+  private sidebarView: vscode.WebviewView | undefined
+  /** Latest usage per provider; kept across reloads and shown with its age. */
+  private readonly quotas: Record<string, Quota>
   private readonly states = new Map<string, ProviderState>()
   private readonly subscriptions: { dispose(): void }[] = []
 
@@ -44,12 +48,19 @@ export class ChatSurfaces
     private readonly editor: EditorContextTracker,
     private readonly diffs: DiffDocuments
   ) {
+    this.quotas = context.globalState.get<Record<string, Quota>>(QUOTA_KEY) ?? {}
     this.subscriptions.push(
       manager.onDidChange(() => {
         this.refreshTitles()
         this.postSessions()
       }),
-      editor.onDidChange((editorContext) => this.broadcast({ type: 'editorContext', context: editorContext }))
+      editor.onDidChange((editorContext) => this.broadcast({ type: 'editorContext', context: editorContext })),
+      manager.onQuota(({ providerId, quota }) => {
+        this.quotas[providerId] = quota
+        void this.context.globalState.update(QUOTA_KEY, this.quotas)
+        this.broadcast({ type: 'quota', providerId, quota })
+      }),
+      manager.onAttention((event) => this.attend(event))
     )
   }
 
@@ -120,9 +131,13 @@ export class ChatSurfaces
     view.webview.html = this.html(view.webview, 'view')
     const surface = this.surface(view.webview, 'view', this.sidebarSession())
     this.sidebar = surface
+    this.sidebarView = view
     view.onDidDispose(() => {
       this.release(surface)
-      if (this.sidebar === surface) this.sidebar = undefined
+      if (this.sidebar === surface) {
+        this.sidebar = undefined
+        this.sidebarView = undefined
+      }
     })
   }
 
@@ -175,6 +190,7 @@ export class ChatSurfaces
         this.post(surface, { type: 'editorContext', context: this.editor.current() })
         this.postSessions(surface)
         await this.postProviders(surface)
+        for (const [providerId, quota] of Object.entries(this.quotas)) this.post(surface, { type: 'quota', providerId, quota })
         if (sessionId) this.show(surface, sessionId)
         else this.post(surface, { type: 'empty' })
         return
@@ -219,6 +235,12 @@ export class ChatSurfaces
       case 'switchSession':
         if (surface.kind === 'view') await this.showInSidebar(message.sessionId)
         else this.openPanel(message.sessionId)
+        return
+      case 'reviewChanges':
+        if (sessionId) await this.diffs.openAll(sessionId, message.itemIds)
+        return
+      case 'openSession':
+        this.openPanel(message.sessionId)
         return
       case 'openFile': {
         const document = await vscode.workspace.openTextDocument(message.path)
@@ -294,6 +316,23 @@ export class ChatSurfaces
     })
   }
 
+  /** A toast when a chat that is not on screen needs approval. */
+  private async attend({ sessionId, reason }: Attention): Promise<void> {
+    if (reason !== 'needs-input' || this.visible(sessionId)) return
+    const record = this.manager.list().find((entry) => entry.record.id === sessionId)?.record
+    if (!record) return
+    const label = this.providers.get(record.providerId)?.label ?? record.providerId
+    const choice = await vscode.window.showInformationMessage(`${label} needs your approval — ${record.title}`, 'Review')
+    if (choice !== 'Review') return
+    if (this.panels.has(sessionId) || this.sidebar?.sessionId !== sessionId) this.openPanel(sessionId)
+    else await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
+  }
+
+  private visible(sessionId: string): boolean {
+    if (this.panels.get(sessionId)?.panel.visible) return true
+    return this.sidebar?.sessionId === sessionId && this.sidebarView?.visible === true
+  }
+
   /** Sends the user to where the MCP server's sign-in happens; the token stays with the provider. */
   private async mcpSignIn(surface: Surface, server: string, scope: string | undefined): Promise<void> {
     const provider = this.providers.get(this.providerOf(surface.sessionId))
@@ -321,7 +360,8 @@ export class ChatSurfaces
         title: record.title,
         providerId: record.providerId,
         status,
-        updatedAt: record.updatedAt
+        updatedAt: record.updatedAt,
+        inTab: this.panels.has(record.id)
       }))
     this.post(surface, { type: 'sessions', sessions })
   }

@@ -102,7 +102,13 @@ describe('chat state', () => {
   })
 
   it('keeps the session list for the switcher', () => {
-    const sessions = [{ id: 's1', title: 'Chat', providerId: 'claude', status: 'idle' as const, updatedAt: 't' }]
+    const sessions = [{ id: 's1', title: 'Chat', providerId: 'claude', status: 'idle' as const, updatedAt: 't', inTab: false }]
     expect(run({ type: 'sessions', sessions }).sessions).toEqual(sessions)
+  })
+
+  it('keeps the latest quota per provider, also across an empty surface', () => {
+    const quota = { observedAt: 't', windows: [{ label: '5-hour', usedPercent: 40, status: 'ok' as const }] }
+    const state = run({ type: 'quota', providerId: 'claude', quota }, { type: 'empty' })
+    expect(state.quotas).toEqual({ claude: quota })
   })
 })

@@ -2,7 +2,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { captureEnv, type Env } from './env'
-import { claudeProvider } from './providers/claude/provider'
+import { providers } from './providers/registry'
 import { SessionManager } from './sessions/manager'
 import { SessionStore } from './sessions/store'
 import { ChatSurfaces, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
@@ -16,7 +16,6 @@ let manager: SessionManager | undefined
 export function activate(context: vscode.ExtensionContext): void {
   let env: Promise<Env> | undefined
   const getEnv = () => (env ??= captureEnv())
-  const providers = new Map([[claudeProvider.id, claudeProvider]])
   const storage = (context.storageUri ?? context.globalStorageUri).fsPath
   manager = new SessionManager({
     providers,

@@ -50,10 +50,21 @@ export class ChatSurfaces
     )
   }
 
-  async newChat(where: SurfaceKind): Promise<void> {
-    const record = await this.manager.create(DEFAULT_PROVIDER)
+  async newChat(where: SurfaceKind, providerId?: string): Promise<void> {
+    const chosen = providerId ?? (await this.pickProvider())
+    if (!chosen) return
+    const record = await this.manager.create(chosen)
     if (where === 'panel') this.openPanel(record.id)
     else await this.showInSidebar(record.id)
+  }
+
+  private async pickProvider(): Promise<string | undefined> {
+    if (this.providers.size === 1) return [...this.providers.keys()][0]
+    const picked = await vscode.window.showQuickPick(
+      [...this.providers.values()].map((provider) => ({ label: provider.label, id: provider.id })),
+      { placeHolder: 'Start a chat with…' }
+    )
+    return picked?.id
   }
 
   openPanel(sessionId: string): void {
@@ -199,7 +210,9 @@ export class ChatSurfaces
   }
 
   private async createFor(surface: Surface): Promise<string> {
-    const record = await this.manager.create(DEFAULT_PROVIDER)
+    const providerId = await this.pickProvider()
+    if (!providerId) throw new Error('No provider was chosen.')
+    const record = await this.manager.create(providerId)
     if (surface.kind === 'view') await this.showInSidebar(record.id)
     else this.show(surface, record.id)
     return record.id

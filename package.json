@@ -28,7 +28,7 @@
       ]
     },
     "commands": [
-      { "command": "agentdeck.newChat", "title": "New Claude Chat in Editor", "category": "AgentDeck", "icon": "$(add)" },
+      { "command": "agentdeck.newChat", "title": "New Chat in Editor", "category": "AgentDeck", "icon": "$(add)" },
       { "command": "agentdeck.sidebar.newChat", "title": "New Chat", "category": "AgentDeck", "icon": "$(add)" },
       { "command": "agentdeck.openInEditor", "title": "Open Chat in Editor", "category": "AgentDeck", "icon": "$(link-external)" },
       { "command": "agentdeck.openSession", "title": "Open in Editor", "category": "AgentDeck" },

@@ -4,7 +4,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { send } from '../host'
 import type { ChatState } from '../state'
 import { Codicon } from './codicon'
+import { ContextMeter } from './context-meter'
 import { FilePill } from './file-pill'
+import { McpPopover } from './mcp-popover'
+import { ModelPicker } from './model-picker'
+import { ModePicker } from './mode-picker'
 
 export function Composer({ state }: { state: ChatState }) {
   const [text, setText] = useState('')
@@ -47,7 +51,14 @@ export function Composer({ state }: { state: ChatState }) {
         }}
       />
       <div className="flex items-center gap-1 px-2 pb-2">
+        <ModelPicker fact={state.facts.model?.kind === 'model' ? state.facts.model : undefined} />
+        <ModePicker
+          current={state.facts.mode?.kind === 'mode' ? state.facts.mode.current : (state.record?.mode ?? 'ask')}
+          available={state.provider?.modes ?? []}
+        />
+        <McpPopover fact={state.facts.mcp?.kind === 'mcp' ? state.facts.mcp : undefined} />
         <div className="flex-1" />
+        <ContextMeter fact={state.facts.context?.kind === 'context' ? state.facts.context : undefined} />
         {busy ? (
           <Button key="stop" size="icon-sm" variant="secondary" aria-label="Stop" onClick={() => send({ type: 'cancel' })}>
             <Codicon name="debug-stop" />

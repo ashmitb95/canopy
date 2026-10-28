@@ -10,7 +10,19 @@ const record: SessionRecord = {
   updatedAt: '2026-10-28T10:04:00.000Z',
   mode: 'ask',
   hasTurns: true,
-  facts: {}
+  facts: {
+    model: { kind: 'model', current: 'opus', available: [{ id: 'opus', label: 'Opus 5.5' }, { id: 'sonnet', label: 'Sonnet 5.5' }] },
+    mode: { kind: 'mode', current: 'ask', available: ['ask', 'accept-edits', 'plan', 'full-access'] },
+    context: { kind: 'context', usedTokens: 76_000, maxTokens: 200_000 },
+    mcp: {
+      kind: 'mcp',
+      servers: [
+        { name: 'screenscribe', status: 'connected', scope: 'user', tools: ['analyze_video', 'extract_frames'] },
+        { name: 'claude.ai Notion', status: 'needs-auth', scope: 'claudeai', tools: [] },
+        { name: 'linear', status: 'failed', scope: 'project', tools: [], error: 'Connection refused' }
+      ]
+    }
+  }
 }
 
 const items: SessionItem[] = [
@@ -84,7 +96,7 @@ const messages: HostMessage[] = [
       label: 'Claude',
       installUrl: 'https://example.invalid',
       capabilities: [],
-      modes: ['ask'],
+      modes: ['ask', 'accept-edits', 'plan', 'full-access'],
       state: { status: 'signed-in', account: 'me@example.com' }
     }
   },

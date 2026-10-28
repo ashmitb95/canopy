@@ -206,7 +206,7 @@ class ClaudeSession implements ProviderSession {
           tools: (server.tools ?? []).map((tool) => tool.name)
         })),
       (servers) => this.facts.fire({ kind: 'mcp', servers }),
-      { intervalMs: 1000, attempts: 30, closed: () => this.closed }
+      { intervalMs: 1000, attempts: 30, minAttempts: 5, closed: () => this.closed }
     )
   }
 
@@ -239,6 +239,7 @@ class ClaudeSession implements ProviderSession {
     try {
       for await (const message of this.query) {
         this.translator.feed(message)
+        if (message.type === 'system' && message.subtype === 'init') void this.refreshMcp().catch(() => undefined)
         if (message.type === 'system' && message.subtype === 'init' && message.model !== this.model) {
           this.model = message.model
           this.facts.fire({ kind: 'model', current: this.model, available: this.models })

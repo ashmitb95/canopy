@@ -39,6 +39,8 @@ async function main(): Promise<void> {
 
   await turn(first, id, 'In notes.md, replace "hello world" with "goodbye world". Use the Edit tool. Reply with one short sentence.')
   if (!readFileSync(file, 'utf8').includes('goodbye world')) throw new Error('edit was not applied')
+  const settled = first.list().find(({ record }) => record.id === id)?.record.facts.mcp
+  console.log('mcp after first turn:', settled?.kind === 'mcp' ? settled.servers.map((s) => `${s.name}=${s.status}`) : [])
   const recall = await turn(first, id, 'What word did you just replace? Answer with that single word only.')
   if (!/hello/i.test(recall)) throw new Error(`second turn lost context: ${JSON.stringify(recall)}`)
   await first.dispose()

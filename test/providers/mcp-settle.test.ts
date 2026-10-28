@@ -21,6 +21,14 @@ describe('refreshUntilSettled', () => {
     expect(emitted.at(-1)).toEqual([server('connected')])
   })
 
+  it('keeps reading for the minimum attempts, since servers can appear late', async () => {
+    const { read, calls } = reader([], [server('connected')])
+    const emitted: McpServer[][] = []
+    await refreshUntilSettled(read, (servers) => emitted.push(servers), { intervalMs: 0, attempts: 10, minAttempts: 3 })
+    expect(calls()).toBe(3)
+    expect(emitted.at(-1)).toEqual([server('connected')])
+  })
+
   it('stops after the attempt limit', async () => {
     const { read, calls } = reader([server('pending')])
     await refreshUntilSettled(read, () => {}, { intervalMs: 0, attempts: 4 })

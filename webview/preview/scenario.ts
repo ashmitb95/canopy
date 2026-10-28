@@ -1,6 +1,6 @@
 import type { SessionItem } from '../../src/core/types'
 import type { SessionRecord } from '../../src/sessions/store'
-import type { HostMessage } from '../../src/ui/protocol'
+import type { HostMessage, ProviderInfo } from '../../src/ui/protocol'
 
 const record: SessionRecord = {
   id: 's1',
@@ -88,7 +88,19 @@ const items: SessionItem[] = [
   }
 ]
 
-const messages: HostMessage[] = [
+const claude: ProviderInfo = {
+  id: 'claude',
+  label: 'Claude',
+  installUrl: 'https://example.invalid',
+  capabilities: [],
+  modes: ['ask', 'accept-edits', 'plan', 'full-access'],
+  state: { status: 'signed-in', account: 'me@example.com', version: '2.1.311' }
+}
+const codex: ProviderInfo = { ...claude, id: 'codex', label: 'Codex', state: { status: 'signed-out' } }
+const providers: HostMessage = { type: 'providers', providers: [claude, codex] }
+
+const chat: HostMessage[] = [
+  providers,
   {
     type: 'sessions',
     sessions: [
@@ -96,17 +108,7 @@ const messages: HostMessage[] = [
       { id: 's2', title: 'Refactor auth middleware', providerId: 'claude', status: 'idle', updatedAt: '2026-10-28T09:00:00.000Z' }
     ]
   },
-  {
-    type: 'provider',
-    provider: {
-      id: 'claude',
-      label: 'Claude',
-      installUrl: 'https://example.invalid',
-      capabilities: [],
-      modes: ['ask', 'accept-edits', 'plan', 'full-access'],
-      state: { status: 'signed-in', account: 'me@example.com' }
-    }
-  },
+  { type: 'provider', provider: claude },
   { type: 'editorContext', context: { path: '/work/src/api.test.ts', label: 'src/api.test.ts', range: [40, 72] } },
   {
     type: 'session',
@@ -120,6 +122,9 @@ const messages: HostMessage[] = [
     }
   }
 ]
+
+// `?scenario=new` shows the provider chooser instead of a chat.
+const messages: HostMessage[] = new URLSearchParams(location.search).get('scenario') === 'new' ? [providers, { type: 'empty' }] : chat
 
 // Posted after the app has mounted and subscribed.
 setTimeout(() => {

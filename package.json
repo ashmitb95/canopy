@@ -23,18 +23,38 @@
     },
     "views": {
       "agentdeck": [
-        { "type": "webview", "id": "agentdeck.chat", "name": "Chat" }
+        { "type": "webview", "id": "agentdeck.chat", "name": "Chat" },
+        { "id": "agentdeck.sessions", "name": "Sessions" }
       ]
     },
     "commands": [
       { "command": "agentdeck.newChat", "title": "New Claude Chat in Editor", "category": "AgentDeck", "icon": "$(add)" },
       { "command": "agentdeck.sidebar.newChat", "title": "New Chat", "category": "AgentDeck", "icon": "$(add)" },
-      { "command": "agentdeck.openInEditor", "title": "Open Chat in Editor", "category": "AgentDeck", "icon": "$(link-external)" }
+      { "command": "agentdeck.openInEditor", "title": "Open Chat in Editor", "category": "AgentDeck", "icon": "$(link-external)" },
+      { "command": "agentdeck.openSession", "title": "Open in Editor", "category": "AgentDeck" },
+      { "command": "agentdeck.openSessionInSidebar", "title": "Open in Sidebar", "category": "AgentDeck" },
+      { "command": "agentdeck.renameSession", "title": "Rename…", "category": "AgentDeck" },
+      { "command": "agentdeck.stopSession", "title": "Stop", "category": "AgentDeck" },
+      { "command": "agentdeck.deleteSession", "title": "Delete…", "category": "AgentDeck" }
     ],
     "menus": {
       "view/title": [
         { "command": "agentdeck.sidebar.newChat", "when": "view == agentdeck.chat", "group": "navigation@1" },
         { "command": "agentdeck.openInEditor", "when": "view == agentdeck.chat", "group": "navigation@2" }
+      ],
+      "view/item/context": [
+        { "command": "agentdeck.openSession", "when": "view == agentdeck.sessions && viewItem == session", "group": "1_open@1" },
+        { "command": "agentdeck.openSessionInSidebar", "when": "view == agentdeck.sessions && viewItem == session", "group": "1_open@2" },
+        { "command": "agentdeck.renameSession", "when": "view == agentdeck.sessions && viewItem == session", "group": "2_edit@1" },
+        { "command": "agentdeck.stopSession", "when": "view == agentdeck.sessions && viewItem == session", "group": "2_edit@2" },
+        { "command": "agentdeck.deleteSession", "when": "view == agentdeck.sessions && viewItem == session", "group": "3_delete@1" }
+      ],
+      "commandPalette": [
+        { "command": "agentdeck.openSession", "when": "false" },
+        { "command": "agentdeck.openSessionInSidebar", "when": "false" },
+        { "command": "agentdeck.renameSession", "when": "false" },
+        { "command": "agentdeck.stopSession", "when": "false" },
+        { "command": "agentdeck.deleteSession", "when": "false" }
       ]
     }
   },

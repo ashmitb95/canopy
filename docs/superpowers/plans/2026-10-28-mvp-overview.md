@@ -4,13 +4,13 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 
 | # | Plan | Delivers | Status |
 |---|---|---|---|
-| 1 | [Core and Claude](2026-10-28-mvp-1-core-and-claude.md) | Shared types, env, Claude provider on the item model, journal, session store, session manager, recorded fixture, live smoke through the manager | Ready |
+| 1 | [Core and Claude](2026-10-28-mvp-1-core-and-claude.md) | Shared types, env, Claude provider on the item model, journal, session store, session manager, recorded fixture, live smoke through the manager | Done |
 | 2 | Chat app foundation | Webview build (React, Tailwind v4, shadcn, AI Elements), theme bridge, chat in editor tabs and the sidebar wired to the session manager, messages, reasoning, composer, approvals, Stop; removes the POC UI | Written after plan 1 lands |
 | 3 | Chat items and controls | Tool cards, diff cards with *Open diff*, plan, model and mode pickers, context meter, MCP popover with sign-in handoff and reconnect, sessions tree, status bar, provider sign-in check | Written after plan 2 |
-
-Carried forward from plan 1's live run: right after the CLI starts, most MCP servers report `pending`, and the Claude provider reads MCP status once. Plan 3 must refresh it until no server is pending (and after a reconnect) so the popover settles on real states.
 | 4 | Codex | `codex app-server` client, Codex translator with a recorded fixture, Codex sign-in and MCP handoff | Written after plan 3; needs Codex installed |
 | 5 | Release | Theme check on Dark Modern, Light Modern, a high-contrast theme, and one third-party theme; packaging; README | Written after plan 4 |
+
+Carried forward from plan 1's live run: right after the CLI starts, most MCP servers report `pending`, and the Claude provider reads MCP status once. Plan 3 must refresh it until no server is pending (and after a reconnect) so the popover settles on real states.
 
 Plans 2–5 are written when the previous plan lands, because each depends on what the previous one shows: plan 2 starts with a spike that confirms AI Elements builds outside Next.js, and plan 4 needs the installed Codex's generated protocol types.
 

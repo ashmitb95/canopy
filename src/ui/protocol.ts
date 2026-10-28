@@ -1,8 +1,12 @@
-import type { Capability, PermissionMode, ProviderState, Quota } from '../core/types'
+import type { Capability, PermissionMode, PromptPart, ProviderState, Quota } from '../core/types'
 import type { SessionEvent } from '../sessions/manager'
 import type { SessionStatus } from '../sessions/store'
 
 export type EditorContext = { path: string; label: string; range?: [number, number] }
+
+export type FileMatch = { path: string; label: string }
+
+export type Attachment = { kind: 'image'; path: string; mimeType: string; name: string } | { kind: 'file'; path: string; label: string }
 
 export type ProviderInfo = {
   id: string
@@ -35,11 +39,18 @@ export type HostMessage =
   /** The sidebar has no session yet. */
   | { type: 'empty' }
   | { type: 'signInProgress'; providerId: string; progress: SignInProgress | null }
+  /** The answer to a webview request with the same requestId. */
+  | { type: 'reply'; requestId: number; value: unknown }
+  /** Webview URI of the attachment store, for showing attached images. */
+  | { type: 'assets'; attachments: string }
 
 /** Webview → extension host. */
 export type WebviewMessage =
   | { type: 'ready' }
-  | { type: 'prompt'; text: string; includeContext: boolean }
+  | { type: 'prompt'; parts: PromptPart[]; includeContext: boolean }
+  | { type: 'searchFiles'; requestId: number; query: string }
+  | { type: 'pickAttachments'; requestId: number }
+  | { type: 'saveImage'; requestId: number; name: string; mimeType: string; data: string }
   | { type: 'cancel' }
   | { type: 'answer'; itemId: string; optionId: string }
   | { type: 'removeQueued'; queuedId: string }

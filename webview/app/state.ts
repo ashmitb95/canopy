@@ -16,6 +16,7 @@ export type ChatState = {
   sessions: SessionSummary[]
   quotas: Record<string, Quota>
   signIns: Record<string, SignInProgress>
+  attachmentsUri?: string
   /** The sidebar has no session to show. */
   empty: boolean
 }
@@ -39,6 +40,10 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
       return { ...state, providers: message.providers }
     case 'provider':
       return { ...state, provider: message.provider }
+    case 'assets':
+      return { ...state, attachmentsUri: message.attachments }
+    case 'reply':
+      return state
     case 'editorContext':
       return { ...state, editorContext: message.context }
     case 'empty':

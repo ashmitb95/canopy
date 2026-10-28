@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Codicon } from '../components/codicon'
-import { clockTime, promptText } from '../format'
+import { clockTime } from '../format'
 import { send } from '../host'
 import type { TurnFooter } from '../turns'
 
@@ -38,7 +38,7 @@ export function TurnFooterView({ footer, model }: { footer: TurnFooter; model?: 
             size="icon-xs"
             variant="ghost"
             aria-label="Send this prompt again"
-            onClick={() => send({ type: 'prompt', text: promptText(footer.prompt?.parts ?? []), includeContext: false })}
+            onClick={() => send({ type: 'prompt', parts: footer.prompt?.parts ?? [], includeContext: false })}
           >
             <Codicon name="refresh" size={12} />
           </Button>

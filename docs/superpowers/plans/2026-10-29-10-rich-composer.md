@@ -457,9 +457,10 @@ export class FileSearch implements vscode.Disposable {
   ]
 
   async search(query: string): Promise<FileMatch[]> {
-    this.files ??= vscode.workspace
-      .findFiles('**/*', EXCLUDE, MAX_FILES)
-      .then((uris) => new Map(uris.map((uri) => [vscode.workspace.asRelativePath(uri), uri.fsPath])))
+    // findFiles returns a Thenable; Promise.resolve makes it a Promise that can be cached and awaited.
+    this.files ??= Promise.resolve(vscode.workspace.findFiles('**/*', EXCLUDE, MAX_FILES)).then(
+      (uris) => new Map(uris.map((uri) => [vscode.workspace.asRelativePath(uri), uri.fsPath]))
+    )
     const files = await this.files
     const recent = new Set(
       vscode.window.tabGroups.all

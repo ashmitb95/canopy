@@ -1,11 +1,14 @@
 import { randomBytes } from 'node:crypto'
+import { join } from 'node:path'
 import * as vscode from 'vscode'
 import type { Disposable } from '../core/emitter'
 import type { PromptPart, ProviderDefinition, ProviderState, Quota, SignInFlow } from '../core/types'
 import type { Env } from '../env'
 import type { Attention, SessionManager } from '../sessions/manager'
+import { attachFile, saveImage } from './attachments'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
+import { FileSearch } from './file-search'
 import type { HostMessage, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
 
 export const PANEL_TYPE = 'agentdeck.chatPanel'
@@ -40,6 +43,8 @@ export class ChatSurfaces
   private readonly states = new Map<string, ProviderState>()
   private readonly signIns = new Map<string, { flow?: SignInFlow; progress: SignInProgress }>()
   private readonly subscriptions: { dispose(): void }[] = []
+  private readonly files = new FileSearch()
+  private readonly attachmentsDir: string
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -49,6 +54,7 @@ export class ChatSurfaces
     private readonly editor: EditorContextTracker,
     private readonly diffs: DiffDocuments
   ) {
+    this.attachmentsDir = join((context.storageUri ?? context.globalStorageUri).fsPath, 'attachments')
     this.quotas = context.globalState.get<Record<string, Quota>>(QUOTA_KEY) ?? {}
     this.subscriptions.push(
       manager.onDidChange(() => {
@@ -83,7 +89,7 @@ export class ChatSurfaces
     const panel = vscode.window.createWebviewPanel(PANEL_TYPE, 'New chat', vscode.ViewColumn.Beside, {
       enableScripts: true,
       retainContextWhenHidden: true,
-      localResourceRoots: [this.assets()]
+      localResourceRoots: this.roots()
     })
     this.attachPanel(panel)
   }
@@ -93,7 +99,7 @@ export class ChatSurfaces
     const panel = vscode.window.createWebviewPanel(PANEL_TYPE, title, vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
-      localResourceRoots: [this.assets()]
+      localResourceRoots: this.roots()
     })
     this.attachPanel(panel)
     panel.title = title
@@ -123,7 +129,7 @@ export class ChatSurfaces
     const panel = vscode.window.createWebviewPanel(PANEL_TYPE, this.title(sessionId), vscode.ViewColumn.Beside, {
       enableScripts: true,
       retainContextWhenHidden: true,
-      localResourceRoots: [this.assets()]
+      localResourceRoots: this.roots()
     })
     this.attachPanel(panel, sessionId)
   }
@@ -139,7 +145,7 @@ export class ChatSurfaces
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
-    view.webview.options = { enableScripts: true, localResourceRoots: [this.assets()] }
+    view.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
     view.webview.html = this.html(view.webview, 'view')
     const surface = this.surface(view.webview, 'view', this.sidebarSession())
     this.sidebar = surface
@@ -160,6 +166,7 @@ export class ChatSurfaces
 
   dispose(): void {
     for (const subscription of this.subscriptions) subscription.dispose()
+    this.files.dispose()
     for (const { flow } of this.signIns.values()) flow?.cancel()
     for (const { surface } of this.panels.values()) this.release(surface)
     for (const surface of this.blankPanels) this.release(surface)
@@ -167,7 +174,7 @@ export class ChatSurfaces
   }
 
   private attachPanel(panel: vscode.WebviewPanel, sessionId?: string): void {
-    panel.webview.options = { enableScripts: true, localResourceRoots: [this.assets()] }
+    panel.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
     panel.webview.html = this.html(panel.webview, 'panel')
     panel.title = sessionId ? this.title(sessionId) : 'New chat'
     const surface = this.surface(panel.webview, 'panel', sessionId)
@@ -196,11 +203,24 @@ export class ChatSurfaces
     surface.listener?.dispose()
   }
 
+  /** The webview may load the bundle and attached images. */
+  private roots(): vscode.Uri[] {
+    return [this.assets(), vscode.Uri.file(this.attachmentsDir)]
+  }
+
+  private reply(surface: Surface, requestId: number, value: unknown): void {
+    this.post(surface, { type: 'reply', requestId, value })
+  }
+
   private async handle(surface: Surface, message: WebviewMessage): Promise<void> {
     const sessionId = surface.sessionId
     switch (message.type) {
       case 'ready':
         this.post(surface, { type: 'editorContext', context: this.editor.current() })
+        this.post(surface, {
+          type: 'assets',
+          attachments: surface.webview.asWebviewUri(vscode.Uri.file(this.attachmentsDir)).toString()
+        })
         this.postSessions(surface)
         await this.postProviders(surface)
         for (const [providerId, quota] of Object.entries(this.quotas)) this.post(surface, { type: 'quota', providerId, quota })
@@ -210,7 +230,7 @@ export class ChatSurfaces
         return
       case 'prompt': {
         const target = sessionId ?? (await this.createFor(surface))
-        const parts: PromptPart[] = [{ type: 'text', text: message.text }]
+        const parts: PromptPart[] = [...message.parts]
         const file = message.includeContext ? this.editor.part() : null
         if (file) parts.push(file)
         return this.manager.prompt(target, parts)
@@ -265,6 +285,19 @@ export class ChatSurfaces
       case 'refreshProviders':
         this.states.clear()
         return this.postProviders()
+      case 'searchFiles':
+        return this.reply(surface, message.requestId, await this.files.search(message.query))
+      case 'pickAttachments': {
+        const uris = await vscode.window.showOpenDialog({ canSelectMany: true, openLabel: 'Attach' })
+        const attachments = (uris ?? []).map((uri) => attachFile(this.attachmentsDir, uri.fsPath, vscode.workspace.asRelativePath(uri)))
+        return this.reply(surface, message.requestId, attachments)
+      }
+      case 'saveImage':
+        return this.reply(
+          surface,
+          message.requestId,
+          saveImage(this.attachmentsDir, message.name, message.mimeType, Buffer.from(message.data, 'base64'))
+        )
       case 'openFile': {
         const document = await vscode.workspace.openTextDocument(message.path)
         const line = Math.max((message.line ?? 1) - 1, 0)

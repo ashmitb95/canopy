@@ -10,4 +10,3 @@ export function groupSessions<T extends { laneId?: string }>(lanes: Lane[], sess
     loose: sessions.filter((session) => session.laneId === undefined || !names.has(session.laneId))
   }
 }
-```

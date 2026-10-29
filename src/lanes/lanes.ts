@@ -54,4 +54,3 @@ export function laneFromPaths(repos: RepoState[], files: string[]): string | und
   const lanes = new Set(files.flatMap((file) => laneForPath(repos, file) ?? []))
   return lanes.size === 1 ? [...lanes][0] : undefined
 }
-```

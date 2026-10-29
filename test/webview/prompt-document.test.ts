@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toParts } from '../../webview/app/composer/prompt-document'
+import { toDocument, toParts } from '../../webview/app/composer/prompt-document'
 
 const doc = (...paragraphs: object[][]) => ({ type: 'doc', content: paragraphs.map((content) => ({ type: 'paragraph', content })) })
 const text = (value: string) => ({ type: 'text', text: value })
@@ -30,5 +30,19 @@ describe('toParts', () => {
       { type: 'text', text: 'one\ntwo\nthree' }
     ])
     expect(toParts(doc([]))).toEqual([])
+  })
+})
+
+describe('toDocument', () => {
+  it('turns prompt parts back into composer content', () => {
+    const parts = [
+      { type: 'command', name: 'review' },
+      { type: 'text', text: 'look at' },
+      { type: 'file', path: '/w/src/a.ts' },
+      { type: 'text', text: 'and this\nsecond line' },
+      { type: 'pasted', text: 'long paste' },
+      { type: 'image', path: '/s/i.png', mimeType: 'image/png', name: 'i.png' }
+    ] as const
+    expect(toParts(toDocument([...parts]))).toEqual(parts)
   })
 })

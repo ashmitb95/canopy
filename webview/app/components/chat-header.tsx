@@ -22,7 +22,8 @@ function ChatMenu({ state }: { state: ChatState }) {
           <Codicon name="kebab-vertical" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      {/* Items open VS Code pickers; returning focus to the trigger would close them. */}
+      <DropdownMenuContent align="end" onCloseAutoFocus={(event) => event.preventDefault()}>
         {state.provider?.capabilities.includes('fork') && (
           <DropdownMenuItem onSelect={() => send({ type: 'forkSession' })}>Fork conversation</DropdownMenuItem>
         )}

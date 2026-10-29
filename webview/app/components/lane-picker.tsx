@@ -26,7 +26,8 @@ export function LanePicker({ lanes, current }: { lanes?: LaneInfo[]; current?: s
           <span className="hidden @[26rem]:inline-flex"><Codicon name="chevron-down" size={12} /></span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-w-80">
+      {/* Items open VS Code pickers; returning focus to the trigger would close them. */}
+      <DropdownMenuContent align="start" className="max-w-80" onCloseAutoFocus={(event) => event.preventDefault()}>
         <DropdownMenuRadioGroup
           value={current ?? NONE}
           onValueChange={(laneId) => send({ type: 'setLane', ...(laneId === NONE ? {} : { laneId }) })}

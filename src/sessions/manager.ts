@@ -3,12 +3,14 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Disposable, Emitter } from '../core/emitter'
 import type {
+  ApprovalItem,
   McpSignIn,
   PermissionMode,
   PromptPart,
   PromptResponse,
   ProviderDefinition,
   ProviderSession,
+  QuestionItem,
   Quota,
   SessionFact,
   SessionItem,
@@ -28,7 +30,10 @@ export type SessionEvent =
   | { type: 'status'; status: SessionStatus }
   | { type: 'queue'; queue: QueuedPrompt[] }
 
-export type Attention = { sessionId: string; reason: 'needs-input' | 'turn-ended' }
+export type Attention =
+  | { sessionId: string; reason: 'needs-input'; prompt: { kind: 'approval' | 'question'; text: string } }
+  | { sessionId: string; reason: 'turn-ended'; durationMs: number; edits: number; commands: number }
+  | { sessionId: string; reason: 'failed'; text: string }
 
 export type QuotaReport = { providerId: string; quota: Quota }
 
@@ -58,6 +63,21 @@ type Live = {
   /** Items received since the provider session was opened; zero means it never produced output. */
   received: number
   resumed: boolean
+  turnStartedAt?: number
+}
+
+/** Files edited and commands run since the last user message. */
+function lastTurnWork(items: Map<string, SessionItem>): { edits: number; commands: number } {
+  let files = new Set<string>()
+  let commands = 0
+  for (const item of items.values()) {
+    if (item.kind === 'message' && item.role === 'user') {
+      files = new Set()
+      commands = 0
+    } else if (item.kind === 'diff') files.add(item.path)
+    else if (item.kind === 'tool' && item.toolKind === 'execute') commands++
+  }
+  return { edits: files.size, commands }
 }
 
 const NEW_TITLE = 'New chat'
@@ -276,6 +296,7 @@ export class SessionManager {
     if (live.record.title === NEW_TITLE) live.record.title = titleFrom(parts)
     live.record.updatedAt = new Date().toISOString()
     this.setStatus(live, 'running')
+    live.turnStartedAt = Date.now()
     this.upsert(live, { kind: 'message', id: `user:${randomUUID()}`, role: 'user', parts })
     try {
       const session = await this.connect(live)
@@ -332,18 +353,22 @@ export class SessionManager {
     live.items.set(item.id, item)
     live.journal.append(item)
     this.broadcast(live, { type: 'item', item })
-    if (item.kind === 'approval' || item.kind === 'question') this.promptChanged(live, item.id, item.resolved !== undefined)
+    if (item.kind === 'approval' || item.kind === 'question') this.promptChanged(live, item)
     if (item.kind === 'turn' && item.state === 'ended') this.turnEnded(live)
   }
 
-  private promptChanged(live: Live, id: string, resolved: boolean): void {
-    if (!resolved) {
-      live.prompts.add(id)
+  private promptChanged(live: Live, item: ApprovalItem | QuestionItem): void {
+    if (item.resolved === undefined) {
+      live.prompts.add(item.id)
       this.setStatus(live, 'needs-input')
-      this.attention.fire({ sessionId: live.record.id, reason: 'needs-input' })
+      const prompt =
+        item.kind === 'approval'
+          ? { kind: 'approval' as const, text: [item.title, item.detail?.split('\n')[0]].filter(Boolean).join(': ') }
+          : { kind: 'question' as const, text: item.questions[0]?.question ?? item.title ?? 'Question' }
+      this.attention.fire({ sessionId: live.record.id, reason: 'needs-input', prompt })
       return
     }
-    live.prompts.delete(id)
+    live.prompts.delete(item.id)
     if (live.prompts.size === 0 && live.status === 'needs-input') this.setStatus(live, 'running')
   }
 
@@ -353,7 +378,9 @@ export class SessionManager {
     void this.save(live)
     live.prompts.clear()
     this.setStatus(live, 'idle')
-    this.attention.fire({ sessionId: live.record.id, reason: 'turn-ended' })
+    const { edits, commands } = lastTurnWork(live.items)
+    const durationMs = live.turnStartedAt ? Date.now() - live.turnStartedAt : 0
+    this.attention.fire({ sessionId: live.record.id, reason: 'turn-ended', durationMs, edits, commands })
     const next = live.queue.shift()
     if (!next) {
       this.wakeLane(live)
@@ -416,6 +443,7 @@ export class SessionManager {
     this.upsert(live, { kind: 'notice', id: `notice:${randomUUID()}`, level: 'error', text, action: 'retry' })
     live.prompts.clear()
     this.setStatus(live, 'error')
+    this.attention.fire({ sessionId: live.record.id, reason: 'failed', text })
   }
 
   private setStatus(live: Live, status: SessionStatus): void {

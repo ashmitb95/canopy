@@ -14,6 +14,7 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 | 8 | [Chat and sidebar details](2026-10-29-8-chat-and-sidebar-polish.md) | Quota pill, searchable switcher, working timer, turn footers, approval toasts | Done |
 | 9 | [Guided sign-in and welcome](2026-10-29-9-guided-sign-in-and-welcome.md) | Sign-in steps for Claude, Codex, and Grok; welcome screen | Done |
 | 10 | [Rich composer](2026-10-29-10-rich-composer.md) | `@` files, `/` commands, attachments, pasted images and text | Done |
+| 11 | [Questions, plan review, and permissions](2026-10-29-11-questions-and-permissions.md) | Agent questions, plan approval with the next mode, richer approvals with Review changes, Claude Auto mode | In progress |
 
 ## Conventions for whoever executes a plan
 

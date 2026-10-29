@@ -11,9 +11,10 @@ import { LaneTracker } from './lanes/tracker'
 import { providers } from './providers/registry'
 import { SessionManager } from './sessions/manager'
 import { SessionStore } from './sessions/store'
-import { ChatSurfaces, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
+import { ChatSurfaces, type LaneSource, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
 import { DIFF_SCHEME, DiffDocuments } from './ui/diff-documents'
 import { EditorContextTracker } from './ui/editor-context'
+import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { type LaneNode, type SessionNode, SessionsTree } from './ui/sessions-tree'
 import { SessionsStatusBar } from './ui/status-bar'
 
@@ -45,8 +46,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const lanes = coordinator
   const editor = new EditorContextTracker()
   const diffs = new DiffDocuments(manager)
-  const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs)
   const tree = new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label])), tracker)
+  const laneSource: LaneSource | undefined = tracker
+    ? { list: () => tree.lanes().map((lane) => ({ name: lane.name, where: laneDescription(lane) })), onDidChange: tracker.onDidChange }
+    : undefined
+  const laneChanges = new LaneChanges()
+  const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs, laneSource)
   context.subscriptions.push(
     editor,
     surfaces,
@@ -57,6 +62,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('agentdeck.openInEditor', () => surfaces.openSidebarInEditor()),
     vscode.commands.registerCommand('agentdeck.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
+    vscode.workspace.registerTextDocumentContentProvider(GIT_SCHEME, laneChanges),
+    vscode.commands.registerCommand('agentdeck.reviewLane', async (target: LaneNode | string) => {
+      const name = typeof target === 'string' ? target : target.lane.name
+      const lane = tree.lanes().find((candidate) => candidate.name === name)
+      if (lane && tracker) await laneChanges.open(lane, tracker.repos)
+    }),
     tree,
     new SessionsStatusBar(sessionManager),
     vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),

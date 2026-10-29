@@ -100,6 +100,11 @@
         "icon": "$(git-branch)"
       },
       {
+        "command": "agentdeck.reviewLane",
+        "title": "Review Lane Changes",
+        "category": "AgentDeck"
+      },
+      {
         "command": "agentdeck.laneIntoMain",
         "title": "Move into Main",
         "category": "AgentDeck"
@@ -148,6 +153,11 @@
           "command": "agentdeck.openLanePlan",
           "when": "view == agentdeck.sessions && viewItem == lane",
           "group": "1_open@1"
+        },
+        {
+          "command": "agentdeck.reviewLane",
+          "when": "view == agentdeck.sessions && viewItem == lane",
+          "group": "1_open@2"
         },
         {
           "command": "agentdeck.setLaneGoal",
@@ -218,6 +228,10 @@
         },
         {
           "command": "agentdeck.openLanePlan",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.reviewLane",
           "when": "false"
         },
         {

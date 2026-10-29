@@ -38,6 +38,153 @@
         }
       ]
     },
+    "configuration": {
+      "title": "AgentDeck",
+      "properties": {
+        "agentdeck.notifications.finished.level": {
+          "type": "string",
+          "enum": [
+            "sound+popup",
+            "sound",
+            "popup",
+            "off"
+          ],
+          "default": "sound+popup",
+          "description": "When a chat finishes a turn."
+        },
+        "agentdeck.notifications.finished.sound": {
+          "type": "string",
+          "enum": [
+            "Basso",
+            "Blow",
+            "Bottle",
+            "Frog",
+            "Funk",
+            "Glass",
+            "Hero",
+            "Morse",
+            "Ping",
+            "Pop",
+            "Purr",
+            "Sosumi",
+            "Submarine",
+            "Tink"
+          ],
+          "default": "Hero"
+        },
+        "agentdeck.notifications.approval.level": {
+          "type": "string",
+          "enum": [
+            "sound+popup",
+            "sound",
+            "popup",
+            "off"
+          ],
+          "default": "sound+popup",
+          "description": "When a chat needs an approval."
+        },
+        "agentdeck.notifications.approval.sound": {
+          "type": "string",
+          "enum": [
+            "Basso",
+            "Blow",
+            "Bottle",
+            "Frog",
+            "Funk",
+            "Glass",
+            "Hero",
+            "Morse",
+            "Ping",
+            "Pop",
+            "Purr",
+            "Sosumi",
+            "Submarine",
+            "Tink"
+          ],
+          "default": "Glass"
+        },
+        "agentdeck.notifications.question.level": {
+          "type": "string",
+          "enum": [
+            "sound+popup",
+            "sound",
+            "popup",
+            "off"
+          ],
+          "default": "sound+popup",
+          "description": "When a chat asks a question."
+        },
+        "agentdeck.notifications.question.sound": {
+          "type": "string",
+          "enum": [
+            "Basso",
+            "Blow",
+            "Bottle",
+            "Frog",
+            "Funk",
+            "Glass",
+            "Hero",
+            "Morse",
+            "Ping",
+            "Pop",
+            "Purr",
+            "Sosumi",
+            "Submarine",
+            "Tink"
+          ],
+          "default": "Ping"
+        },
+        "agentdeck.notifications.failed.level": {
+          "type": "string",
+          "enum": [
+            "sound+popup",
+            "sound",
+            "popup",
+            "off"
+          ],
+          "default": "sound+popup",
+          "description": "When a turn fails."
+        },
+        "agentdeck.notifications.failed.sound": {
+          "type": "string",
+          "enum": [
+            "Basso",
+            "Blow",
+            "Bottle",
+            "Frog",
+            "Funk",
+            "Glass",
+            "Hero",
+            "Morse",
+            "Ping",
+            "Pop",
+            "Purr",
+            "Sosumi",
+            "Submarine",
+            "Tink"
+          ],
+          "default": "Basso"
+        },
+        "agentdeck.notifications.volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1,
+          "description": "Sound volume (1 = system volume; macOS and Linux)."
+        },
+        "agentdeck.notifications.minDurationSeconds": {
+          "type": "number",
+          "minimum": 0,
+          "default": 10,
+          "description": "Only notify that a turn finished when it ran at least this long."
+        },
+        "agentdeck.notifications.muteWhenFocused": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stay quiet while VS Code is focused and the chat is visible."
+        }
+      }
+    },
     "commands": [
       {
         "command": "agentdeck.newChat",
@@ -117,6 +264,11 @@
       {
         "command": "agentdeck.handOff",
         "title": "Hand Off to\u2026",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.testNotification",
+        "title": "Test Notification",
         "category": "AgentDeck"
       },
       {

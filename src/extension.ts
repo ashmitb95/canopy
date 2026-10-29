@@ -16,6 +16,7 @@ import { ChatSurfaces, type LaneSource, PANEL_TYPE, SIDEBAR_VIEW } from './ui/ch
 import { DIFF_SCHEME, DiffDocuments } from './ui/diff-documents'
 import { EditorContextTracker } from './ui/editor-context'
 import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
+import { Notifier } from './ui/notifier'
 import { type LaneNode, type SessionNode, SessionsTree } from './ui/sessions-tree'
 import { SessionsStatusBar } from './ui/status-bar'
 
@@ -23,7 +24,8 @@ let manager: SessionManager | undefined
 
 export function activate(context: vscode.ExtensionContext): void {
   let env: Promise<Env> | undefined
-  const getEnv = () => (env ??= captureEnv())
+  // claude-notifier's hooks stay quiet for the CLIs AgentDeck runs; AgentDeck notifies itself.
+  const getEnv = () => (env ??= captureEnv().then((captured) => ({ ...captured, CLAUDE_NOTIFIER_DISABLE: '1' })))
   const storage = (context.storageUri ?? context.globalStorageUri).fsPath
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
   // Without a folder there is nothing to track (and the home folder is not scanned).
@@ -53,9 +55,19 @@ export function activate(context: vscode.ExtensionContext): void {
     : undefined
   const laneChanges = new LaneChanges()
   const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs, laneSource)
+  const notifier = new Notifier(
+    sessionManager,
+    new Map([...providers].map(([id, provider]) => [id, provider.label])),
+    (id) => surfaces.visible(id)
+  )
   context.subscriptions.push(
     editor,
     surfaces,
+    notifier,
+    vscode.commands.registerCommand('agentdeck.testNotification', async () => {
+      const event = await vscode.window.showQuickPick(['finished', 'approval', 'question', 'failed'], { placeHolder: 'Which notification?' })
+      if (event) notifier.test(event as 'finished' | 'approval' | 'question' | 'failed')
+    }),
     vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW, surfaces, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.window.registerWebviewPanelSerializer(PANEL_TYPE, surfaces),
     vscode.commands.registerCommand('agentdeck.newChat', () => surfaces.newChat('panel')),

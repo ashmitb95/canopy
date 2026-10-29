@@ -448,7 +448,7 @@ export class ChatSurfaces
     else await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
   }
 
-  private visible(sessionId: string): boolean {
+  visible(sessionId: string): boolean {
     if (this.panels.get(sessionId)?.panel.visible) return true
     return this.sidebar?.sessionId === sessionId && this.sidebarView?.visible === true
   }

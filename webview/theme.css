@@ -148,3 +148,8 @@ body.vscode-high-contrast [data-slot="button"]:is([data-variant="default"], [dat
     vertical-align: -1px;
   }
 }
+
+/* Streamdown pins the Mermaid zoom controls to the diagram's bottom-left corner; a left gutter keeps them off the nodes. */
+[data-streamdown='mermaid'] > .relative {
+  padding-left: 2.75rem;
+}

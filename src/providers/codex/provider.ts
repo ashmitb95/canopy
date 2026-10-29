@@ -19,7 +19,8 @@ import type {
   Quota,
   SessionFact,
   SessionItem,
-  SignInEvent
+  SignInEvent,
+  WriteBoundary
 } from '../../core/types'
 import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
@@ -89,7 +90,11 @@ function policy(mode: PermissionMode): { approvalPolicy: ApprovalPolicy; sandbox
     : { approvalPolicy: 'on-request', sandbox: 'workspace-write' }
 }
 
-function sandboxPolicy(mode: PermissionMode, cwd: string): SandboxPolicy {
+function sandboxPolicy(mode: PermissionMode, cwd: string, boundary?: WriteBoundary): SandboxPolicy {
+  // On a lane, writes stay inside the lane in every mode; full access keeps its network.
+  if (boundary) {
+    return { type: 'workspaceWrite', writableRoots: boundary.roots, networkAccess: mode === 'full-access', excludeTmpdirEnvVar: false, excludeSlashTmp: false }
+  }
   return mode === 'full-access'
     ? { type: 'dangerFullAccess' }
     : { type: 'workspaceWrite', writableRoots: [cwd], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false }
@@ -150,6 +155,7 @@ class CodexSession implements ProviderSession {
   private model: string | undefined
   private readonly skills = new Map<string, string>()
   private mode: PermissionMode
+  private boundary: WriteBoundary | undefined
   private turnId: string | undefined
   private ready = false
   private closed = false
@@ -210,7 +216,7 @@ class CodexSession implements ProviderSession {
         ...imageParts(parts).map((image) => ({ type: 'localImage', path: image.path }))
       ],
       approvalPolicy: policy(this.mode).approvalPolicy,
-      sandboxPolicy: sandboxPolicy(this.mode, this.options.cwd),
+      sandboxPolicy: sandboxPolicy(this.mode, this.options.cwd, this.boundary),
       model: this.model ?? null
     })
   }
@@ -233,6 +239,10 @@ class CodexSession implements ProviderSession {
 
   answer(itemId: string, response: PromptResponse): void {
     this.holder.answer(itemId, response)
+  }
+
+  setBoundary(boundary: WriteBoundary | undefined): void {
+    this.boundary = boundary
   }
 
   async refreshMcp(): Promise<void> {

@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import type {
   CanUseTool,
+  HookInput,
+  HookJSONOutput,
   PermissionResult,
   PermissionUpdate,
   Query,
@@ -26,9 +28,11 @@ import type {
   Quota,
   SessionFact,
   SessionItem,
-  SignInEvent
+  SignInEvent,
+  WriteBoundary
 } from '../../core/types'
 import type { Env } from '../../env'
+import { BRANCH_SWITCH, claudeWritePaths, switchesBranch, writable } from '../boundary'
 import { refreshUntilSettled } from '../mcp-settle'
 import { PromptHolder } from '../prompt-holder'
 import { claudeAnswers } from '../prompts'
@@ -142,6 +146,7 @@ class ClaudeSession implements ProviderSession {
   readonly onQuota = this.quotas.event
   private readonly translator = new ClaudeTranslator((item) => this.items.fire(item))
   private readonly holder = new PromptHolder((item) => this.items.fire(item))
+  private boundary: WriteBoundary | undefined
   private readonly query: Query
   private readonly inbox: SDKUserMessage[] = []
   private wake: (() => void) | null = null
@@ -170,7 +175,9 @@ class ClaudeSession implements ProviderSession {
         // Permits switching to full access mid-session; the starting mode is still options.mode.
         allowDangerouslySkipPermissions: true,
         ...(options.resumeId ? { resume: options.resumeId } : { sessionId: this.nativeId }),
-        canUseTool: (toolName, input, context) => this.requestApproval(toolName, input, context)
+        canUseTool: (toolName, input, context) => this.requestApproval(toolName, input, context),
+        // Hooks run in every permission mode, so lane boundaries hold in full access too.
+        hooks: { PreToolUse: [{ hooks: [(input) => this.guard(input)] }] }
       }
     })
     void this.pump()
@@ -217,6 +224,22 @@ class ClaudeSession implements ProviderSession {
 
   answer(itemId: string, response: PromptResponse): void {
     this.holder.answer(itemId, response)
+  }
+
+  setBoundary(boundary: WriteBoundary | undefined): void {
+    this.boundary = boundary
+  }
+
+  private async guard(input: HookInput): Promise<HookJSONOutput> {
+    const boundary = this.boundary
+    if (!boundary || input.hook_event_name !== 'PreToolUse') return {}
+    const toolInput = (input.tool_input ?? {}) as Record<string, unknown>
+    let reason: string | undefined
+    if (input.tool_name === 'Bash' && typeof toolInput.command === 'string' && switchesBranch(toolInput.command)) reason = BRANCH_SWITCH
+    for (const path of claudeWritePaths(input.tool_name, toolInput, this.options.cwd)) {
+      if (!reason && !writable(boundary, path)) reason = await boundary.outside(path)
+    }
+    return reason ? { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } } : {}
   }
 
   async refreshMcp(): Promise<void> {

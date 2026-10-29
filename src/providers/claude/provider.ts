@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, type UUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import type {
@@ -75,7 +75,7 @@ export const claudeProvider: ProviderDefinition = {
     if (!path) throw new Error('The claude CLI was not found.')
     return claudeSignIn(path, claudeEnv(env), onEvent)
   },
-  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact', 'fork']),
+  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact', 'fork', 'rewind', 'rewindFiles']),
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
@@ -163,7 +163,7 @@ class ClaudeSession implements ProviderSession {
     cliPath: string,
     private readonly options: OpenOptions
   ) {
-    this.nativeId = options.resumeId ?? randomUUID()
+    this.nativeId = options.resumeId && !options.resumeAt ? options.resumeId : randomUUID()
     this.model = options.model ?? 'default'
     this.effort = options.effort
     this.query = query({
@@ -175,12 +175,17 @@ class ClaudeSession implements ProviderSession {
         model: options.model,
         ...(options.effort ? { effort: options.effort as EffortLevel } : {}),
         includePartialMessages: true,
+        enableFileCheckpointing: true,
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
         permissionMode: MODES[options.mode],
         // Permits switching to full access mid-session; the starting mode is still options.mode.
         allowDangerouslySkipPermissions: true,
-        ...(options.resumeId ? { resume: options.resumeId } : { sessionId: this.nativeId }),
+        ...(options.resumeId && options.resumeAt
+          ? { resume: options.resumeId, resumeSessionAt: options.resumeAt, forkSession: true, sessionId: this.nativeId }
+          : options.resumeId
+            ? { resume: options.resumeId }
+            : { sessionId: this.nativeId }),
         canUseTool: (toolName, input, context) => this.requestApproval(toolName, input, context),
         // Hooks run in every permission mode, so lane boundaries hold in full access too.
         hooks: { PreToolUse: [{ hooks: [(input) => this.guard(input)] }] }
@@ -191,8 +196,9 @@ class ClaudeSession implements ProviderSession {
   }
 
   async prompt(parts: PromptPart[]): Promise<void> {
-    this.translator.startTurn()
-    this.push(parts)
+    const promptRef = randomUUID()
+    this.translator.startTurn(promptRef)
+    this.push(parts, promptRef)
   }
 
   async setEffort(effort: string): Promise<void> {
@@ -215,7 +221,7 @@ class ClaudeSession implements ProviderSession {
     this.facts.fire({ kind: 'effort', ...(this.effort ? { current: this.effort } : {}), available })
   }
 
-  private push(parts: PromptPart[]): void {
+  private push(parts: PromptPart[], uuid?: UUID): void {
     const text = encodePrompt(parts, this.options.cwd)
     const images = imageParts(parts)
     const content =
@@ -232,7 +238,7 @@ class ClaudeSession implements ProviderSession {
               }
             }))
           ]
-    this.inbox.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null })
+    this.inbox.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, ...(uuid ? { uuid } : {}) })
     this.wake?.()
   }
 
@@ -297,6 +303,14 @@ class ClaudeSession implements ProviderSession {
     const { forkSession } = await import('@anthropic-ai/claude-agent-sdk')
     const { sessionId } = await forkSession(this.nativeId, { dir: this.options.cwd })
     return sessionId
+  }
+
+  async rewind(target: { prompt?: string; keep?: string; files: boolean }): Promise<{ restart?: { resumeAt?: string } }> {
+    if (target.files && target.prompt) {
+      const result = await this.query.rewindFiles(target.prompt)
+      if (!result.canRewind) throw new Error(result.error ?? 'Claude could not restore the files.')
+    }
+    return { restart: { ...(target.keep ? { resumeAt: target.keep } : {}) } }
   }
 
   async dispose(): Promise<void> {

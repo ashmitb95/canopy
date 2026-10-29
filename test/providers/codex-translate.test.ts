@@ -28,7 +28,7 @@ describe('CodexTranslator', () => {
 
   it('opens and closes turns', () => {
     expect(run([['turn/started', turn('inProgress')], ['turn/completed', turn('completed')]])).toEqual([
-      { kind: 'turn', id: 'turn:u1', state: 'ended', stopReason: 'completed', durationMs: 900 }
+      { kind: 'turn', id: 'turn:u1', state: 'ended', promptRef: 'u1', stopReason: 'completed', durationMs: 900 }
     ])
   })
 
@@ -39,7 +39,7 @@ describe('CodexTranslator', () => {
 
   it('marks an interrupted turn', () => {
     const items = run([['turn/completed', turn('interrupted')]])
-    expect(items).toEqual([{ kind: 'turn', id: 'turn:u1', state: 'ended', stopReason: 'interrupted', durationMs: 900 }])
+    expect(items).toEqual([{ kind: 'turn', id: 'turn:u1', state: 'ended', promptRef: 'u1', stopReason: 'interrupted', durationMs: 900 }])
   })
 
   it('streams agent messages', () => {

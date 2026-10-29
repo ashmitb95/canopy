@@ -36,7 +36,7 @@ export class CodexTranslator {
       case 'turn/started': {
         const { turn } = params as { turn: Turn }
         this.interruptRequested = false
-        return this.upsert({ kind: 'turn', id: `turn:${turn.id}`, state: 'started' })
+        return this.upsert({ kind: 'turn', id: `turn:${turn.id}`, state: 'started', promptRef: turn.id })
       }
       case 'turn/completed':
         return this.turnCompleted((params as { turn: Turn }).turn)
@@ -60,6 +60,7 @@ export class CodexTranslator {
       kind: 'turn',
       id,
       state: 'ended',
+      promptRef: turn.id,
       stopReason: interrupted ? 'interrupted' : turn.status,
       durationMs: turn.durationMs ?? undefined
     })

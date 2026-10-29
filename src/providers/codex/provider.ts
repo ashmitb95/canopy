@@ -110,7 +110,7 @@ export const codexProvider: ProviderDefinition = {
     if (!path) throw new Error('The codex CLI was not found.')
     return codexSignIn(path, env, onEvent)
   },
-  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact', 'fork']),
+  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact', 'fork', 'rewind']),
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
@@ -301,6 +301,11 @@ class CodexSession implements ProviderSession {
   async fork(): Promise<string> {
     const result = await this.rpc.request<{ thread: { id: string } }>('thread/fork', { threadId: this.nativeId, excludeTurns: true })
     return result.thread.id
+  }
+
+  async rewind(target: { prompt?: string; keep?: string; files: boolean }): Promise<{ restart?: { resumeAt?: string } }> {
+    if (target.prompt) await this.rpc.request('thread/revert', { threadId: this.nativeId, beforeTurnId: target.prompt })
+    return {}
   }
 
   async dispose(): Promise<void> {

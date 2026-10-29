@@ -20,13 +20,17 @@ export class ClaudeTranslator {
   private readonly tools = new Map<string, ToolItem>()
   private turnId = ''
   private interruptRequested = false
+  private promptRef: string | undefined
+  private lastUuid: string | undefined
 
   constructor(private readonly emit: (item: SessionItem) => void) {}
 
-  startTurn(): void {
+  startTurn(promptRef?: string): void {
     this.turnId = `turn:${randomUUID()}`
     this.interruptRequested = false
-    this.emit({ kind: 'turn', id: this.turnId, state: 'started' })
+    this.promptRef = promptRef
+    this.lastUuid = undefined
+    this.emit({ kind: 'turn', id: this.turnId, state: 'started', ...(promptRef ? { promptRef } : {}) })
   }
 
   interrupted(): void {
@@ -34,6 +38,7 @@ export class ClaudeTranslator {
   }
 
   feed(message: SDKMessage): void {
+    if ((message.type === 'assistant' || message.type === 'user') && !message.parent_tool_use_id && message.uuid) this.lastUuid = message.uuid
     switch (message.type) {
       case 'stream_event':
         return this.streamEvent(message)
@@ -134,7 +139,12 @@ export class ClaudeTranslator {
   private result(message: Message<'result'>): void {
     const turnId = this.turnId || `turn:${randomUUID()}`
     const stopReason = this.interruptRequested ? 'interrupted' : message.subtype
-    this.emit({ kind: 'turn', id: turnId, state: 'ended', stopReason, durationMs: message.duration_ms })
+    this.emit({ kind: 'turn', id: turnId, state: 'ended',
+      stopReason,
+      durationMs: message.duration_ms,
+      ...(this.promptRef ? { promptRef: this.promptRef } : {}),
+      ...(this.lastUuid ? { ref: this.lastUuid } : {})
+    })
     if (message.is_error && !this.interruptRequested) {
       const result = message.subtype === 'success' ? message.result : `The turn ended with ${message.subtype}.`
       const text = LONG_CONTEXT.test(result) ? `${result}\n${LONG_CONTEXT_HINT}` : result

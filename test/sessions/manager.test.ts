@@ -297,4 +297,41 @@ describe('SessionManager', () => {
     sessions[0].emit({ kind: 'diff', id: 'd2', path: '/w/b.ts', oldText: null, newText: 'c' })
     expect(manager.diffPaths(id)).toEqual(['/w/a.ts', '/w/b.ts'])
   })
+
+  it('lets a decorator add to what the provider receives while the transcript keeps what the user wrote', async () => {
+    const { provider, sessions } = fakeProvider()
+    const manager = new SessionManager({
+      providers: new Map([[provider.id, provider]]),
+      store: new SessionStore(new MemoryMemento()),
+      journalDir: mkdtempSync(join(tmpdir(), 'agentdeck-manager-')),
+      cwd: '/work',
+      env: async () => ({ PATH: '/bin' }),
+      decorate: async (record, parts) => {
+        record.laneSeen = { lane: 'x', at: 'now', repos: {} }
+        return [...parts, { type: 'text', text: '<lane name="x" />' }]
+      }
+    })
+    const { id } = await manager.create('fake')
+    const events = watch(manager, id)
+    await manager.prompt(id, text('hello'))
+    expect(sessions[0].prompts[0]).toEqual([...text('hello'), { type: 'text', text: '<lane name="x" />' }])
+    expect(events.find((event) => event.type === 'item' && event.item.kind === 'message')).toMatchObject({
+      item: { role: 'user', parts: text('hello') }
+    })
+    expect(manager.list()[0].record.laneSeen).toEqual({ lane: 'x', at: 'now', repos: {} })
+  })
+
+  it('knows the last reply and forgets what a chat saw when it changes lane', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('hi'))
+    sessions[0].emit({ kind: 'message', id: 'm1', role: 'assistant', text: 'first', streaming: false })
+    sessions[0].emit({ kind: 'message', id: 'm2', role: 'assistant', text: 'second', streaming: false })
+    expect(manager.lastReply(id)).toBe('second')
+    await manager.setLane(id, 'a')
+    const record = manager.list()[0].record
+    record.laneSeen = { lane: 'a', at: 'now', repos: {} }
+    await manager.setLane(id, 'b')
+    expect(manager.list()[0].record.laneSeen).toBeUndefined()
+  })
 })

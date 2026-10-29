@@ -40,6 +40,7 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 | 34 | Workflows (Research, Plan, Build, Review stages with per-task-type default providers) are opt-in and never advance on their own | Explicit handoffs keep each stage a real, reviewable session without an autonomous router. |
 | 35 | Notifications are native, from AgentDeck's own session events, carrying over claude-notifier's behaviour; spawned CLIs get `CLAUDE_NOTIFIER_DISABLE=1` | AgentDeck knows every event directly; the env var stops claude-notifier's hooks double-notifying. |
 | 36 | Lanes stay implicit in the UI: the sidebar groups chats by lane with per-repo location; no Control Center board or lane pages. Foundations first; UI only when a feature needs it | Mockups of a board, a lane page, and context panels all made the tool a dashboard to manage. The value is the coordination underneath (one writer, main swap, warm worktrees, briefs). |
+| 37 | Cursor runs as `cursor-agent acp`, not `agent acp` | Grok's CLI also installs an `agent` binary; the explicit name avoids starting the wrong agent. Cursor's blocking `cursor/ask_question` and `cursor/create_plan` get a JSON-RPC error until their formats are verified. |
 
 ## Findings from the proof of concept
 
@@ -47,4 +48,3 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 - The Agent SDK is ESM and reads `import.meta.url`; the CJS extension bundle defines it from `__filename`.
 - Dropping `ANTHROPIC_API_KEY` from the child environment keeps Claude on the subscription (the session reports `apiKeySource: none`).
 - `vscode.window.activeTextEditor` is undefined while a webview or panel has focus; editor context falls back to the last focused file, then any visible file.
-| 37 | Cursor runs as `cursor-agent acp`, not `agent acp` | Grok's CLI also installs an `agent` binary; the explicit name avoids starting the wrong agent. Cursor's blocking `cursor/ask_question` and `cursor/create_plan` get a JSON-RPC error until their formats are verified. |

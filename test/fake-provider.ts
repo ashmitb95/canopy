@@ -66,6 +66,10 @@ export class FakeSession implements ProviderSession {
     this.boundaries.push(boundary)
   }
 
+  async fork(): Promise<string> {
+    return `${this.nativeId}-fork`
+  }
+
   async dispose(): Promise<void> {
     this.disposed = true
     this.exits.fire({})

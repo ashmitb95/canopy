@@ -468,4 +468,26 @@ describe('SessionManager', () => {
     expect(sessions[0].compacted).toBe(1)
     expect(events.some((event) => event.type === 'item' && event.item.kind === 'notice' && /Compacting/.test(event.item.text))).toBe(true)
   })
+
+  it('forks a chat into a new one with the same transcript that resumes the forked native session', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.setLane(id, 'x')
+    await manager.prompt(id, text('hello'))
+    sessions[0].emit({ kind: 'message', id: 'm1', role: 'assistant', text: 'hi', streaming: false })
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended' })
+    const fork = await manager.fork(id)
+    expect(fork).toMatchObject({ title: expect.stringMatching(/\(fork\)$/), hasTurns: true, laneId: 'x', nativeId: `${sessions[0].nativeId}-fork` })
+    expect(fork.id).not.toBe(id)
+    await manager.warm(fork.id)
+    expect(sessions[1].options.resumeId).toBe(`${sessions[0].nativeId}-fork`)
+    const snapshot = await new Promise<unknown>((resolve) => manager.subscribe(fork.id, (event) => event.type === 'snapshot' && resolve(event)))
+    expect(snapshot).toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: 'm1' })]) })
+  })
+
+  it('refuses to fork a chat with no turns yet', async () => {
+    const { manager } = setup()
+    const { id } = await manager.create('fake')
+    await expect(manager.fork(id)).rejects.toThrow(/Send a message first/)
+  })
 })

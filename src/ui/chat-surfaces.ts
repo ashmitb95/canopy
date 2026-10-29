@@ -571,6 +571,7 @@ export class ChatSurfaces
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="${asset('codicon.css')}">
+<link rel="stylesheet" href="${asset('katex.css')}">
 <link rel="stylesheet" href="${asset('webview.css')}">
 </head>
 <body data-surface="${kind}">

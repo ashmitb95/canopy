@@ -77,6 +77,15 @@ const items: SessionItem[] = [
     oldText: 'setTimeout(() => attempt(n + 1), delay)',
     newText: 'await sleep(delay)\nreturn attempt(n + 1)'
   },
+  { kind: 'tool', id: 'tool5', title: 'Read /work/src/sleep.ts', toolKind: 'read', status: 'done', paths: ['/work/src/sleep.ts'] },
+  { kind: 'tool', id: 'tool6', title: 'Read /work/src/api.ts', toolKind: 'read', status: 'done', paths: ['/work/src/api.ts'] },
+  {
+    kind: 'message',
+    id: 'm-math',
+    role: 'assistant',
+    streaming: false,
+    text: 'The backoff grows as $$d_n = d_0 \\cdot 2^n$$ and the flow is:\n\n```mermaid\ngraph LR\n  A[request] --> B{ok?}\n  B -- no --> C[wait d_n]\n  C --> A\n```'
+  },
   {
     kind: 'approval',
     id: 'approval:1',

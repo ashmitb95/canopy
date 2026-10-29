@@ -54,6 +54,8 @@ function styles(outdir) {
   })
   cpSync('node_modules/@vscode/codicons/dist/codicon.css', `${outdir}/codicon.css`)
   cpSync('node_modules/@vscode/codicons/dist/codicon.ttf', `${outdir}/codicon.ttf`)
+  cpSync('node_modules/katex/dist/katex.min.css', `${outdir}/katex.css`)
+  cpSync('node_modules/katex/dist/fonts', `${outdir}/fonts`, { recursive: true })
 }
 
 if (preview) {

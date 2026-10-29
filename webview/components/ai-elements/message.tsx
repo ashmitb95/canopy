@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { code } from "@streamdown/code";
+import { math } from "@streamdown/math";
+import { createMermaidPlugin } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
@@ -318,7 +320,14 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { code };
+// Mermaid follows the VS Code theme kind, read once when the webview loads.
+const dark =
+  typeof document !== "undefined" && document.body.classList.contains("vscode-dark");
+const streamdownPlugins = {
+  code,
+  math,
+  mermaid: createMermaidPlugin({ config: { theme: dark ? "dark" : "default" } }),
+};
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (

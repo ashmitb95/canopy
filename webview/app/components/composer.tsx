@@ -9,6 +9,7 @@ import type { ChatState } from '../state'
 import { Codicon } from './codicon'
 import { ContextMeter } from './context-meter'
 import { FilePill } from './file-pill'
+import { LanePicker } from './lane-picker'
 import { McpPopover } from './mcp-popover'
 import { ModelPicker } from './model-picker'
 import { ModePicker } from './mode-picker'
@@ -72,6 +73,7 @@ export function Composer({ state }: { state: ChatState }) {
             current={state.facts.mode?.kind === 'mode' ? state.facts.mode.current : (state.record?.mode ?? 'ask')}
             available={state.provider?.modes ?? []}
           />
+          <LanePicker lanes={state.lanes} current={state.record?.laneId} />
           <McpPopover fact={state.facts.mcp?.kind === 'mcp' ? state.facts.mcp : undefined} />
         </div>
         <ContextMeter fact={state.facts.context?.kind === 'context' ? state.facts.context : undefined} />

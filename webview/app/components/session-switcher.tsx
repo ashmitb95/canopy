@@ -15,6 +15,7 @@ import type { WebviewMessage } from '../../../src/ui/protocol'
 import { relativeTime } from '../../../src/ui/time'
 import { shortWindow } from '../format'
 import { send } from '../host'
+import { groupRecent } from '../lanes'
 import type { ChatState } from '../state'
 import { Codicon } from './codicon'
 import { ProviderAvatar } from './provider-avatar'
@@ -82,21 +83,23 @@ export function SessionSwitcher({ state }: { state: ChatState }) {
               })}
             </CommandGroup>
             <CommandSeparator />
-            <CommandGroup heading="Recent">
-              {state.sessions.map((session) => (
-                <CommandItem
-                  key={session.id}
-                  value={`session:${session.id}`}
-                  keywords={[session.title]}
-                  onSelect={() => choose({ type: 'switchSession', sessionId: session.id })}
-                >
-                  <StatusDot status={session.status} />
-                  <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                  {session.inTab && <span className="rounded border px-1 text-[10px] text-muted-foreground">in tab</span>}
-                  <span className="text-xs text-muted-foreground">{relativeTime(session.updatedAt)}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {groupRecent(state.sessions).map((group) => (
+              <CommandGroup key={group.heading} heading={group.heading}>
+                {group.sessions.map((session) => (
+                  <CommandItem
+                    key={session.id}
+                    value={`session:${session.id}`}
+                    keywords={[session.title, ...(session.laneId ? [session.laneId] : [])]}
+                    onSelect={() => choose({ type: 'switchSession', sessionId: session.id })}
+                  >
+                    <StatusDot status={session.status} />
+                    <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                    {session.inTab && <span className="rounded border px-1 text-[10px] text-muted-foreground">in tab</span>}
+                    <span className="text-xs text-muted-foreground">{relativeTime(session.updatedAt)}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
           </CommandList>
           <div className="flex gap-3 border-t px-3 py-1.5 text-[11px] text-muted-foreground">
             <span>↑↓ navigate</span>

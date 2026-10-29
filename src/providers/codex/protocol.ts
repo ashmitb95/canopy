@@ -66,7 +66,14 @@ export type McpServerStatus = {
   toolsError: string | null
 }
 
-export type ModelInfo = { id: string; displayName: string; description: string; hidden: boolean }
+export type ModelInfo = {
+  id: string
+  displayName: string
+  description: string
+  hidden: boolean
+  supportedReasoningEfforts?: { reasoningEffort: string }[]
+  defaultReasoningEffort?: string
+}
 
 export type ApprovalPolicy = 'on-request' | 'never'
 export type SandboxMode = 'workspace-write' | 'danger-full-access'

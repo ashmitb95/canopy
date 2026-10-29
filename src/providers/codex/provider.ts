@@ -110,7 +110,7 @@ export const codexProvider: ProviderDefinition = {
     if (!path) throw new Error('The codex CLI was not found.')
     return codexSignIn(path, env, onEvent)
   },
-  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context']),
+  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer']),
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
@@ -153,6 +153,8 @@ class CodexSession implements ProviderSession {
   private readonly startup = new Map<string, McpServer['status']>()
   private models: ModelOption[] = []
   private model: string | undefined
+  private effort: string | undefined
+  private efforts = new Map<string, { levels: string[]; default?: string }>()
   private readonly skills = new Map<string, string>()
   private mode: PermissionMode
   private boundary: WriteBoundary | undefined
@@ -183,6 +185,7 @@ class CodexSession implements ProviderSession {
   ) {
     this.mode = options.mode
     this.model = options.model
+    this.effort = options.effort
     rpc.onNotification(({ method, params }) => this.notification(method, params))
     rpc.onRequest((request) => this.serverRequest(request))
     child.stderr?.setEncoding('utf8')
@@ -199,26 +202,47 @@ class CodexSession implements ProviderSession {
   async prompt(parts: PromptPart[]): Promise<void> {
     await this.rpc.request('turn/start', {
       threadId: this.nativeId,
-      input: [
-        ...parts.flatMap((part) =>
-          part.type === 'command' && this.skills.has(part.name)
-            ? [{ type: 'skill', name: part.name, path: this.skills.get(part.name) }]
-            : []
-        ),
-        {
-          type: 'text',
-          text: encodePrompt(
-            parts.filter((part) => !(part.type === 'command' && this.skills.has(part.name))),
-            this.options.cwd
-          ),
-          text_elements: []
-        },
-        ...imageParts(parts).map((image) => ({ type: 'localImage', path: image.path }))
-      ],
+      input: this.input(parts),
       approvalPolicy: policy(this.mode).approvalPolicy,
       sandboxPolicy: sandboxPolicy(this.mode, this.options.cwd, this.boundary),
-      model: this.model ?? null
+      model: this.model ?? null,
+      effort: this.effort ?? null
     })
+  }
+
+  async setEffort(effort: string): Promise<void> {
+    this.effort = effort
+    this.fireEffort()
+  }
+
+  async steer(parts: PromptPart[]): Promise<void> {
+    if (!this.turnId) return this.prompt(parts)
+    await this.rpc.request('turn/steer', { threadId: this.nativeId, expectedTurnId: this.turnId, input: this.input(parts) })
+  }
+
+  private fireEffort(): void {
+    const model = this.efforts.get(this.model ?? '')
+    const current = this.effort ?? model?.default
+    this.facts.fire({ kind: 'effort', ...(current ? { current } : {}), available: model?.levels ?? [] })
+  }
+
+  private input(parts: PromptPart[]) {
+    return [
+      ...parts.flatMap((part) =>
+        part.type === 'command' && this.skills.has(part.name)
+          ? [{ type: 'skill', name: part.name, path: this.skills.get(part.name) }]
+          : []
+      ),
+      {
+        type: 'text',
+        text: encodePrompt(
+          parts.filter((part) => !(part.type === 'command' && this.skills.has(part.name))),
+          this.options.cwd
+        ),
+        text_elements: []
+      },
+      ...imageParts(parts).map((image) => ({ type: 'localImage', path: image.path }))
+    ]
   }
 
   async cancel(): Promise<void> {
@@ -230,6 +254,7 @@ class CodexSession implements ProviderSession {
   async setModel(id: string): Promise<void> {
     this.model = id
     this.facts.fire({ kind: 'model', current: id, available: this.models })
+    this.fireEffort()
   }
 
   async setMode(mode: PermissionMode): Promise<void> {
@@ -294,11 +319,18 @@ class CodexSession implements ProviderSession {
     try {
       const { data } = await this.rpc.request<{ data: ModelInfo[] }>('model/list', {})
       this.models = data.filter((model) => !model.hidden).map((model) => ({ id: model.id, label: model.displayName, description: model.description }))
+      this.efforts = new Map(
+        data.map((model) => [
+          model.id,
+          { levels: (model.supportedReasoningEfforts ?? []).map((option) => option.reasoningEffort), default: model.defaultReasoningEffort }
+        ])
+      )
     } catch {
       // The model picker then offers only the current model.
     }
     this.facts.fire({ kind: 'mode', current: this.mode, available: MODE_LIST })
     this.facts.fire({ kind: 'model', current: this.model ?? '', available: this.models })
+    this.fireEffort()
     try {
       const { data } = await this.rpc.request<{
         data: { skills: { name: string; description: string; shortDescription?: string; path: string; enabled: boolean }[] }[]

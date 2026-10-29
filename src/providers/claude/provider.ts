@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import type {
   CanUseTool,
+  EffortLevel,
   HookInput,
   HookJSONOutput,
   PermissionResult,
@@ -74,7 +75,7 @@ export const claudeProvider: ProviderDefinition = {
     if (!path) throw new Error('The claude CLI was not found.')
     return claudeSignIn(path, claudeEnv(env), onEvent)
   },
-  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context']),
+  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer']),
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
@@ -153,6 +154,8 @@ class ClaudeSession implements ProviderSession {
   private closed = false
   private models: ModelOption[] = []
   private model: string
+  private efforts = new Map<string, string[]>()
+  private effort: string | undefined
 
   constructor(
     query: QueryFn,
@@ -161,6 +164,7 @@ class ClaudeSession implements ProviderSession {
   ) {
     this.nativeId = options.resumeId ?? randomUUID()
     this.model = options.model ?? 'default'
+    this.effort = options.effort
     this.query = query({
       prompt: this.messages(),
       options: {
@@ -168,6 +172,7 @@ class ClaudeSession implements ProviderSession {
         cwd: options.cwd,
         env: claudeEnv(options.env),
         model: options.model,
+        ...(options.effort ? { effort: options.effort as EffortLevel } : {}),
         includePartialMessages: true,
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'],
@@ -186,6 +191,26 @@ class ClaudeSession implements ProviderSession {
 
   async prompt(parts: PromptPart[]): Promise<void> {
     this.translator.startTurn()
+    this.push(parts)
+  }
+
+  async setEffort(effort: string): Promise<void> {
+    await this.query.applyFlagSettings({ effortLevel: effort as EffortLevel })
+    this.effort = effort
+    this.fireEffort()
+  }
+
+  async steer(parts: PromptPart[]): Promise<void> {
+    // The CLI reads streaming input during a turn and takes the message at its next step.
+    this.push(parts)
+  }
+
+  private fireEffort(): void {
+    const available = this.efforts.get(this.model) ?? this.efforts.get(this.models.find((model) => model.resolved === this.model)?.id ?? '') ?? []
+    this.facts.fire({ kind: 'effort', ...(this.effort ? { current: this.effort } : {}), available })
+  }
+
+  private push(parts: PromptPart[]): void {
     const text = encodePrompt(parts, this.options.cwd)
     const images = imageParts(parts)
     const content =
@@ -215,6 +240,7 @@ class ClaudeSession implements ProviderSession {
     await this.query.setModel(id)
     this.model = id
     this.facts.fire({ kind: 'model', current: id, available: this.models })
+    this.fireEffort()
   }
 
   async setMode(mode: PermissionMode): Promise<void> {
@@ -312,11 +338,13 @@ class ClaudeSession implements ProviderSession {
         description: model.description,
         resolved: model.resolvedModel
       }))
+      this.efforts = new Map(models.map((model) => [model.value, model.supportedEffortLevels ?? []]))
     } catch {
       // The model picker then offers only the current model.
     }
     this.facts.fire({ kind: 'mode', current: this.options.mode, available: MODE_LIST })
     this.facts.fire({ kind: 'model', current: this.model, available: this.models })
+    this.fireEffort()
     try {
       const commands = await this.query.supportedCommands()
       this.facts.fire({

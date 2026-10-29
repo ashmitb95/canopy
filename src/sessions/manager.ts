@@ -199,6 +199,14 @@ export class SessionManager {
     await live.session?.setEffort?.(effort)
   }
 
+  async compact(id: string): Promise<void> {
+    const live = this.load(id)
+    const session = live.session ?? (await this.connect(live))
+    if (!session.compact) return
+    this.notify(id, 'Compacting the conversation…')
+    await session.compact()
+  }
+
   /** Sends a queued message into the running turn now; when nothing is running it is simply sent. */
   async steer(id: string, queuedId: string): Promise<void> {
     const live = this.load(id)

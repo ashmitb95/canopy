@@ -110,7 +110,7 @@ export const codexProvider: ProviderDefinition = {
     if (!path) throw new Error('The codex CLI was not found.')
     return codexSignIn(path, env, onEvent)
   },
-  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer']),
+  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact']),
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
@@ -213,6 +213,10 @@ class CodexSession implements ProviderSession {
   async setEffort(effort: string): Promise<void> {
     this.effort = effort
     this.fireEffort()
+  }
+
+  async compact(): Promise<void> {
+    await this.rpc.request('thread/compact/start', { threadId: this.nativeId })
   }
 
   async steer(parts: PromptPart[]): Promise<void> {

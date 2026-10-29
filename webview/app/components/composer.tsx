@@ -101,7 +101,10 @@ export function Composer({ state }: { state: ChatState }) {
           <LanePicker lanes={state.lanes} current={state.record?.laneId} />
           <McpPopover fact={state.facts.mcp?.kind === 'mcp' ? state.facts.mcp : undefined} />
         </div>
-        <ContextMeter fact={state.facts.context?.kind === 'context' ? state.facts.context : undefined} />
+        <ContextMeter
+          fact={state.facts.context?.kind === 'context' ? state.facts.context : undefined}
+          canCompact={state.provider?.capabilities.includes('compact') ?? false}
+        />
         {busy ? (
           <Button key="stop" size="icon-sm" variant="secondary" className="shrink-0" aria-label="Stop" onClick={() => send({ type: 'cancel' })}>
             <Codicon name="debug-stop" />

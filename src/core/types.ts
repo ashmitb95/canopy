@@ -138,11 +138,17 @@ export type SessionFact =
   | { kind: 'model'; current: string; available: ModelOption[] }
   | { kind: 'effort'; current?: string; available: string[] }
   | { kind: 'mode'; current: PermissionMode; available: readonly PermissionMode[] }
-  | { kind: 'context'; usedTokens: number; maxTokens: number }
+  | {
+      kind: 'context'
+      usedTokens: number
+      maxTokens: number
+      /** Session total at API prices (Claude reports it; subscriptions are not billed this). */
+      costUsd?: number
+    }
   | { kind: 'mcp'; servers: McpServer[] }
   | { kind: 'commands'; items: CommandOption[] }
 
-export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context' | 'steer' | 'effort'
+export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context' | 'steer' | 'effort' | 'compact'
 
 /** An account's usage limits as its CLI last reported them; shown with their age. */
 export type Quota = {
@@ -193,6 +199,8 @@ export interface ProviderSession {
   setModel?(id: string): Promise<void>
   /** Sets the reasoning effort for this and later turns. */
   setEffort?(effort: string): Promise<void>
+  /** Summarizes the conversation to free context. */
+  compact?(): Promise<void>
   /** Adds a message to the running turn instead of waiting for it to end. */
   steer?(parts: PromptPart[]): Promise<void>
   setMode?(mode: PermissionMode): Promise<void>

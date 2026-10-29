@@ -78,6 +78,7 @@ export type WebviewMessage =
   | { type: 'setMode'; mode: PermissionMode }
   | { type: 'setEffort'; effort: string }
   | { type: 'steer'; queuedId: string }
+  | { type: 'compact' }
   | { type: 'refreshMcp' }
   | { type: 'reconnectMcp'; server: string }
   | { type: 'mcpSignIn'; server: string; scope?: string }

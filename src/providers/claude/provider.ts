@@ -75,7 +75,7 @@ export const claudeProvider: ProviderDefinition = {
     if (!path) throw new Error('The claude CLI was not found.')
     return claudeSignIn(path, claudeEnv(env), onEvent)
   },
-  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer']),
+  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact']),
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
@@ -156,6 +156,7 @@ class ClaudeSession implements ProviderSession {
   private model: string
   private efforts = new Map<string, string[]>()
   private effort: string | undefined
+  private costUsd: number | undefined
 
   constructor(
     query: QueryFn,
@@ -198,6 +199,10 @@ class ClaudeSession implements ProviderSession {
     await this.query.applyFlagSettings({ effortLevel: effort as EffortLevel })
     this.effort = effort
     this.fireEffort()
+  }
+
+  async compact(): Promise<void> {
+    await this.prompt([{ type: 'command', name: 'compact' }])
   }
 
   async steer(parts: PromptPart[]): Promise<void> {
@@ -317,7 +322,10 @@ class ClaudeSession implements ProviderSession {
           this.model = message.model
           this.facts.fire({ kind: 'model', current: this.model, available: this.models })
         }
-        if (message.type === 'result') void this.refreshContext()
+        if (message.type === 'result') {
+          this.costUsd = message.total_cost_usd
+          void this.refreshContext()
+        }
         if (message.type === 'rate_limit_event') {
           const quota = claudeQuota(message.rate_limit_info as RateLimitInfo)
           if (quota) this.quotas.fire(quota)
@@ -360,7 +368,12 @@ class ClaudeSession implements ProviderSession {
   private async refreshContext(): Promise<void> {
     try {
       const usage = await this.query.getContextUsage({ detail: 'summary' })
-      this.facts.fire({ kind: 'context', usedTokens: usage.totalTokens, maxTokens: usage.maxTokens })
+      this.facts.fire({
+        kind: 'context',
+        usedTokens: usage.totalTokens,
+        maxTokens: usage.maxTokens,
+        ...(this.costUsd !== undefined ? { costUsd: this.costUsd } : {})
+      })
     } catch {
       // Older CLIs lack this request; the context meter stays hidden.
     }

@@ -274,6 +274,9 @@ export class ChatSurfaces
       case 'steer':
         if (sessionId) await this.manager.steer(sessionId, message.queuedId)
         return
+      case 'compact':
+        if (sessionId) await this.manager.compact(sessionId)
+        return
       case 'refreshMcp':
         if (sessionId) await this.manager.refreshMcp(sessionId)
         return

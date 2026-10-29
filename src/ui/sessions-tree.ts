@@ -5,6 +5,7 @@ import type { LaneTracker } from '../lanes/tracker'
 import type { SessionManager } from '../sessions/manager'
 import type { SessionStatus } from '../sessions/store'
 import { relativeTime } from './time'
+import type { Unread } from './unread'
 
 export type SessionNode = {
   kind: 'session'
@@ -36,10 +37,11 @@ export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Dispo
   constructor(
     private readonly manager: SessionManager,
     private readonly labels: ReadonlyMap<string, string>,
-    private readonly tracker: LaneTracker | undefined
+    private readonly tracker: LaneTracker | undefined,
+    private readonly unread: Unread
   ) {
     this.view = vscode.window.createTreeView('agentdeck.sessions', { treeDataProvider: this })
-    this.subscriptions = [manager.onDidChange(() => this.refresh()), ...(tracker ? [tracker.onDidChange(() => this.refresh())] : [])]
+    this.subscriptions = [manager.onDidChange(() => this.refresh()), unread.onDidChange(() => this.refresh()), ...(tracker ? [tracker.onDidChange(() => this.refresh())] : [])]
     this.refresh()
   }
 
@@ -77,8 +79,9 @@ export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Dispo
     const item = new vscode.TreeItem(node.title)
     item.id = node.id
     item.description = relativeTime(node.updatedAt)
-    item.tooltip = `${node.provider} · ${node.status}`
-    item.iconPath = ICONS[node.status]
+    const unread = node.status === 'idle' && this.unread.has(node.id)
+    item.tooltip = `${unread ? 'Unread · ' : ''}${node.provider} · ${node.status}`
+    item.iconPath = unread ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('notificationsInfoIcon.foreground')) : ICONS[node.status]
     item.contextValue = 'session'
     item.command = { command: 'agentdeck.openSession', title: 'Open', arguments: [node] }
     return item

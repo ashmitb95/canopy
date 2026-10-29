@@ -26,6 +26,7 @@ export type SessionSummary = {
   status: SessionStatus
   updatedAt: string
   inTab: boolean
+  unread?: boolean
   laneId?: string
 }
 
@@ -57,6 +58,8 @@ export type HostMessage =
   | { type: 'reply'; requestId: number; value: unknown }
   /** Webview URI of the attachment store, for showing attached images. */
   | { type: 'assets'; attachments: string }
+  /** Files to put into the composer, from *Add to AgentDeck Chat*. */
+  | { type: 'insertAttachments'; attachments: Attachment[] }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -89,4 +92,7 @@ export type WebviewMessage =
   | { type: 'setLane'; laneId?: string }
   | { type: 'newLane' }
   | { type: 'handOff' }
+  | { type: 'forkSession' }
+  | { type: 'renameSession'; sessionId?: string }
+  | { type: 'deleteSession'; sessionId?: string }
   | { type: 'reviewLane'; laneId: string }

@@ -1,8 +1,41 @@
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
+import { send } from '../host'
 import type { ChatState } from '../state'
+import { Codicon } from './codicon'
 import { ProviderAvatar } from './provider-avatar'
 import { QuotaPill } from './quota-pill'
 import { SessionSwitcher } from './session-switcher'
 import { StatusBadge } from './status-badge'
+
+function ChatMenu({ state }: { state: ChatState }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="icon-xs" variant="ghost" className="shrink-0 text-muted-foreground" aria-label="Chat actions">
+          <Codicon name="kebab-vertical" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {state.provider?.capabilities.includes('fork') && (
+          <DropdownMenuItem onSelect={() => send({ type: 'forkSession' })}>Fork conversation</DropdownMenuItem>
+        )}
+        <DropdownMenuItem onSelect={() => send({ type: 'handOff' })}>Hand off to…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => send({ type: 'renameSession' })}>Rename…</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive" onSelect={() => send({ type: 'deleteSession' })}>
+          Delete…
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export function ChatHeader({ state }: { state: ChatState }) {
   if (!state.record) return null
@@ -14,7 +47,9 @@ export function ChatHeader({ state }: { state: ChatState }) {
         <ProviderAvatar providerId={state.record.providerId} className="size-6 text-[11px]" />
         <SessionSwitcher state={state} />
         <QuotaPill label={label} quota={quota} compact />
-        <StatusBadge status={state.status} />
+        <ChatMenu state={state} />
+        <ChatMenu state={state} />
+      <StatusBadge status={state.status} />
       </header>
     )
   }
@@ -26,6 +61,7 @@ export function ChatHeader({ state }: { state: ChatState }) {
         <div className="truncate text-xs text-muted-foreground">{label}</div>
       </div>
       <QuotaPill label={label} quota={quota} />
+      <ChatMenu state={state} />
       <StatusBadge status={state.status} />
     </header>
   )

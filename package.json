@@ -221,6 +221,11 @@
         "category": "AgentDeck"
       },
       {
+        "command": "agentdeck.forkSession",
+        "title": "Fork Conversation",
+        "category": "AgentDeck"
+      },
+      {
         "command": "agentdeck.renameSession",
         "title": "Rename…",
         "category": "AgentDeck"
@@ -345,6 +350,11 @@
           "command": "agentdeck.handOff",
           "when": "view == agentdeck.sessions && viewItem == session",
           "group": "1_open@3"
+        },
+        {
+          "command": "agentdeck.forkSession",
+          "when": "view == agentdeck.sessions && viewItem == session",
+          "group": "1_open@4"
         },
         {
           "command": "agentdeck.renameSession",

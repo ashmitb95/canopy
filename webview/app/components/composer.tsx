@@ -8,7 +8,7 @@ import { Drafts } from '../composer/drafts'
 import { onEdit } from '../composer/edit-bus'
 import { toDocument } from '../composer/prompt-document'
 import { PromptEditor, type PromptEditorHandle } from '../composer/prompt-editor'
-import { ask, persisted, send } from '../host'
+import { ask, onHostMessage, persisted, send } from '../host'
 import type { ChatState } from '../state'
 import { Codicon } from './codicon'
 import { ContextMeter } from './context-meter'
@@ -64,6 +64,14 @@ export function Composer({ state }: { state: ChatState }) {
   }, [state.sessionId, drafts])
 
   useEffect(() => onEdit((parts) => editor.current?.setContent(toDocument(parts))), [])
+
+  useEffect(
+    () =>
+      onHostMessage((message) => {
+        if (message.type === 'insertAttachments') editor.current?.insert(message.attachments)
+      }),
+    []
+  )
 
   // A file the user removed is offered again once they switch to another file.
   useEffect(() => setIncludeContext(true), [state.editorContext?.path])

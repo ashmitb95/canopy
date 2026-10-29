@@ -19,6 +19,7 @@ import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { Notifier } from './ui/notifier'
 import { type LaneNode, type SessionNode, SessionsTree } from './ui/sessions-tree'
 import { SessionsStatusBar } from './ui/status-bar'
+import { Unread } from './ui/unread'
 
 let manager: SessionManager | undefined
 
@@ -49,12 +50,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const lanes = coordinator
   const editor = new EditorContextTracker()
   const diffs = new DiffDocuments(manager)
-  const tree = new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label])), tracker)
+  const unread = new Unread(context.workspaceState)
+  const tree = new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label])), tracker, unread)
   const laneSource: LaneSource | undefined = tracker
     ? { list: () => tree.lanes().map((lane) => ({ name: lane.name, where: laneDescription(lane) })), onDidChange: tracker.onDidChange }
     : undefined
   const laneChanges = new LaneChanges()
-  const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs, laneSource)
+  const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs, unread, laneSource)
   const notifier = new Notifier(
     sessionManager,
     new Map([...providers].map(([id, provider]) => [id, provider.label])),
@@ -85,9 +87,19 @@ export function activate(context: vscode.ExtensionContext): void {
     new SessionsStatusBar(sessionManager),
     vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),
     vscode.commands.registerCommand('agentdeck.openSessionInSidebar', (node: SessionNode) => surfaces.showInSidebar(node.id)),
-    vscode.commands.registerCommand('agentdeck.renameSession', async (node: SessionNode) => {
+    vscode.commands.registerCommand('agentdeck.renameSession', async (node: { id: string; title: string }) => {
       const title = await vscode.window.showInputBox({ prompt: 'Session name', value: node.title })
       if (title?.trim()) await sessionManager.rename(node.id, title.trim())
+    }),
+    vscode.commands.registerCommand('agentdeck.forkSession', async (target?: SessionNode | string) => {
+      const id = typeof target === 'string' ? target : (target?.id ?? surfaces.activeSessionId())
+      if (!id) return
+      try {
+        const fork = await sessionManager.fork(id)
+        surfaces.openPanel(fork.id)
+      } catch (error) {
+        void vscode.window.showErrorMessage((error as Error).message)
+      }
     }),
     vscode.commands.registerCommand('agentdeck.moveSessionToLane', async (node: SessionNode) => {
       const none = { label: '$(circle-slash) No branch', lane: undefined }
@@ -174,7 +186,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await sessionManager.prompt(next.id, [{ type: 'text', text: text.trim() }])
     }),
     vscode.commands.registerCommand('agentdeck.stopSession', (node: SessionNode) => sessionManager.stop(node.id)),
-    vscode.commands.registerCommand('agentdeck.deleteSession', async (node: SessionNode) => {
+    vscode.commands.registerCommand('agentdeck.deleteSession', async (node: { id: string; title: string }) => {
       const choice = await vscode.window.showWarningMessage(`Delete “${node.title}”?`, { modal: true }, 'Delete')
       if (choice === 'Delete') await sessionManager.delete(node.id)
     })

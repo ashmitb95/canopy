@@ -90,12 +90,38 @@ export function SessionSwitcher({ state }: { state: ChatState }) {
                     key={session.id}
                     value={`session:${session.id}`}
                     keywords={[session.title, ...(session.laneId ? [session.laneId] : [])]}
+                    className="group/item"
                     onSelect={() => choose({ type: 'switchSession', sessionId: session.id })}
                   >
                     <StatusDot status={session.status} />
-                    <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                    <span className={cn('min-w-0 flex-1 truncate', session.unread && 'font-semibold')}>{session.title}</span>
                     {session.inTab && <span className="rounded border px-1 text-[10px] text-muted-foreground">in tab</span>}
+                    {session.unread && <span className="size-1.5 shrink-0 rounded-full bg-info" />}
                     <span className="text-xs text-muted-foreground">{relativeTime(session.updatedAt)}</span>
+                    <button
+                      type="button"
+                      aria-label="Rename"
+                      className="hidden text-muted-foreground hover:text-foreground group-hover/item:flex"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        choose({ type: 'renameSession', sessionId: session.id })
+                      }}
+                    >
+                      <Codicon name="edit" size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete"
+                      className="hidden text-muted-foreground hover:text-destructive group-hover/item:flex"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        choose({ type: 'deleteSession', sessionId: session.id })
+                      }}
+                    >
+                      <Codicon name="trash" size={12} />
+                    </button>
                   </CommandItem>
                 ))}
               </CommandGroup>

@@ -9,7 +9,9 @@ import { attachFile, saveImage } from './attachments'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
 import { FileSearch } from './file-search'
-import type { HostMessage, LaneInfo, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
+import type { Attachment, HostMessage, LaneInfo, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
+import { recentSessions } from './recent'
+import type { Unread } from './unread'
 
 export const PANEL_TYPE = 'agentdeck.chatPanel'
 export const SIDEBAR_VIEW = 'agentdeck.chat'
@@ -56,6 +58,7 @@ export class ChatSurfaces
     private readonly env: () => Promise<Env>,
     private readonly editor: EditorContextTracker,
     private readonly diffs: DiffDocuments,
+    private readonly unread: Unread,
     private readonly lanes?: LaneSource
   ) {
     this.attachmentsDir = join((context.storageUri ?? context.globalStorageUri).fsPath, 'attachments')
@@ -73,7 +76,8 @@ export class ChatSurfaces
         void this.context.globalState.update(QUOTA_KEY, this.quotas)
         this.broadcast({ type: 'quota', providerId, quota })
       }),
-      manager.onAttention((event) => this.attend(event))
+      manager.onAttention((event) => this.attend(event)),
+      unread.onDidChange(() => this.postSessions())
     )
   }
 
@@ -301,6 +305,18 @@ export class ChatSurfaces
       case 'handOff':
         if (sessionId) await vscode.commands.executeCommand('agentdeck.handOff', sessionId)
         return
+      case 'forkSession':
+        if (sessionId) await vscode.commands.executeCommand('agentdeck.forkSession', sessionId)
+        return
+      case 'renameSession':
+      case 'deleteSession': {
+        const target = message.sessionId ?? sessionId
+        const record = this.manager.list().find((entry) => entry.record.id === target)?.record
+        if (record) {
+          await vscode.commands.executeCommand(`agentdeck.${message.type}`, { kind: 'session', id: record.id, title: record.title })
+        }
+        return
+      }
       case 'newLane':
         await vscode.commands.executeCommand('agentdeck.newLane')
         return
@@ -353,6 +369,7 @@ export class ChatSurfaces
     void this.manager.warm(sessionId)
     void this.postProvider(surface)
     this.postLanes(surface)
+    this.unread.clear(sessionId)
   }
 
   private async createFor(surface: Surface): Promise<string> {
@@ -447,6 +464,7 @@ export class ChatSurfaces
 
   /** A toast when a chat that is not on screen needs approval. */
   private async attend({ sessionId, reason }: Attention): Promise<void> {
+    if ((reason === 'turn-ended' || reason === 'failed') && !this.visible(sessionId)) this.unread.mark(sessionId)
     if (reason !== 'needs-input' || this.visible(sessionId)) return
     const record = this.manager.list().find((entry) => entry.record.id === sessionId)?.record
     if (!record) return
@@ -455,6 +473,14 @@ export class ChatSurfaces
     if (choice !== 'Review') return
     if (this.panels.has(sessionId) || this.sidebar?.sessionId !== sessionId) this.openPanel(sessionId)
     else await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
+  }
+
+  /** Puts attachments into the composer of the chat in front: the active tab, else the sidebar (shown first). */
+  async insertAttachments(attachments: Attachment[]): Promise<void> {
+    const active = [...this.panels.values()].find(({ panel }) => panel.active)?.surface
+    if (active) return void this.post(active, { type: 'insertAttachments', attachments })
+    await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
+    if (this.sidebar) this.post(this.sidebar, { type: 'insertAttachments', attachments })
   }
 
   visible(sessionId: string): boolean {
@@ -481,9 +507,7 @@ export class ChatSurfaces
   /** The sidebar's session switcher lists recent sessions. */
   private postSessions(surface = this.sidebar): void {
     if (!surface || surface.kind !== 'view') return
-    const sessions = this.manager
-      .list()
-      .slice(0, 20)
+    const sessions = recentSessions(this.manager.list().map((entry) => ({ ...entry, updatedAt: entry.record.updatedAt })))
       .map(({ record, status }) => ({
         id: record.id,
         title: record.title,
@@ -491,6 +515,7 @@ export class ChatSurfaces
         status,
         updatedAt: record.updatedAt,
         inTab: this.panels.has(record.id),
+        ...(this.unread.has(record.id) ? { unread: true } : {}),
         ...(record.laneId ? { laneId: record.laneId } : {})
       }))
     this.post(surface, { type: 'sessions', sessions })

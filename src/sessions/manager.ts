@@ -11,7 +11,8 @@ import type {
   ProviderSession,
   Quota,
   SessionFact,
-  SessionItem
+  SessionItem,
+  WriteBoundary
 } from '../core/types'
 import type { Env } from '../env'
 import { Journal } from './journal'
@@ -39,6 +40,8 @@ export type SessionManagerDeps = {
   env: () => Promise<Env>
   /** Adds context to what the provider receives (the transcript keeps what the user wrote). May update the record, which is saved after. */
   decorate?: (record: SessionRecord, parts: PromptPart[]) => Promise<PromptPart[]>
+  /** Where the chat may write for its next turn; asked before every prompt. */
+  boundary?: (record: SessionRecord) => Promise<WriteBoundary | undefined>
 }
 
 type Live = {
@@ -124,9 +127,11 @@ export class SessionManager {
 
   async prompt(id: string, parts: PromptPart[]): Promise<void> {
     const live = this.load(id)
-    if (live.status === 'running' || live.status === 'needs-input') {
+    const writer = this.laneWriter(live)
+    if (live.status === 'running' || live.status === 'needs-input' || writer) {
       live.queue.push({ id: randomUUID(), parts })
       this.broadcast(live, { type: 'queue', queue: [...live.queue] })
+      if (writer) this.notify(id, `Waiting: ${live.record.laneId} is busy in “${writer.record.title}”.`)
       return
     }
     await this.send(live, parts)
@@ -204,6 +209,17 @@ export class SessionManager {
     return replies.at(-1)
   }
 
+  /** Chats on these lanes in the middle of a turn. */
+  busyOn(lanes: string[]): SessionRecord[] {
+    return [...this.live.values()]
+      .filter((live) => live.record.laneId !== undefined && lanes.includes(live.record.laneId) && isBusy(live.status))
+      .map((live) => live.record)
+  }
+
+  notify(id: string, text: string, level: 'info' | 'warning' | 'error' = 'info'): void {
+    this.upsert(this.load(id), { kind: 'notice', id: `notice:${randomUUID()}`, level, text })
+  }
+
   /** Stops the CLI. The session stays listed and resumes on the next prompt. */
   async stop(id: string): Promise<void> {
     const live = this.live.get(id)
@@ -263,6 +279,7 @@ export class SessionManager {
     this.upsert(live, { kind: 'message', id: `user:${randomUUID()}`, role: 'user', parts })
     try {
       const session = await this.connect(live)
+      if (this.deps.boundary) session.setBoundary?.(await this.deps.boundary(live.record).catch(() => undefined))
       const sent = this.deps.decorate ? await this.deps.decorate(live.record, parts).catch(() => parts) : parts
       live.record.hasTurns = true
       await this.save(live)
@@ -338,9 +355,32 @@ export class SessionManager {
     this.setStatus(live, 'idle')
     this.attention.fire({ sessionId: live.record.id, reason: 'turn-ended' })
     const next = live.queue.shift()
-    if (!next) return
+    if (!next) {
+      this.wakeLane(live)
+      return
+    }
     this.broadcast(live, { type: 'queue', queue: [...live.queue] })
     void this.send(live, next.parts)
+  }
+
+  /** Another chat on the same lane that is mid-turn: one writer per lane. */
+  private laneWriter(live: Live): Live | undefined {
+    const lane = live.record.laneId
+    if (!lane) return undefined
+    return [...this.live.values()].find((other) => other !== live && other.record.laneId === lane && isBusy(other.status))
+  }
+
+  /** When a lane frees up, the next chat waiting on it goes. */
+  private wakeLane(live: Live): void {
+    const lane = live.record.laneId
+    if (!lane) return
+    const waiting = [...this.live.values()].find(
+      (other) => other !== live && other.record.laneId === lane && !isBusy(other.status) && other.queue.length > 0
+    )
+    const next = waiting?.queue.shift()
+    if (!waiting || !next) return
+    this.broadcast(waiting, { type: 'queue', queue: [...waiting.queue] })
+    void this.send(waiting, next.parts)
   }
 
   private fact(live: Live, fact: SessionFact): void {
@@ -392,6 +432,10 @@ export class SessionManager {
   private async save(live: Live): Promise<void> {
     await this.deps.store.put(live.record)
   }
+}
+
+function isBusy(status: SessionStatus): boolean {
+  return status === 'running' || status === 'needs-input'
 }
 
 /** Items from a previous run that can no longer change. */

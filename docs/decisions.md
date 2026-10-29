@@ -41,6 +41,7 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 | 35 | Notifications are native, from AgentDeck's own session events, carrying over claude-notifier's behaviour; spawned CLIs get `CLAUDE_NOTIFIER_DISABLE=1` | AgentDeck knows every event directly; the env var stops claude-notifier's hooks double-notifying. |
 | 36 | Lanes stay implicit in the UI: the sidebar groups chats by lane with per-repo location; no Control Center board or lane pages. Foundations first; UI only when a feature needs it | Mockups of a board, a lane page, and context panels all made the tool a dashboard to manage. The value is the coordination underneath (one writer, main swap, warm worktrees, briefs). |
 | 37 | Cursor runs as `cursor-agent acp`, not `agent acp` | Grok's CLI also installs an `agent` binary; the explicit name avoids starting the wrong agent. Cursor's blocking `cursor/ask_question` and `cursor/create_plan` get a JSON-RPC error until their formats are verified. |
+| 38 | The left sidebar's Sessions list groups chats by provider, then by lane; chat lives in one AgentDeck tab in the secondary sidebar, where clicking a session opens it (*Open in Editor* moves it to a tab) | Matches how the chat tabs of other agent extensions sit together in the right bar; provider is the first thing people look for in history, lanes second. Supersedes the grouping in 36. |
 
 ## Findings from the proof of concept
 

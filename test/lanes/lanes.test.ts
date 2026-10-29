@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupSessions } from '../../src/lanes/group'
+import { groupByProvider, groupSessions } from '../../src/lanes/group'
 import { deriveLanes, laneDescription, laneForPath, laneFromPaths } from '../../src/lanes/lanes'
 import type { RepoState } from '../../src/lanes/state'
 
@@ -72,6 +72,23 @@ describe('groupSessions', () => {
       ],
       loose: [sessions[1]]
     })
+  })
+})
+
+describe('groupByProvider', () => {
+  it('groups by provider in the given order, then by the lanes each provider has chats on', () => {
+    const sessions = [
+      { id: 's1', provider: 'Codex', laneId: 'retry-fix' },
+      { id: 's2', provider: 'Claude' },
+      { id: 's3', provider: 'Codex' },
+      { id: 's4', provider: 'Muse' }
+    ]
+    const lanes = deriveLanes(repos, ['retry-fix'])
+    expect(groupByProvider(lanes, sessions, ['Claude', 'Codex'])).toEqual([
+      { provider: 'Claude', lanes: [], loose: [sessions[1]] },
+      { provider: 'Codex', lanes: [{ lane: lanes[1], sessions: [sessions[0]] }], loose: [sessions[2]] },
+      { provider: 'Muse', lanes: [], loose: [sessions[3]] }
+    ])
   })
 })
 

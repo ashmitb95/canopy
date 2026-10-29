@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { groupSessions } from '../lanes/group'
+import { groupByProvider, groupSessions } from '../lanes/group'
 import { deriveLanes, type Lane, laneDescription } from '../lanes/lanes'
 import type { LaneTracker } from '../lanes/tracker'
 import type { SessionManager } from '../sessions/manager'
@@ -16,9 +16,10 @@ export type SessionNode = {
   provider: string
   laneId?: string
 }
-export type LaneNode = { kind: 'lane'; lane: Lane; sessions: SessionNode[] }
-type LooseNode = { kind: 'loose'; sessions: SessionNode[] }
-type Node = SessionNode | LaneNode | LooseNode
+export type LaneNode = { kind: 'lane'; lane: Lane; sessions: SessionNode[]; provider?: string }
+type LooseNode = { kind: 'loose'; sessions: SessionNode[]; provider: string }
+type ProviderNode = { kind: 'provider'; provider: string; children: Node[] }
+type Node = SessionNode | LaneNode | LooseNode | ProviderNode
 
 const ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
   idle: new vscode.ThemeIcon('comment'),
@@ -51,19 +52,32 @@ export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Dispo
   }
 
   getChildren(element?: Node): Node[] {
-    if (element) return element.kind === 'session' ? [] : element.sessions
+    if (element) return element.kind === 'session' ? [] : element.kind === 'provider' ? element.children : element.sessions
     const sessions = this.sessions()
-    const grouped = groupSessions(this.lanes(), sessions)
-    // No lanes in this workspace: the plain list, as before.
-    if (grouped.lanes.length === 0) return sessions
-    const lanes: Node[] = grouped.lanes.map(({ lane, sessions }) => ({ kind: 'lane', lane, sessions }))
-    return grouped.loose.length > 0 ? [...lanes, { kind: 'loose', sessions: grouped.loose }] : lanes
+    const lanes = this.lanes()
+    const providers: Node[] = groupByProvider(lanes, sessions, [...this.labels.values()]).map(({ provider, lanes, loose }) => {
+      // A provider with no chats on a lane: its chats directly, without a "No branch" level.
+      if (lanes.length === 0) return { kind: 'provider', provider, children: loose }
+      const children: Node[] = lanes.map(({ lane, sessions }) => ({ kind: 'lane', lane, sessions, provider }))
+      return { kind: 'provider', provider, children: loose.length > 0 ? [...children, { kind: 'loose', sessions: loose, provider }] : children }
+    })
+    // Lanes with no chats yet stay listed, so their actions stay reachable.
+    const empty: Node[] = groupSessions(lanes, sessions)
+      .lanes.filter((group) => group.sessions.length === 0)
+      .map(({ lane }) => ({ kind: 'lane', lane, sessions: [] }))
+    return [...providers, ...empty]
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
+    if (node.kind === 'provider') {
+      const item = new vscode.TreeItem(node.provider, vscode.TreeItemCollapsibleState.Expanded)
+      item.id = `provider:${node.provider}`
+      item.iconPath = new vscode.ThemeIcon('hubot')
+      return item
+    }
     if (node.kind === 'lane') {
-      const item = new vscode.TreeItem(node.lane.name, vscode.TreeItemCollapsibleState.Expanded)
-      item.id = `lane:${node.lane.name}`
+      const item = new vscode.TreeItem(node.lane.name, node.sessions.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None)
+      item.id = `lane:${node.provider ?? ''}:${node.lane.name}`
       item.description = laneDescription(node.lane)
       item.tooltip = node.lane.repos.map((repo) => `${repo.repo}: ${repo.path}`).join('\n') || 'No checkout'
       item.iconPath = new vscode.ThemeIcon('git-branch')
@@ -72,7 +86,7 @@ export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Dispo
     }
     if (node.kind === 'loose') {
       const item = new vscode.TreeItem('No branch', vscode.TreeItemCollapsibleState.Expanded)
-      item.id = 'lane:none'
+      item.id = `lane:${node.provider}:none`
       item.iconPath = new vscode.ThemeIcon('circle-slash')
       return item
     }
@@ -83,7 +97,7 @@ export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Dispo
     item.tooltip = `${unread ? 'Unread · ' : ''}${node.provider} · ${node.status}`
     item.iconPath = unread ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('notificationsInfoIcon.foreground')) : ICONS[node.status]
     item.contextValue = 'session'
-    item.command = { command: 'agentdeck.openSession', title: 'Open', arguments: [node] }
+    item.command = { command: 'agentdeck.openSessionInSidebar', title: 'Open', arguments: [node] }
     return item
   }
 

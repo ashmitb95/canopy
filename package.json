@@ -43,7 +43,7 @@
         {
           "type": "webview",
           "id": "agentdeck.chat",
-          "name": "Chat"
+          "name": "AgentDeck"
         }
       ]
     },
@@ -402,12 +402,12 @@
         {
           "command": "agentdeck.openSession",
           "when": "view == agentdeck.sessions && viewItem == session",
-          "group": "1_open@1"
+          "group": "1_open@2"
         },
         {
           "command": "agentdeck.openSessionInSidebar",
           "when": "view == agentdeck.sessions && viewItem == session",
-          "group": "1_open@2"
+          "group": "1_open@1"
         },
         {
           "command": "agentdeck.handOff",

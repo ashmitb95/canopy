@@ -28,3 +28,28 @@ export function toParts(doc: JSONContent): PromptPart[] {
   flush()
   return parts
 }
+
+/** Prompt parts as composer content: the inverse of `toParts`, for history, drafts, and editing queued messages. */
+export function toDocument(parts: PromptPart[]): JSONContent {
+  const paragraphs: JSONContent[][] = [[]]
+  const current = () => paragraphs[paragraphs.length - 1]
+  // Pills get a space on each side for reading; toParts trims text around them, so the parts come back unchanged.
+  const pill = (node: JSONContent) => current().push(...(current().length > 0 ? [{ type: 'text', text: ' ' }] : []), node, { type: 'text', text: ' ' })
+  for (const part of parts) {
+    if (part.type === 'text') {
+      part.text.split('\n').forEach((line, index) => {
+        if (index > 0) paragraphs.push([])
+        if (line) current().push({ type: 'text', text: line })
+      })
+    } else if (part.type === 'file') {
+      pill({ type: 'mention', attrs: { id: part.path, label: part.path.split('/').pop() ?? part.path, mentionSuggestionChar: '@' } })
+    } else if (part.type === 'command') {
+      pill({ type: 'mention', attrs: { id: part.name, label: part.name, mentionSuggestionChar: '/' } })
+    } else if (part.type === 'pasted') {
+      pill({ type: 'pastedText', attrs: { text: part.text } })
+    } else {
+      pill({ type: 'imageAttachment', attrs: { path: part.path, mimeType: part.mimeType, name: part.name } })
+    }
+  }
+  return { type: 'doc', content: paragraphs.map((content) => ({ type: 'paragraph', ...(content.length > 0 ? { content } : {}) })) }
+}

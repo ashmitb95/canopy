@@ -17,6 +17,15 @@ const started = (item: object) => ['item/started', { item }] as [string, unknown
 const completed = (item: object) => ['item/completed', { item }] as [string, unknown]
 
 describe('CodexTranslator', () => {
+  it('marks a turn with its turn id as the prompt reference', () => {
+    const items: SessionItem[] = []
+    const translator = new CodexTranslator((item) => items.push(item))
+    translator.feed('turn/started', turn('inProgress'))
+    translator.feed('turn/completed', turn('completed'))
+    expect(items[0]).toMatchObject({ kind: 'turn', state: 'started', promptRef: 'u1' })
+    expect(items[1]).toMatchObject({ kind: 'turn', state: 'ended', promptRef: 'u1' })
+  })
+
   it('opens and closes turns', () => {
     expect(run([['turn/started', turn('inProgress')], ['turn/completed', turn('completed')]])).toEqual([
       { kind: 'turn', id: 'turn:u1', state: 'ended', stopReason: 'completed', durationMs: 900 }

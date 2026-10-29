@@ -155,4 +155,18 @@ describe('ClaudeTranslator', () => {
     expect(final).toHaveLength(1)
     expect(final[0]).toMatchObject({ kind: 'turn', state: 'ended', stopReason: 'interrupted' })
   })
+
+  it('marks turns with the prompt uuid and the last main-chain message', () => {
+    const { items } = run(
+      [
+        sdk({ type: 'assistant', uuid: 'a-1', parent_tool_use_id: null, message: { content: [] } }),
+        sdk({ type: 'user', uuid: 'u-2', parent_tool_use_id: null, message: { content: [] } }),
+        sdk({ type: 'assistant', uuid: 'sub-3', parent_tool_use_id: 'task', message: { content: [] } }),
+        sdk({ type: 'result', subtype: 'success', is_error: false, duration_ms: 1, result: '' })
+      ],
+      (translator) => translator.startTurn('prompt-uuid')
+    )
+    expect(items.find((item) => item.kind === 'turn' && item.state === 'started')).toMatchObject({ promptRef: 'prompt-uuid' })
+    expect(items.find((item) => item.kind === 'turn' && item.state === 'ended')).toMatchObject({ promptRef: 'prompt-uuid', ref: 'u-2' })
+  })
 })

@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { captureEnv, type Env } from './env'
+import { LaneCoordinator } from './lanes/coordinator'
 import { laneContext } from './lanes/lane-context'
 import { watchHistory, watchTurns } from './lanes/lane-turns'
 import { LaneMemory } from './lanes/memory'
@@ -25,15 +26,22 @@ export function activate(context: vscode.ExtensionContext): void {
   // Without a folder there is nothing to track (and the home folder is not scanned).
   const tracker = root ? new LaneTracker(root) : undefined
   const memory = tracker ? new LaneMemory(tracker.root) : undefined
+  let coordinator: LaneCoordinator | undefined
   manager = new SessionManager({
     providers,
     store: new SessionStore(context.workspaceState),
     journalDir: join(storage, 'sessions'),
     cwd: root ?? homedir(),
     env: getEnv,
-    decorate: tracker && memory ? laneContext(tracker, memory) : undefined
+    decorate: tracker && memory ? laneContext(tracker, memory) : undefined,
+    boundary: async (record) => coordinator?.boundary(record)
   })
   const sessionManager = manager
+  coordinator =
+    tracker && memory
+      ? new LaneCoordinator({ tracker, memory, manager: sessionManager, env: async () => (await getEnv()) as NodeJS.ProcessEnv })
+      : undefined
+  const lanes = coordinator
   const editor = new EditorContextTracker()
   const diffs = new DiffDocuments(manager)
   const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs)
@@ -75,6 +83,37 @@ export function activate(context: vscode.ExtensionContext): void {
       memory.ensure(node.lane.name)
       await vscode.window.showTextDocument(vscode.Uri.file(memory.planPath(node.lane.name)))
     }),
+    vscode.commands.registerCommand('agentdeck.newLane', async () => {
+      if (!lanes || !tracker) return void vscode.window.showInformationMessage('Open a folder to use lanes.')
+      const name = await vscode.window.showInputBox({
+        prompt: 'Lane name (the branch name)',
+        validateInput: (value) => (/^[\w][\w./-]*$/.test(value.trim()) ? undefined : 'Letters, digits, and . _ / - only')
+      })
+      if (!name?.trim()) return
+      const goal = await vscode.window.showInputBox({ prompt: `Goal for ${name.trim()} (optional)` })
+      const repos = await vscode.window.showQuickPick(
+        tracker.repos.map((repo) => ({ label: repo.name })),
+        { canPickMany: true, placeHolder: 'Repos the lane starts in' }
+      )
+      if (!repos || repos.length === 0) return
+      const where = await vscode.window.showQuickPick(
+        [
+          { label: 'Worktrees', description: 'Separate checkouts, warmed up; main stays as it is', worktrees: true },
+          { label: 'Main checkout', description: 'Work where the code runs (main must be free)', worktrees: false }
+        ],
+        { placeHolder: 'Where does the lane start?' }
+      )
+      if (!where) return
+      await runLane(`Creating ${name.trim()}…`, () =>
+        lanes.newLane(name.trim(), repos.map((repo) => repo.label), { worktrees: where.worktrees, goal: goal?.trim() || undefined })
+      )
+    }),
+    vscode.commands.registerCommand('agentdeck.laneIntoMain', (node: LaneNode) =>
+      lanes ? runLane(`Moving ${node.lane.name} into main…`, () => lanes.moveIntoMain(node.lane.name)) : undefined
+    ),
+    vscode.commands.registerCommand('agentdeck.laneToWorktree', (node: LaneNode) =>
+      lanes ? runLane(`Moving ${node.lane.name} to worktrees…`, () => lanes.moveToWorktree(node.lane.name)) : undefined
+    ),
     vscode.commands.registerCommand('agentdeck.stopSession', (node: SessionNode) => sessionManager.stop(node.id)),
     vscode.commands.registerCommand('agentdeck.deleteSession', async (node: SessionNode) => {
       const choice = await vscode.window.showWarningMessage(`Delete “${node.title}”?`, { modal: true }, 'Delete')
@@ -102,4 +141,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export async function deactivate(): Promise<void> {
   await manager?.dispose()
+}
+
+/** Runs a lane operation with progress; failures (busy chats, stash conflicts) show their message. */
+async function runLane(title: string, operation: () => Promise<unknown>): Promise<void> {
+  try {
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, operation)
+  } catch (error) {
+    void vscode.window.showErrorMessage((error as Error).message)
+  }
 }

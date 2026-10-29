@@ -94,6 +94,22 @@
         "category": "AgentDeck"
       },
       {
+        "command": "agentdeck.newLane",
+        "title": "New Lane\u2026",
+        "category": "AgentDeck",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "agentdeck.laneIntoMain",
+        "title": "Move into Main",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.laneToWorktree",
+        "title": "Move to Worktrees",
+        "category": "AgentDeck"
+      },
+      {
         "command": "agentdeck.stopSession",
         "title": "Stop",
         "category": "AgentDeck"
@@ -120,6 +136,11 @@
           "command": "agentdeck.manageProviders",
           "when": "view == agentdeck.chat",
           "group": "navigation@3"
+        },
+        {
+          "command": "agentdeck.newLane",
+          "when": "view == agentdeck.sessions",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -132,6 +153,16 @@
           "command": "agentdeck.setLaneGoal",
           "when": "view == agentdeck.sessions && viewItem == lane",
           "group": "2_edit@1"
+        },
+        {
+          "command": "agentdeck.laneIntoMain",
+          "when": "view == agentdeck.sessions && viewItem == lane",
+          "group": "3_move@1"
+        },
+        {
+          "command": "agentdeck.laneToWorktree",
+          "when": "view == agentdeck.sessions && viewItem == lane",
+          "group": "3_move@2"
         },
         {
           "command": "agentdeck.openSession",
@@ -187,6 +218,14 @@
         },
         {
           "command": "agentdeck.openLanePlan",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.laneIntoMain",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.laneToWorktree",
           "when": "false"
         },
         {

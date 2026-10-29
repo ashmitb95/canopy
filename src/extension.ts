@@ -9,7 +9,8 @@ import { laneDescription } from './lanes/lanes'
 import { LaneMemory } from './lanes/memory'
 import { handoffPrompt, readTasks } from './lanes/tasks'
 import { LaneTracker } from './lanes/tracker'
-import { providers } from './providers/registry'
+import { customAgent } from './providers/acp/agents'
+import { buildProviders } from './providers/registry'
 import { SessionManager } from './sessions/manager'
 import { SessionStore } from './sessions/store'
 import { attachFile } from './ui/attachments'
@@ -26,6 +27,8 @@ import { Unread } from './ui/unread'
 let manager: SessionManager | undefined
 
 export function activate(context: vscode.ExtensionContext): void {
+  const custom = vscode.workspace.getConfiguration('agentdeck').get<Record<string, unknown>[]>('customAgents', [])
+  const providers = buildProviders(custom.flatMap((entry) => customAgent(entry) ?? []))
   let env: Promise<Env> | undefined
   // claude-notifier's hooks stay quiet for the CLIs AgentDeck runs; AgentDeck notifies itself.
   const getEnv = () => (env ??= captureEnv().then((captured) => ({ ...captured, CLAUDE_NOTIFIER_DISABLE: '1' })))

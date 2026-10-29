@@ -3,7 +3,10 @@ import { cn } from '@/lib/utils'
 const PROVIDERS: Record<string, { monogram: string; hue: string }> = {
   claude: { monogram: 'C', hue: '#d97757' },
   codex: { monogram: 'Cx', hue: '#10a37f' },
-  grok: { monogram: 'G', hue: '#a1a1aa' }
+  grok: { monogram: 'G', hue: '#a1a1aa' },
+  cursor: { monogram: 'Cu', hue: '#a1a1aa' },
+  opencode: { monogram: 'O', hue: '#a1a1aa' },
+  gemini: { monogram: 'Ge', hue: '#4285f4' }
 }
 
 export function ProviderAvatar({ providerId, className }: { providerId: string; className?: string }) {

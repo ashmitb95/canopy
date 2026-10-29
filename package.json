@@ -196,6 +196,44 @@
           "type": "boolean",
           "default": true,
           "description": "Keep the computer from sleeping while a chat is running (macOS and Linux)."
+        },
+        "agentdeck.customAgents": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "More ACP agents: `{ \"id\": \"goose\", \"label\": \"Goose\", \"command\": \"goose\", \"args\": [\"acp\"], \"loginArgs\": [\"configure\"] }`. Reload the window after changing.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "command",
+              "args"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "loginArgs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     },

@@ -60,7 +60,7 @@ From the [design](superpowers/specs/2026-10-29-lanes-and-control-center.md):
 - **17 — Notifications** (independent, can run any time after 11): native events, claude-notifier's sounds and settings, `CLAUDE_NOTIFIER_DISABLE` for spawned CLIs.
 - **18 — Workspace and lane tracking:** repo discovery, derived per-repo lane state, Git watchers and reconciliation, chat ↔ lane links, the "main / no lane" group. ✓ done.
 - **19 — Lane memory and briefs:** `.agentdeck/` layout, stamping, chat summaries, the brief and the delta in prompts. ✓ done.
-- **20 — Switch and warm-up:** the switch steps with stash carry-over and failure handling, worktree creation, bootstrap, chat notices, lane path enforcement (Claude, Codex writable roots, ACP).
+- **20 — Switch and warm-up:** the switch steps with stash carry-over and failure handling, worktree creation, bootstrap, chat notices, lane path enforcement (Claude, Codex writable roots, ACP). ✓ done.
 - **21 — Lanes in the chat list:** group chats by lane with per-repo location, group actions, composer lane chip, multi-repo *Review changes*. No board or lane pages (decision 36).
 - **22 — Workflows inside lanes:** task types and defaults, stages, handoff briefs, *Hand off to…*.
 - **Later:** PR and review-thread triage, issue linking, cross-lane conflicts, lane preflight, commit/push/PR per repo.

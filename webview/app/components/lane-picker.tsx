@@ -44,6 +44,10 @@ export function LanePicker({ lanes, current }: { lanes?: LaneInfo[]; current?: s
           <Codicon name="add" size={12} />
           New lane…
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => send({ type: 'handOff' })}>
+          <Codicon name="arrow-right" size={12} />
+          Hand off to…
+        </DropdownMenuItem>
         {current && (
           <DropdownMenuItem onSelect={() => send({ type: 'reviewLane', laneId: current })}>
             <Codicon name="diff-multiple" size={12} />

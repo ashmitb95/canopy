@@ -115,6 +115,11 @@
         "category": "AgentDeck"
       },
       {
+        "command": "agentdeck.handOff",
+        "title": "Hand Off to\u2026",
+        "category": "AgentDeck"
+      },
+      {
         "command": "agentdeck.stopSession",
         "title": "Stop",
         "category": "AgentDeck"
@@ -183,6 +188,11 @@
           "command": "agentdeck.openSessionInSidebar",
           "when": "view == agentdeck.sessions && viewItem == session",
           "group": "1_open@2"
+        },
+        {
+          "command": "agentdeck.handOff",
+          "when": "view == agentdeck.sessions && viewItem == session",
+          "group": "1_open@3"
         },
         {
           "command": "agentdeck.renameSession",

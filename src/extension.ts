@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import * as vscode from 'vscode'
 import { captureEnv, type Env } from './env'
 import { LaneCoordinator } from './lanes/coordinator'
@@ -7,6 +7,7 @@ import { laneContext } from './lanes/lane-context'
 import { watchHistory, watchTurns } from './lanes/lane-turns'
 import { laneDescription } from './lanes/lanes'
 import { LaneMemory } from './lanes/memory'
+import { handoffPrompt, readTasks } from './lanes/tasks'
 import { LaneTracker } from './lanes/tracker'
 import { providers } from './providers/registry'
 import { SessionManager } from './sessions/manager'
@@ -126,6 +127,40 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('agentdeck.laneToWorktree', (node: LaneNode) =>
       lanes ? runLane(`Moving ${node.lane.name} to worktrees…`, () => lanes.moveToWorktree(node.lane.name)) : undefined
     ),
+    vscode.commands.registerCommand('agentdeck.handOff', async (target?: SessionNode | string) => {
+      const sourceId = typeof target === 'string' ? target : (target?.id ?? surfaces.activeSessionId())
+      const source = sessionManager.list().find(({ record }) => record.id === sourceId)?.record
+      if (!source) return void vscode.window.showInformationMessage('Open a chat to hand off from.')
+      const tasks = readTasks(root ?? '')
+      const task = await vscode.window.showQuickPick(
+        tasks.map((candidate) => ({
+          label: candidate.label,
+          description: `${providers.get(candidate.provider)?.label ?? candidate.provider} · ${candidate.mode}`,
+          task: candidate
+        })),
+        { placeHolder: `Hand off “${source.title}” to…` }
+      )
+      if (!task) return
+      if (!providers.has(task.task.provider)) {
+        return void vscode.window.showErrorMessage(`No provider “${task.task.provider}”. Check [task.${task.task.id}] in .agentdeck/config.toml.`)
+      }
+      const summary = source.laneId && memory ? join(memory.laneDir(source.laneId), 'chats', `${source.id}.md`) : undefined
+      const text = await vscode.window.showInputBox({
+        prompt: `First prompt for the ${task.task.label} chat (edit before sending)`,
+        value: handoffPrompt({
+          task: task.task.label,
+          from: source.title,
+          ...(source.laneId ? { lane: source.laneId } : {}),
+          ...(summary && tracker ? { summaryPath: relative(tracker.root, summary) } : {}),
+          reply: sessionManager.lastReply(source.id)
+        })
+      })
+      if (!text?.trim()) return
+      const next = await sessionManager.create(task.task.provider, task.task.mode)
+      if (source.laneId) await sessionManager.setLane(next.id, source.laneId)
+      surfaces.openPanel(next.id)
+      await sessionManager.prompt(next.id, [{ type: 'text', text: text.trim() }])
+    }),
     vscode.commands.registerCommand('agentdeck.stopSession', (node: SessionNode) => sessionManager.stop(node.id)),
     vscode.commands.registerCommand('agentdeck.deleteSession', async (node: SessionNode) => {
       const choice = await vscode.window.showWarningMessage(`Delete “${node.title}”?`, { modal: true }, 'Delete')

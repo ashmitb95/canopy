@@ -85,4 +85,5 @@ export type WebviewMessage =
   | { type: 'openSession'; sessionId: string }
   | { type: 'setLane'; laneId?: string }
   | { type: 'newLane' }
+  | { type: 'handOff' }
   | { type: 'reviewLane'; laneId: string }

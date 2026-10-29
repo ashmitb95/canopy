@@ -146,6 +146,12 @@ export class ChatSurfaces
     if (this.sidebar) this.show(this.sidebar, sessionId)
   }
 
+  /** The chat in the focused tab, else the sidebar's chat. */
+  activeSessionId(): string | undefined {
+    for (const [sessionId, { panel }] of this.panels) if (panel.active) return sessionId
+    return this.sidebar?.sessionId
+  }
+
   openSidebarInEditor(): void {
     if (this.sidebar?.sessionId) this.openPanel(this.sidebar.sessionId)
   }
@@ -282,6 +288,9 @@ export class ChatSurfaces
         return
       case 'setLane':
         if (sessionId) await this.manager.setLane(sessionId, message.laneId)
+        return
+      case 'handOff':
+        if (sessionId) await vscode.commands.executeCommand('agentdeck.handOff', sessionId)
         return
       case 'newLane':
         await vscode.commands.executeCommand('agentdeck.newLane')

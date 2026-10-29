@@ -117,4 +117,16 @@ describe('chat state', () => {
     expect(started.signIns.claude).toEqual({ step: 'link', url: 'https://claude.ai/x' })
     expect(reduce(started, { type: 'signInProgress', providerId: 'claude', progress: null }).signIns).toEqual({})
   })
+
+  it('keeps the lane list and the lane of the chat it shows', () => {
+    let state = reduce(initialState, { type: 'session', sessionId: 's1', event: { type: 'snapshot', record, status: 'idle', items: [], queue: [] } })
+    state = reduce(state, { type: 'lanes', lanes: [{ name: 'x', where: 'api main' }] })
+    state = reduce(state, { type: 'lane', sessionId: 's1', laneId: 'x' })
+    expect(state.lanes).toEqual([{ name: 'x', where: 'api main' }])
+    expect(state.record?.laneId).toBe('x')
+    state = reduce(state, { type: 'lane', sessionId: 'other', laneId: 'y' })
+    expect(state.record?.laneId).toBe('x')
+    state = reduce(state, { type: 'lane', sessionId: 's1' })
+    expect(state.record?.laneId).toBeUndefined()
+  })
 })

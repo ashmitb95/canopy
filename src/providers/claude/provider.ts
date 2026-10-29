@@ -18,9 +18,11 @@ import type {
   OpenOptions,
   PermissionMode,
   PromptPart,
+  PromptResponse,
   ProviderDefinition,
   ProviderSession,
   ProviderState,
+  QuestionItem,
   Quota,
   SessionFact,
   SessionItem,
@@ -28,6 +30,8 @@ import type {
 } from '../../core/types'
 import type { Env } from '../../env'
 import { refreshUntilSettled } from '../mcp-settle'
+import { PromptHolder } from '../prompt-holder'
+import { claudeAnswers } from '../prompts'
 import { encodePrompt, imageParts } from '../encode'
 import { findClaude } from './locate'
 import { claudeSignIn } from './sign-in'
@@ -39,20 +43,15 @@ const run = promisify(execFile)
 
 type QueryFn = typeof import('@anthropic-ai/claude-agent-sdk').query
 type ApprovalContext = Parameters<CanUseTool>[2]
-type PendingApproval = {
-  item: ApprovalItem
-  input: Record<string, unknown>
-  suggestions?: PermissionUpdate[]
-  resolve: (result: PermissionResult) => void
-}
 
 const MODES: Record<PermissionMode, SdkPermissionMode> = {
   ask: 'default',
   'accept-edits': 'acceptEdits',
+  auto: 'auto',
   plan: 'plan',
   'full-access': 'bypassPermissions'
 }
-const MODE_LIST: readonly PermissionMode[] = ['ask', 'accept-edits', 'plan', 'full-access']
+const MODE_LIST: readonly PermissionMode[] = ['ask', 'accept-edits', 'auto', 'plan', 'full-access']
 
 /** An inherited API key would bill the API instead of the claude.ai subscription. */
 export function claudeEnv(env: Env): Env {
@@ -122,6 +121,15 @@ async function authStatus(
   }
 }
 
+const EDIT_TOOLS = new Set(['Edit', 'Write'])
+
+const PLAN_OPTIONS = [
+  { id: 'approve:ask', label: 'Approve · Ask before edits' },
+  { id: 'approve:accept-edits', label: 'Approve · Accept edits' },
+  { id: 'approve:auto', label: 'Approve · Auto' },
+  { id: 'keep-planning', label: 'Keep planning' }
+]
+
 class ClaudeSession implements ProviderSession {
   readonly nativeId: string
   private readonly items = new Emitter<SessionItem>()
@@ -133,11 +141,11 @@ class ClaudeSession implements ProviderSession {
   private readonly quotas = new Emitter<Quota>()
   readonly onQuota = this.quotas.event
   private readonly translator = new ClaudeTranslator((item) => this.items.fire(item))
+  private readonly holder = new PromptHolder((item) => this.items.fire(item))
   private readonly query: Query
   private readonly inbox: SDKUserMessage[] = []
   private wake: (() => void) | null = null
   private closed = false
-  private readonly approvals = new Map<string, PendingApproval>()
   private models: ModelOption[] = []
   private model: string
 
@@ -207,18 +215,8 @@ class ClaudeSession implements ProviderSession {
     this.facts.fire({ kind: 'mode', current: mode, available: MODE_LIST })
   }
 
-  answer(itemId: string, optionId: string): void {
-    const pending = this.approvals.get(itemId)
-    if (!pending) return
-    this.approvals.delete(itemId)
-    this.items.fire({ ...pending.item, resolved: optionId })
-    if (optionId === 'deny') return pending.resolve({ behavior: 'deny', message: 'The user denied this action.' })
-    // The CLI rejects an allow without updatedInput, although the SDK types mark it optional.
-    pending.resolve({
-      behavior: 'allow',
-      updatedInput: pending.input,
-      updatedPermissions: optionId === 'always' ? pending.suggestions : undefined
-    })
+  answer(itemId: string, response: PromptResponse): void {
+    this.holder.answer(itemId, response)
   }
 
   async refreshMcp(): Promise<void> {
@@ -244,7 +242,7 @@ class ClaudeSession implements ProviderSession {
   async dispose(): Promise<void> {
     this.closed = true
     this.wake?.()
-    for (const id of [...this.approvals.keys()]) this.answer(id, 'deny')
+    this.holder.dismissAll()
     this.query.close()
   }
 
@@ -322,28 +320,114 @@ class ClaudeSession implements ProviderSession {
     input: Record<string, unknown>,
     context: ApprovalContext
   ): Promise<PermissionResult> {
-    if (toolName === 'AskUserQuestion') {
-      return Promise.resolve({
-        behavior: 'deny',
-        message: 'This client cannot show questions yet. Ask the user in plain text instead.'
-      })
+    const prompt =
+      toolName === 'AskUserQuestion' ? this.question(input, context.toolUseID) : this.approval(toolName, input, context)
+    context.signal.addEventListener('abort', () => this.holder.answer(`${toolName === 'AskUserQuestion' ? 'question' : 'approval'}:${context.toolUseID}`, { kind: 'dismiss' }))
+    return prompt
+  }
+
+  private question(input: Record<string, unknown>, toolUseId: string): Promise<PermissionResult> {
+    const raw = (Array.isArray(input.questions) ? input.questions : []) as {
+      question: string
+      header?: string
+      multiSelect?: boolean
+      options?: { label: string; description?: string; preview?: string }[]
+    }[]
+    const item: QuestionItem = {
+      kind: 'question',
+      id: `question:${toolUseId}`,
+      questions: raw.map((question, index) => ({
+        id: `q${index + 1}`,
+        header: question.header,
+        question: question.question,
+        multiSelect: question.multiSelect === true,
+        allowOther: true,
+        options: (question.options ?? []).map((option, optionIndex) => ({
+          id: `o${optionIndex + 1}`,
+          label: option.label,
+          description: option.description,
+          preview: option.preview
+        }))
+      }))
     }
-    const suggestions = context.suppressAlwaysAllowRule ? undefined : context.suggestions
+    return this.holder.hold<PermissionResult>(item, (response) =>
+      response.kind === 'answers'
+        ? {
+            resolved: { answers: response.answers },
+            // The CLI rejects an allow without updatedInput, although the SDK types mark it optional.
+            result: { behavior: 'allow', updatedInput: { ...input, answers: claudeAnswers(item.questions, response.answers) } }
+          }
+        : {
+            resolved: 'dismissed',
+            result: {
+              behavior: 'deny',
+              message: 'The user dismissed these questions without answering. End your turn and wait for them.'
+            }
+          }
+    )
+  }
+
+  private approval(toolName: string, input: Record<string, unknown>, context: ApprovalContext): Promise<PermissionResult> {
+    const plan = toolName === 'ExitPlanMode' && typeof input.plan === 'string' ? input.plan : undefined
+    const filePath = typeof input.planFilePath === 'string' ? input.planFilePath : undefined
+    const suggestions = context.suppressAlwaysAllowRule ? [] : (context.suggestions ?? [])
+    const reason = [context.decisionReason, context.blockedPath && `Path: ${context.blockedPath}`].filter(Boolean).join(' · ')
     const item: ApprovalItem = {
       kind: 'approval',
       id: `approval:${context.toolUseID}`,
-      title: context.title ?? `Allow ${toolName}?`,
-      detail: approvalDetail(input),
-      options: [
-        { id: 'allow', label: 'Allow once' },
-        ...(suggestions?.length ? [{ id: 'always', label: 'Always allow' }] : []),
-        { id: 'deny', label: 'Deny' }
-      ]
+      title: plan ? 'Ready to code?' : (context.title ?? `Allow ${toolName}?`),
+      ...(plan ? { subject: { kind: 'plan' as const, text: plan, ...(filePath ? { filePath } : {}) } } : { detail: approvalDetail(input) }),
+      ...(context.description ? { description: context.description } : {}),
+      ...(reason ? { reason } : {}),
+      ...(EDIT_TOOLS.has(toolName) ? { diffIds: [`${context.toolUseID}:diff`] } : {}),
+      options: plan
+        ? PLAN_OPTIONS
+        : [
+            { id: 'allow', label: 'Allow once' },
+            ...(suggestions.length > 0 ? [{ id: 'allowForSession', label: 'Allow for this session' }] : []),
+            { id: 'deny', label: 'Deny' }
+          ]
     }
-    return new Promise((resolve) => {
-      this.approvals.set(item.id, { item, input, suggestions, resolve })
-      context.signal.addEventListener('abort', () => this.answer(item.id, 'deny'))
-      this.items.fire(item)
+    return this.holder.hold(item, (response) => {
+      const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
+      return { resolved: optionId, result: this.approvalResult(optionId, input, suggestions, plan !== undefined) }
     })
+  }
+
+  private approvalResult(
+    optionId: string,
+    input: Record<string, unknown>,
+    suggestions: PermissionUpdate[],
+    plan: boolean
+  ): PermissionResult {
+    if (optionId.startsWith('approve:')) {
+      const mode = optionId.slice('approve:'.length) as PermissionMode
+      this.facts.fire({ kind: 'mode', current: mode, available: MODE_LIST })
+      return {
+        behavior: 'allow',
+        updatedInput: input,
+        updatedPermissions: [{ type: 'setMode', mode: MODES[mode], destination: 'session' }]
+      }
+    }
+    if (optionId === 'allow' || optionId === 'allowForSession') {
+      // The CLI rejects an allow without updatedInput, although the SDK types mark it optional.
+      return {
+        behavior: 'allow',
+        updatedInput: input,
+        // "For this session": the CLI's own suggestion, kept to this session rather than written to settings.
+        ...(optionId === 'allowForSession'
+          ? { updatedPermissions: suggestions.map((suggestion) => ({ ...suggestion, destination: 'session' as const })) }
+          : {})
+      }
+    }
+    const message =
+      optionId === 'keep-planning'
+        ? 'The user asked you to keep planning. Revise the plan and call ExitPlanMode again.'
+        : optionId === 'dismissed'
+          ? plan
+            ? 'The user dismissed this plan without approving it. End your turn and wait for them to say what to change.'
+            : 'The user dismissed this request. End your turn and wait for them.'
+          : 'The user denied this action.'
+    return { behavior: 'deny', message }
   }
 }

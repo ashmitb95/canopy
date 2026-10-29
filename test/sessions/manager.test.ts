@@ -458,4 +458,14 @@ describe('SessionManager', () => {
     expect(events.filter((event) => event.type === 'queue').at(-1)).toMatchObject({ queue: [] })
     expect(events.filter((event) => event.type === 'item' && event.item.kind === 'message' && event.item.role === 'user')).toHaveLength(2)
   })
+
+  it('compacts through the provider and notes it in the transcript', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.warm(id)
+    const events = watch(manager, id)
+    await manager.compact(id)
+    expect(sessions[0].compacted).toBe(1)
+    expect(events.some((event) => event.type === 'item' && event.item.kind === 'notice' && /Compacting/.test(event.item.text))).toBe(true)
+  })
 })

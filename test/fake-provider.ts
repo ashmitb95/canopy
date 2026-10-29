@@ -18,6 +18,7 @@ export class FakeSession implements ProviderSession {
   readonly answers: [string, PromptResponse][] = []
   readonly modes: PermissionMode[] = []
   readonly efforts: string[] = []
+  compacted = 0
   readonly steers: PromptPart[][] = []
   boundaries: (WriteBoundary | undefined)[] = []
   disposed = false
@@ -47,6 +48,10 @@ export class FakeSession implements ProviderSession {
 
   async setEffort(effort: string): Promise<void> {
     this.efforts.push(effort)
+  }
+
+  async compact(): Promise<void> {
+    this.compacted++
   }
 
   async steer(parts: PromptPart[]): Promise<void> {

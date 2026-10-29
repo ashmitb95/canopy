@@ -2,13 +2,15 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { captureEnv, type Env } from './env'
+import { autoLink } from './lanes/auto-link'
+import { LaneTracker } from './lanes/tracker'
 import { providers } from './providers/registry'
 import { SessionManager } from './sessions/manager'
 import { SessionStore } from './sessions/store'
 import { ChatSurfaces, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
 import { DIFF_SCHEME, DiffDocuments } from './ui/diff-documents'
 import { EditorContextTracker } from './ui/editor-context'
-import { type SessionNode, SessionsTree } from './ui/sessions-tree'
+import { laneDescription, type SessionNode, SessionsTree } from './ui/sessions-tree'
 import { SessionsStatusBar } from './ui/status-bar'
 
 let manager: SessionManager | undefined
@@ -17,17 +19,21 @@ export function activate(context: vscode.ExtensionContext): void {
   let env: Promise<Env> | undefined
   const getEnv = () => (env ??= captureEnv())
   const storage = (context.storageUri ?? context.globalStorageUri).fsPath
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  // Without a folder there is nothing to track (and the home folder is not scanned).
+  const tracker = root ? new LaneTracker(root) : undefined
   manager = new SessionManager({
     providers,
     store: new SessionStore(context.workspaceState),
     journalDir: join(storage, 'sessions'),
-    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir(),
+    cwd: root ?? homedir(),
     env: getEnv
   })
   const sessionManager = manager
   const editor = new EditorContextTracker()
   const diffs = new DiffDocuments(manager)
   const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs)
+  const tree = new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label])), tracker)
   context.subscriptions.push(
     editor,
     surfaces,
@@ -38,7 +44,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('agentdeck.openInEditor', () => surfaces.openSidebarInEditor()),
     vscode.commands.registerCommand('agentdeck.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
-    new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label]))),
+    tree,
     new SessionsStatusBar(sessionManager),
     vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),
     vscode.commands.registerCommand('agentdeck.openSessionInSidebar', (node: SessionNode) => surfaces.showInSidebar(node.id)),
@@ -46,12 +52,32 @@ export function activate(context: vscode.ExtensionContext): void {
       const title = await vscode.window.showInputBox({ prompt: 'Session name', value: node.title })
       if (title?.trim()) await sessionManager.rename(node.id, title.trim())
     }),
+    vscode.commands.registerCommand('agentdeck.moveSessionToLane', async (node: SessionNode) => {
+      const none = { label: '$(circle-slash) No branch', lane: undefined }
+      const choices = [
+        ...tree.lanes().map((lane) => ({ label: `$(git-branch) ${lane.name}`, description: laneDescription(lane), lane: lane.name })),
+        none
+      ]
+      const choice = await vscode.window.showQuickPick(choices, { placeHolder: `Move “${node.title}” to…` })
+      if (choice) await sessionManager.setLane(node.id, choice.lane)
+    }),
     vscode.commands.registerCommand('agentdeck.stopSession', (node: SessionNode) => sessionManager.stop(node.id)),
     vscode.commands.registerCommand('agentdeck.deleteSession', async (node: SessionNode) => {
       const choice = await vscode.window.showWarningMessage(`Delete “${node.title}”?`, { modal: true }, 'Delete')
       if (choice === 'Delete') await sessionManager.delete(node.id)
     })
   )
+
+  if (tracker) {
+    void tracker.refresh().catch(() => {})
+    context.subscriptions.push(
+      tracker,
+      autoLink(sessionManager, tracker),
+      // Saves change dirty counts; refocusing catches work done in a terminal or another app.
+      vscode.workspace.onDidSaveTextDocument(() => tracker.schedule()),
+      vscode.window.onDidChangeWindowState((state) => state.focused && tracker.schedule())
+    )
+  }
 
   // First run: show the providers and how to start, once.
   if (!context.globalState.get('agentdeck.welcomed') && sessionManager.list().length === 0) {

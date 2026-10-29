@@ -79,6 +79,11 @@
         "category": "AgentDeck"
       },
       {
+        "command": "agentdeck.moveSessionToLane",
+        "title": "Move to Lane\u2026",
+        "category": "AgentDeck"
+      },
+      {
         "command": "agentdeck.stopSession",
         "title": "Stop",
         "category": "AgentDeck"
@@ -124,9 +129,14 @@
           "group": "2_edit@1"
         },
         {
-          "command": "agentdeck.stopSession",
+          "command": "agentdeck.moveSessionToLane",
           "when": "view == agentdeck.sessions && viewItem == session",
           "group": "2_edit@2"
+        },
+        {
+          "command": "agentdeck.stopSession",
+          "when": "view == agentdeck.sessions && viewItem == session",
+          "group": "2_edit@3"
         },
         {
           "command": "agentdeck.deleteSession",
@@ -145,6 +155,10 @@
         },
         {
           "command": "agentdeck.renameSession",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.moveSessionToLane",
           "when": "false"
         },
         {

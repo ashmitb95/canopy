@@ -21,11 +21,11 @@ Checklist against AFK Pilot's features (its README, October 2026). ✓ done · �
 | Reasoning effort, live | ✓ | 12 |
 | Queue: edit, remove, merge further typing; **Steer** (Codex, Grok) | ✓ (steer: Codex, Claude) | 12 |
 | Drafts kept per chat; prompt history (↑/↓) | ✓ | 12 |
-| Subagent cards | ○ (`parentId` stored) | 13 |
-| Tool batching and summaries ("Explored 5 items", "Edited 2 files"), inline diffs at real line numbers | ◐ | 13 |
-| Workflow / deep-research progress cards | ○ | 13 |
-| Context and cost popover (billed totals) and Compact | ◐ meter only | 13 |
-| LaTeX and Mermaid rendering | ○ | 13 |
+| Subagent cards | ✓ | 13 |
+| Tool batching and summaries ("Explored 5 items", "Edited 2 files"), inline diffs at real line numbers | ◐ (Explored batches; inline diffs at real line numbers later) | 13 |
+| Workflow / deep-research progress cards | — (not planned: no provider exposes it) | 13 |
+| Context and cost popover (billed totals) and Compact | ✓ | 13 |
+| LaTeX and Mermaid rendering | ✓ | 13 |
 | Fork conversation | ○ | 14 |
 | Rewind (conversation, optionally files) | ○ | 14 |
 | History: unread result badges, rename and delete inline, 30-day list | ◐ | 14 |
@@ -48,7 +48,7 @@ Plans:
 
 - **11 — Questions, plan review, and permissions.** First. Its path checks are also the enforcement layer lanes need.
 - **12 — Turn controls:** effort, steering, queue editing, drafts, prompt history. ✓ done.
-- **13 — Transcript depth:** subagent and workflow cards, tool batching, context and cost, LaTeX, Mermaid.
+- **13 — Transcript depth:** subagent and workflow cards, tool batching, context and cost, LaTeX, Mermaid. ✓ done.
 - **14 — Session operations:** fork, rewind, unread badges, history actions, Explorer context menu, Secondary Side Bar default, keep-awake.
 - **15 — Voice dictation:** spike microphone access in a webview first; fall back to a host-side recorder.
 - **16 — More agents:** Cursor, OpenCode, Gemini CLI, Muse, Antigravity as ACP specs with recorded fixtures; provider config editing.

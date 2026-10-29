@@ -16,6 +16,7 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 | 10 | [Rich composer](2026-10-29-10-rich-composer.md) | `@` files, `/` commands, attachments, pasted images and text | Done |
 | 11 | [Questions, plan review, and permissions](2026-10-29-11-questions-and-permissions.md) | Agent questions, plan approval with the next mode, richer approvals with Review changes, Claude Auto mode | Done |
 | 12 | [Turn controls](2026-10-29-12-turn-controls.md) | Reasoning effort, steering, queue editing and merging, drafts per chat, prompt history | Done |
+| 13 | [Transcript depth](2026-10-30-13-transcript-depth.md) | Subagent steps nested, Explored batches, context popover with cost and Compact, LaTeX and Mermaid | Done |
 | 17 | [Notifications](2026-10-29-17-notifications.md) | Native sound and popups for finished turns, approvals, questions, and failures; claude-notifier's settings; `CLAUDE_NOTIFIER_DISABLE` for spawned CLIs | Done |
 | 18 | [Workspace and lane tracking](2026-10-29-18-lane-tracking.md) | Repos and checkouts read live from Git, lanes derived from branches, chats linked to lanes, Sessions grouped by lane | Done |
 | 19 | [Lane memory and briefs](2026-10-29-19-lane-memory-and-briefs.md) | `.agentdeck/` lane memory, stamped chat summaries, lane brief and update in prompts, history of moves | Done |

@@ -46,6 +46,7 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
       return { ...state, attachmentsUri: message.attachments }
     case 'reply':
     case 'insertAttachments':
+    case 'editPrompt':
       return state
     case 'editorContext':
       return { ...state, editorContext: message.context }

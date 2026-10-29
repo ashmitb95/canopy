@@ -5,6 +5,7 @@ import { useAttachmentSrc } from '../assets'
 import { Codicon } from '../components/codicon'
 import { FilePill } from '../components/file-pill'
 import { promptText } from '../format'
+import { send } from '../host'
 
 type Part<T extends PromptPart['type']> = Extract<PromptPart, { type: T }>
 
@@ -32,7 +33,7 @@ function Pasted({ text }: { text: string }) {
   )
 }
 
-export function UserMessageView({ item }: { item: UserMessage }) {
+export function UserMessageView({ item, canRewind }: { item: UserMessage; canRewind?: boolean }) {
   const of = <T extends PromptPart['type']>(type: T) => item.parts.filter((part): part is Part<T> => part.type === type)
   const commands = of('command')
   const files = of('file')
@@ -40,6 +41,17 @@ export function UserMessageView({ item }: { item: UserMessage }) {
   const text = promptText(item.parts)
   return (
     <Message from="user">
+      {canRewind && (
+        <button
+          type="button"
+          aria-label="Rewind to here"
+          title="Rewind to here"
+          className="self-end text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+          onClick={() => send({ type: 'rewind', itemId: item.id })}
+        >
+          <Codicon name="discard" size={14} />
+        </button>
+      )}
       <MessageContent>
         {(commands.length > 0 || text) && (
           <div className="whitespace-pre-wrap">

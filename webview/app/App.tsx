@@ -37,6 +37,7 @@ export function App() {
   const modelFact = state.facts.model?.kind === 'model' ? state.facts.model : undefined
   const model = modelFact ? (selectedModel(modelFact)?.label ?? modelFact.current) : undefined
   const busy = state.status === 'running' || state.status === 'needs-input'
+  const canRewind = (state.provider?.capabilities.includes('rewind') ?? false) && !busy
   const [since, setSince] = useState<number>()
   useEffect(() => setSince((started) => (busy ? (started ?? Date.now()) : undefined)), [busy])
 
@@ -56,7 +57,7 @@ export function App() {
                 const footer = items.flatMap((item) => [item, ...(children.get(item.id) ?? [])]).map((item) => footers.get(item.id)).find(Boolean)
                 return (
                   <Fragment key={items[0].id}>
-                    {unit.type === 'item' ? <ItemView item={unit.item} steps={children.get(unit.item.id)} /> : <ExploredCard items={unit.items} />}
+                    {unit.type === 'item' ? <ItemView item={unit.item} steps={children.get(unit.item.id)} canRewind={canRewind} /> : <ExploredCard items={unit.items} />}
                     {footer && <TurnFooterView footer={footer} model={model} />}
                   </Fragment>
                 )

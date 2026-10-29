@@ -69,6 +69,7 @@ export function Composer({ state }: { state: ChatState }) {
     () =>
       onHostMessage((message) => {
         if (message.type === 'insertAttachments') editor.current?.insert(message.attachments)
+        if (message.type === 'editPrompt') editor.current?.setContent(toDocument(message.parts))
       }),
     []
   )

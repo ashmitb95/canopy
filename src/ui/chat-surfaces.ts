@@ -305,6 +305,24 @@ export class ChatSurfaces
       case 'handOff':
         if (sessionId) await vscode.commands.executeCommand('agentdeck.handOff', sessionId)
         return
+      case 'rewind': {
+        if (!sessionId) return
+        const files = this.providers.get(this.providerOf(sessionId))?.capabilities.has('rewindFiles')
+        const choice = await vscode.window.showWarningMessage(
+          'Rewind to before this message? It and everything after it are removed from the chat.',
+          { modal: true },
+          'Rewind',
+          ...(files ? ['Rewind and restore files'] : [])
+        )
+        if (!choice) return
+        try {
+          const parts = await this.manager.rewind(sessionId, message.itemId, choice === 'Rewind and restore files')
+          this.post(surface, { type: 'editPrompt', parts })
+        } catch (error) {
+          void vscode.window.showErrorMessage((error as Error).message)
+        }
+        return
+      }
       case 'forkSession':
         if (sessionId) await vscode.commands.executeCommand('agentdeck.forkSession', sessionId)
         return

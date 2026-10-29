@@ -60,6 +60,8 @@ export type HostMessage =
   | { type: 'assets'; attachments: string }
   /** Files to put into the composer, from *Add to AgentDeck Chat*. */
   | { type: 'insertAttachments'; attachments: Attachment[] }
+  /** A rewound message to edit and resend. */
+  | { type: 'editPrompt'; parts: PromptPart[] }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -69,6 +71,7 @@ export type WebviewMessage =
   | { type: 'pickAttachments'; requestId: number }
   | { type: 'saveImage'; requestId: number; name: string; mimeType: string; data: string }
   | { type: 'cancel' }
+  | { type: 'rewind'; itemId: string }
   | { type: 'answer'; itemId: string; response: PromptResponse }
   | { type: 'removeQueued'; queuedId: string }
   | { type: 'newChat'; providerId?: string }

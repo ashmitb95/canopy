@@ -9,10 +9,10 @@ import { ThoughtView } from './thought'
 import { ToolCard } from './tool-card'
 import { UserMessageView } from './user-message'
 
-export function ItemView({ item, steps }: { item: SessionItem; steps?: SessionItem[] }) {
+export function ItemView({ item, steps, canRewind }: { item: SessionItem; steps?: SessionItem[]; canRewind?: boolean }) {
   switch (item.kind) {
     case 'message':
-      return item.role === 'user' ? <UserMessageView item={item} /> : <AssistantMessageView item={item} />
+      return item.role === 'user' ? <UserMessageView item={item} canRewind={canRewind} /> : <AssistantMessageView item={item} />
     case 'thought':
       return <ThoughtView item={item} />
     case 'tool':

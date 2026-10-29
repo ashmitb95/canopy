@@ -17,9 +17,15 @@ const STATUS: Record<string, ToolItem['status']> = {
 export class CodexTranslator {
   private readonly items = new Map<string, SessionItem>()
   private readonly types = new Map<string, string>()
+  private readonly diffs = new Map<string, string[]>()
   private interruptRequested = false
 
   constructor(private readonly emit: (item: SessionItem) => void) {}
+
+  /** The diff items a file change produced, so its approval can offer Review changes. */
+  diffIdsFor(itemId: string): string[] {
+    return this.diffs.get(itemId) ?? []
+  }
 
   interrupted(): void {
     this.interruptRequested = true
@@ -96,6 +102,7 @@ export class CodexTranslator {
           status: STATUS[item.status],
           paths: item.changes.map((change) => change.path)
         })
+        this.diffs.set(item.id, item.changes.map((_, index) => `${item.id}:${index}`))
         item.changes.forEach((change, index) => {
           const { oldText, newText } = splitDiff(change.diff)
           this.upsert({

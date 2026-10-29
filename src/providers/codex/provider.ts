@@ -1,4 +1,5 @@
 import { type ChildProcess, execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
 import { Emitter } from '../../core/emitter'
 import type {
@@ -9,9 +10,12 @@ import type {
   OpenOptions,
   PermissionMode,
   PromptPart,
+  PromptResponse,
   ProviderDefinition,
   ProviderSession,
   ProviderState,
+  Question,
+  QuestionItem,
   Quota,
   SessionFact,
   SessionItem,
@@ -21,6 +25,8 @@ import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
 import { encodePrompt, imageParts } from '../encode'
 import { refreshUntilSettled } from '../mcp-settle'
+import { PromptHolder } from '../prompt-holder'
+import { codexAnswers, elicitationContent, elicitationQuestions, type ElicitationSchema, redactSecrets } from '../prompts'
 import { findCodex } from './locate'
 import { codexSignIn } from './sign-in'
 import { codexQuota } from './quota'
@@ -30,6 +36,32 @@ import { unwrapShell } from './text'
 import { CodexTranslator } from './translate'
 
 const run = promisify(execFile)
+
+type UserInputRequest = {
+  itemId: string
+  questions: {
+    id: string
+    header: string
+    question: string
+    isOther: boolean
+    isSecret: boolean
+    options: { label: string; description: string }[] | null
+  }[]
+}
+
+type PermissionsRequest = {
+  itemId: string
+  reason: string | null
+  permissions: {
+    network: { enabled: boolean | null } | null
+    fileSystem: { read: string[] | null; write: string[] | null } | null
+  }
+}
+
+type ElicitationRequest = { serverName: string; message: string } & (
+  | { mode: 'url'; url: string }
+  | { mode: 'form' | 'openai/form' | 'openaiForm'; requestedSchema: unknown }
+)
 
 const MODE_LIST: readonly PermissionMode[] = ['ask', 'accept-edits', 'full-access']
 const STDERR_TAIL = 4000
@@ -112,7 +144,7 @@ class CodexSession implements ProviderSession {
   private readonly quotas = new Emitter<Quota>()
   readonly onQuota = this.quotas.event
   private readonly translator = new CodexTranslator((item) => this.items.fire(item))
-  private readonly approvals = new Map<string, { item: ApprovalItem; resolve: (decision: string) => void }>()
+  private readonly holder = new PromptHolder((item) => this.items.fire(item))
   private readonly startup = new Map<string, McpServer['status']>()
   private models: ModelOption[] = []
   private model: string | undefined
@@ -199,12 +231,8 @@ class CodexSession implements ProviderSession {
     this.facts.fire({ kind: 'mode', current: mode, available: MODE_LIST })
   }
 
-  answer(itemId: string, optionId: string): void {
-    const pending = this.approvals.get(itemId)
-    if (!pending) return
-    this.approvals.delete(itemId)
-    this.items.fire({ ...pending.item, resolved: optionId })
-    pending.resolve(optionId === 'allow' ? 'accept' : optionId === 'always' ? 'acceptForSession' : 'decline')
+  answer(itemId: string, response: PromptResponse): void {
+    this.holder.answer(itemId, response)
   }
 
   async refreshMcp(): Promise<void> {
@@ -233,7 +261,7 @@ class CodexSession implements ProviderSession {
 
   async dispose(): Promise<void> {
     this.closed = true
-    for (const id of [...this.approvals.keys()]) this.answer(id, 'deny')
+    this.holder.dismissAll()
     await stopGroup(this.child)
   }
 
@@ -308,35 +336,129 @@ class CodexSession implements ProviderSession {
   }
 
   private serverRequest({ method, params }: ServerRequest): Promise<unknown> {
-    if (method === 'item/commandExecution/requestApproval') {
-      const request = params as { itemId: string; command?: string | null; reason?: string | null }
-      const detail = request.command ? unwrapShell(request.command) : (request.reason ?? undefined)
-      return this.ask(request.itemId, 'Allow Codex to run this command?', detail)
+    switch (method) {
+      case 'item/commandExecution/requestApproval': {
+        const request = params as { itemId: string; command?: string | null; reason?: string | null }
+        const detail = request.command ? unwrapShell(request.command) : (request.reason ?? undefined)
+        return this.decision(request.itemId, 'Allow Codex to run this command?', detail, [])
+      }
+      case 'item/fileChange/requestApproval': {
+        const request = params as { itemId: string; reason?: string | null; grantRoot?: string | null }
+        if (this.mode === 'accept-edits') return Promise.resolve({ decision: 'accept' })
+        const detail = request.grantRoot ?? request.reason ?? undefined
+        return this.decision(request.itemId, 'Allow Codex to change files?', detail, this.translator.diffIdsFor(request.itemId))
+      }
+      case 'item/tool/requestUserInput':
+        return this.userInput(params as UserInputRequest)
+      case 'item/permissions/requestApproval':
+        return this.permissions(params as PermissionsRequest)
+      case 'mcpServer/elicitation/request':
+        return this.elicitation(params as ElicitationRequest)
+      default:
+        return Promise.reject(new Error(`AgentDeck does not handle ${method} yet.`))
     }
-    if (method === 'item/fileChange/requestApproval') {
-      const request = params as { itemId: string; reason?: string | null; grantRoot?: string | null }
-      if (this.mode === 'accept-edits') return Promise.resolve({ decision: 'accept' })
-      return this.ask(request.itemId, 'Allow Codex to change files?', request.grantRoot ?? request.reason ?? undefined)
-    }
-    return Promise.reject(new Error(`AgentDeck does not handle ${method} yet.`))
   }
 
-  private ask(itemId: string, title: string, detail: string | undefined): Promise<{ decision: string }> {
+  private decision(itemId: string, title: string, detail: string | undefined, diffIds: string[]): Promise<{ decision: string }> {
     const item: ApprovalItem = {
       kind: 'approval',
       id: `approval:${itemId}`,
       title,
       detail,
+      ...(diffIds.length > 0 ? { diffIds } : {}),
       options: [
         { id: 'allow', label: 'Allow once' },
-        { id: 'always', label: 'Allow for this session' },
+        { id: 'allowForSession', label: 'Allow for this session' },
         { id: 'deny', label: 'Deny' }
       ]
     }
-    return new Promise((resolve) => {
-      this.approvals.set(item.id, { item, resolve: (decision) => resolve({ decision }) })
-      this.items.fire(item)
+    return this.holder.hold(item, (response) => {
+      const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
+      const decision = optionId === 'allow' ? 'accept' : optionId === 'allowForSession' ? 'acceptForSession' : 'decline'
+      return { resolved: optionId, result: { decision } }
     })
+  }
+
+  private userInput(request: UserInputRequest): Promise<unknown> {
+    const questions: Question[] = request.questions.map((question) => ({
+      id: question.id,
+      header: question.header,
+      question: question.question,
+      multiSelect: false,
+      allowOther: question.isOther || !question.options?.length,
+      ...(question.isSecret ? { secret: true } : {}),
+      options: (question.options ?? []).map((option, index) => ({ id: `o${index + 1}`, label: option.label, description: option.description }))
+    }))
+    const item: QuestionItem = { kind: 'question', id: `question:${request.itemId}`, questions }
+    return this.holder.hold(item, (response) =>
+      response.kind === 'answers'
+        ? { resolved: { answers: redactSecrets(questions, response.answers) }, result: codexAnswers(questions, response.answers) }
+        : { resolved: 'dismissed', result: { answers: {} } }
+    )
+  }
+
+  private permissions(request: PermissionsRequest): Promise<unknown> {
+    const { fileSystem, network } = request.permissions
+    const lines = [
+      ...(fileSystem?.write ?? []).map((path) => `Write ${path}`),
+      ...(fileSystem?.read ?? []).map((path) => `Read ${path}`),
+      ...(network?.enabled ? ['Network access'] : [])
+    ]
+    const item: ApprovalItem = {
+      kind: 'approval',
+      id: `approval:${request.itemId}:permissions`,
+      title: 'Allow Codex more access?',
+      detail: lines.join('\n'),
+      ...(request.reason ? { reason: request.reason } : {}),
+      options: [
+        { id: 'allow', label: 'Allow for this turn' },
+        { id: 'allowForSession', label: 'Allow for this session' },
+        { id: 'deny', label: 'Deny' }
+      ]
+    }
+    return this.holder.hold(item, (response) => {
+      const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
+      const granted = optionId === 'allow' || optionId === 'allowForSession'
+      return {
+        resolved: optionId,
+        result: {
+          permissions: granted ? { ...(network ? { network } : {}), ...(fileSystem ? { fileSystem } : {}) } : {},
+          scope: optionId === 'allowForSession' ? 'session' : 'turn'
+        }
+      }
+    })
+  }
+
+  private elicitation(request: ElicitationRequest): Promise<unknown> {
+    const id = `elicitation:${randomUUID()}`
+    if (request.mode === 'url') {
+      const item: ApprovalItem = {
+        kind: 'approval',
+        id,
+        title: `${request.serverName} asks you to open a link`,
+        description: request.message,
+        detail: request.url,
+        options: [
+          { id: 'allow', label: 'Done' },
+          { id: 'deny', label: 'Decline' }
+        ]
+      }
+      return this.holder.hold(item, (response) => {
+        const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
+        return { resolved: optionId, result: { action: optionId === 'allow' ? 'accept' : 'decline', content: null, _meta: null } }
+      })
+    }
+    const schema = request.requestedSchema as ElicitationSchema
+    const questions = elicitationQuestions(schema)
+    const item: QuestionItem = { kind: 'question', id, title: `${request.serverName}: ${request.message}`, questions }
+    return this.holder.hold(item, (response) =>
+      response.kind === 'answers'
+        ? {
+            resolved: { answers: response.answers },
+            result: { action: 'accept', content: elicitationContent(schema, questions, response.answers), _meta: null }
+          }
+        : { resolved: 'dismissed', result: { action: 'decline', content: null, _meta: null } }
+    )
   }
 
   private mcpServer(server: McpServerStatus): McpServer {

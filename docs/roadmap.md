@@ -5,7 +5,7 @@ AgentDeck has two jobs:
 1. **A chat at parity with AFK Pilot**, the strongest multi-provider coding-agent chat for VS Code, on the user's own subscriptions, with native Claude and Codex protocols and ACP for the rest.
 2. **Its specialization: lanes and the Control Center** ([design](superpowers/specs/2026-10-29-lanes-and-control-center.md)) — multi-repo feature lanes, a main checkout that lanes move into and out of, warm worktrees, lane memory, workflows, and notifications.
 
-Built so far (plans 1–10, [overview](superpowers/plans/2026-10-28-mvp-overview.md)): Claude, Codex, and Grok; sessions with resume; tabs and sidebar; tool, diff, and plan cards; approvals; model and mode pickers; context meter; quota; MCP status and sign-in; guided sign-in and welcome; searchable switcher; turn footers; approval toasts; rich composer with `@`, `/`, attachments, and images.
+Built so far (plans 1–11, [overview](superpowers/plans/2026-10-28-mvp-overview.md)): Claude, Codex, and Grok; sessions with resume; tabs and sidebar; tool, diff, and plan cards; approvals; model and mode pickers; context meter; quota; MCP status and sign-in; guided sign-in and welcome; searchable switcher; turn footers; approval toasts; rich composer with `@`, `/`, attachments, and images; agent questions, plan review, and richer approvals.
 
 ## Phase A — chat parity with AFK Pilot
 
@@ -13,11 +13,11 @@ Checklist against AFK Pilot's features (its README, October 2026). ✓ done · �
 
 | Feature | Status | Plan |
 |---|---|---|
-| Questions from the agent (AskUserQuestion, Codex user input, Grok `x.ai/ask_user_question`) | ○ | 11 |
-| Plan review card (Claude ExitPlanMode, Grok `x.ai/exit_plan_mode`) with the next mode to switch to | ○ | 11 |
-| Permission cards with a native diff preview before approval | ◐ approvals exist; no preview | 11 |
-| "Allow `npm` for this session" for commands | ◐ Claude suggestions, Codex session accept | 11 |
-| Modes incl. Claude **Auto**, switchable mid-turn | ◐ no Auto | 11 |
+| Questions from the agent (AskUserQuestion, Codex user input, Grok `x.ai/ask_user_question`) | ✓ | 11 |
+| Plan review card (Claude ExitPlanMode, Grok `x.ai/exit_plan_mode`) with the next mode to switch to | ✓ | 11 |
+| Permission cards with a native diff preview before approval | ✓ *Review changes* on edit approvals | 11 |
+| "Allow `npm` for this session" for commands | ✓ | 11 |
+| Modes incl. Claude **Auto**, switchable mid-turn | ✓ | 11 |
 | Reasoning effort, live | ○ | 12 |
 | Queue: edit, remove, merge further typing; **Steer** (Codex, Grok) | ◐ remove only | 12 |
 | Drafts kept per chat; prompt history (↑/↓) | ○ | 12 |

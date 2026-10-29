@@ -37,6 +37,8 @@ export type SessionManagerDeps = {
   journalDir: string
   cwd: string
   env: () => Promise<Env>
+  /** Adds context to what the provider receives (the transcript keeps what the user wrote). May update the record, which is saved after. */
+  decorate?: (record: SessionRecord, parts: PromptPart[]) => Promise<PromptPart[]>
 }
 
 type Live = {
@@ -185,6 +187,7 @@ export class SessionManager {
     const live = this.load(id)
     if (laneId === undefined) delete live.record.laneId
     else live.record.laneId = laneId
+    delete live.record.laneSeen
     await this.save(live)
     this.changed.fire()
   }
@@ -192,6 +195,13 @@ export class SessionManager {
   /** Files the chat's diffs touched, as the provider reported them (absolute, or relative to the workspace root). */
   diffPaths(id: string): string[] {
     return [...this.load(id).items.values()].flatMap((item) => (item.kind === 'diff' ? [item.path] : []))
+  }
+
+  lastReply(id: string): string | undefined {
+    const replies = [...this.load(id).items.values()].flatMap((item) =>
+      item.kind === 'message' && item.role === 'assistant' ? [item.text] : []
+    )
+    return replies.at(-1)
   }
 
   /** Stops the CLI. The session stays listed and resumes on the next prompt. */
@@ -253,9 +263,10 @@ export class SessionManager {
     this.upsert(live, { kind: 'message', id: `user:${randomUUID()}`, role: 'user', parts })
     try {
       const session = await this.connect(live)
+      const sent = this.deps.decorate ? await this.deps.decorate(live.record, parts).catch(() => parts) : parts
       live.record.hasTurns = true
       await this.save(live)
-      await session.prompt(parts)
+      await session.prompt(sent)
     } catch (error) {
       this.fail(live, errorText(error))
     }

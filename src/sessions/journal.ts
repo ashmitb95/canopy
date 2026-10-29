@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { SessionItem } from '../core/types'
 
@@ -25,6 +25,12 @@ export class Journal {
     this.pending.clear()
     mkdirSync(dirname(this.path), { recursive: true })
     appendFileSync(this.path, lines)
+  }
+
+  /** Replaces the journal with exactly these items (after a rewind). */
+  static write(path: string, items: SessionItem[]): void {
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, items.map((item) => `${JSON.stringify(item)}\n`).join(''))
   }
 
   /** The latest version of every item, in the order items first appeared. */

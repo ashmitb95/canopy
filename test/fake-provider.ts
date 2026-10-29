@@ -22,6 +22,8 @@ export class FakeSession implements ProviderSession {
   readonly steers: PromptPart[][] = []
   boundaries: (WriteBoundary | undefined)[] = []
   disposed = false
+  readonly rewinds: { prompt?: string; keep?: string; files: boolean }[] = []
+  restartOnRewind = false
   private readonly items = new Emitter<SessionItem>()
   private readonly facts = new Emitter<SessionFact>()
   private readonly exits = new Emitter<{ error?: string }>()
@@ -68,6 +70,11 @@ export class FakeSession implements ProviderSession {
 
   async fork(): Promise<string> {
     return `${this.nativeId}-fork`
+  }
+
+  async rewind(target: { prompt?: string; keep?: string; files: boolean }): Promise<{ restart?: { resumeAt?: string } }> {
+    this.rewinds.push(target)
+    return this.restartOnRewind ? { restart: { resumeAt: target.keep } } : {}
   }
 
   async dispose(): Promise<void> {

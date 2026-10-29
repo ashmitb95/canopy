@@ -39,6 +39,16 @@ function watch(manager: SessionManager, id: string): SessionEvent[] {
   return events
 }
 
+function snapshotItems(manager: SessionManager, id: string): Promise<SessionItem[]> {
+  return new Promise((resolve) => {
+    const subscription = manager.subscribe(id, (event) => {
+      if (event.type !== 'snapshot') return
+      resolve(event.items)
+      queueMicrotask(() => subscription.dispose())
+    })
+  })
+}
+
 describe('SessionManager', () => {
   it('creates a session and sends a snapshot to subscribers', async () => {
     const { manager } = setup()
@@ -489,5 +499,57 @@ describe('SessionManager', () => {
     const { manager } = setup()
     const { id } = await manager.create('fake')
     await expect(manager.fork(id)).rejects.toThrow(/Send a message first/)
+  })
+
+  it('rewinds to before a user message: provider, transcript, and journal', async () => {
+    const { manager, sessions, memento, journalDir } = setup()
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('first'))
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'started', promptRef: 'p1' })
+    sessions[0].emit({ kind: 'message', id: 'a1', role: 'assistant', text: 'one', streaming: false })
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended', promptRef: 'p1', ref: 'r1' })
+    await manager.prompt(id, text('second'))
+    sessions[0].emit({ kind: 'turn', id: 't2', state: 'started', promptRef: 'p2' })
+    sessions[0].emit({ kind: 'turn', id: 't2', state: 'ended', promptRef: 'p2', ref: 'r2' })
+    const second = (await snapshotItems(manager, id)).find((item) => item.kind === 'message' && item.role === 'user' && item.parts[0]?.type === 'text' && item.parts[0].text === 'second')
+    const parts = await manager.rewind(id, second?.id ?? '', false)
+    expect(parts).toEqual(text('second'))
+    expect(sessions[0].rewinds).toEqual([{ prompt: 'p2', keep: 'r1', files: false }])
+    expect((await snapshotItems(manager, id)).map((item) => item.id)).toEqual(expect.arrayContaining(['a1']))
+    expect((await snapshotItems(manager, id)).some((item) => item.id === 't2')).toBe(false)
+    const reloaded = setup(memento, journalDir).manager
+    expect((await snapshotItems(reloaded, id)).some((item) => item.id === 't2')).toBe(false)
+  })
+
+  it('restarts the provider at the kept turn when it asks to', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('first'))
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'started', promptRef: 'p1' })
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended', promptRef: 'p1', ref: 'r1' })
+    await manager.prompt(id, text('second'))
+    sessions[0].emit({ kind: 'turn', id: 't2', state: 'started', promptRef: 'p2' })
+    sessions[0].emit({ kind: 'turn', id: 't2', state: 'ended', promptRef: 'p2', ref: 'r2' })
+    sessions[0].restartOnRewind = true
+    const second = (await snapshotItems(manager, id)).filter((item) => item.kind === 'message' && item.role === 'user')[1]
+    await manager.rewind(id, second.id, false)
+    expect(sessions[0].disposed).toBe(true)
+    await manager.warm(id)
+    expect(sessions[1].options).toMatchObject({ resumeAt: 'r1' })
+    expect(manager.list()[0].record.resumeAt).toBeUndefined()
+  })
+
+  it('rewinding the first message starts the provider afresh', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('only'))
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'started', promptRef: 'p1' })
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended', promptRef: 'p1', ref: 'r1' })
+    sessions[0].restartOnRewind = true
+    const first = (await snapshotItems(manager, id)).find((item) => item.kind === 'message' && item.role === 'user')
+    await manager.rewind(id, first?.id ?? '', false)
+    expect(manager.list()[0].record.hasTurns).toBe(false)
+    await manager.warm(id)
+    expect(sessions[1].options.resumeId).toBeUndefined()
   })
 })

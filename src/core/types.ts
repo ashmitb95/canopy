@@ -94,6 +94,10 @@ export type TurnItem = {
   durationMs?: number
   /** When the turn ended (ISO), stamped by the session manager. */
   at?: string
+  /** The provider's id for the prompt that started the turn (on both its started and ended items). */
+  promptRef?: string
+  /** On an ended turn: where the provider can resume up to this turn. */
+  ref?: string
 }
 export type NoticeItem = {
   kind: 'notice'
@@ -148,7 +152,7 @@ export type SessionFact =
   | { kind: 'mcp'; servers: McpServer[] }
   | { kind: 'commands'; items: CommandOption[] }
 
-export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context' | 'steer' | 'effort' | 'compact' | 'fork'
+export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context' | 'steer' | 'effort' | 'compact' | 'fork' | 'rewind' | 'rewindFiles'
 
 /** An account's usage limits as its CLI last reported them; shown with their age. */
 export type Quota = {
@@ -162,7 +166,7 @@ export type ProviderState = {
   account?: string
 }
 
-export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?: string; effort?: string; resumeId?: string }
+export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?: string; effort?: string; resumeId?: string; resumeAt?: string }
 
 /** Where a user signs in to an MCP server: a web page, or a CLI flow in a terminal. */
 export type McpSignIn = { kind: 'url'; url: string } | { kind: 'terminal'; command: string; hint: string }
@@ -198,6 +202,11 @@ export interface ProviderSession {
   cancel(): Promise<void>
   /** Copies the conversation into a new provider session; returns its native id. */
   fork?(): Promise<string>
+  /**
+   * Drops the turn started by `prompt` and everything after; `keep` is the last kept turn's `ref`.
+   * Returns `restart` when the provider must be reopened (with `resumeAt`) to finish the rewind.
+   */
+  rewind?(target: { prompt?: string; keep?: string; files: boolean }): Promise<{ restart?: { resumeAt?: string } }>
   setModel?(id: string): Promise<void>
   /** Sets the reasoning effort for this and later turns. */
   setEffort?(effort: string): Promise<void>

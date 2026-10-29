@@ -24,6 +24,8 @@ export type SessionRecord = {
   nativeId?: string
   /** False until a prompt was sent; a provider cannot resume a session it never saved. */
   hasTurns: boolean
+  /** Resume up to this provider reference on the next open (set by a rewind). */
+  resumeAt?: string
   /** The lane (branch) this chat works on; absent for chats on no lane. */
   laneId?: string
   laneSeen?: LaneSeen

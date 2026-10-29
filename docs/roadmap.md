@@ -26,12 +26,12 @@ Checklist against AFK Pilot's features (its README, October 2026). ✓ done · �
 | Workflow / deep-research progress cards | — (not planned: no provider exposes it) | 13 |
 | Context and cost popover (billed totals) and Compact | ✓ | 13 |
 | LaTeX and Mermaid rendering | ✓ | 13 |
-| Fork conversation | ○ | 14 |
-| Rewind (conversation, optionally files) | ○ | 14 |
-| History: unread result badges, rename and delete inline, 30-day list | ◐ | 14 |
-| Add to chat from the Explorer and editor context menu; keybinding | ○ | 14 |
-| Default to the Secondary Side Bar | ○ | 14 |
-| Keep the machine awake while a turn runs | ○ | 14 |
+| Fork conversation | ✓ (Claude, Codex) | 14 |
+| Rewind (conversation, optionally files) | ○ | 14b |
+| History: unread result badges, rename and delete inline, 30-day list | ✓ | 14 |
+| Add to chat from the Explorer and editor context menu; keybinding | ✓ | 14 |
+| Default to the Secondary Side Bar | ✓ | 14 |
+| Keep the machine awake while a turn runs | ✓ (macOS, Linux) | 14 |
 | Voice dictation | ○ | 15 (spike first) |
 | More agents: Cursor (`agent acp`), OpenCode, Gemini CLI, Muse, Antigravity | ◐ Grok | 16 |
 | Edit provider config files from settings | ○ | 16 |
@@ -49,7 +49,8 @@ Plans:
 - **11 — Questions, plan review, and permissions.** First. Its path checks are also the enforcement layer lanes need.
 - **12 — Turn controls:** effort, steering, queue editing, drafts, prompt history. ✓ done.
 - **13 — Transcript depth:** subagent and workflow cards, tool batching, context and cost, LaTeX, Mermaid. ✓ done.
-- **14 — Session operations:** fork, rewind, unread badges, history actions, Explorer context menu, Secondary Side Bar default, keep-awake.
+- **14 — Session operations:** fork, rewind, unread badges, history actions, Explorer context menu, Secondary Side Bar default, keep-awake. ✓ done (rewind moves to 14b).
+- **14b — Rewind:** per-provider turn references; Claude resumeSessionAt and file checkpoints, Codex thread/revert.
 - **15 — Voice dictation:** spike microphone access in a webview first; fall back to a host-side recorder.
 - **16 — More agents:** Cursor, OpenCode, Gemini CLI, Muse, Antigravity as ACP specs with recorded fixtures; provider config editing.
 

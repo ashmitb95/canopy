@@ -12,6 +12,7 @@ import { LaneTracker } from './lanes/tracker'
 import { providers } from './providers/registry'
 import { SessionManager } from './sessions/manager'
 import { SessionStore } from './sessions/store'
+import { attachFile } from './ui/attachments'
 import { ChatSurfaces, type LaneSource, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
 import { DIFF_SCHEME, DiffDocuments } from './ui/diff-documents'
 import { EditorContextTracker } from './ui/editor-context'
@@ -19,6 +20,7 @@ import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { Notifier } from './ui/notifier'
 import { type LaneNode, type SessionNode, SessionsTree } from './ui/sessions-tree'
 import { SessionsStatusBar } from './ui/status-bar'
+import { KeepAwake } from './ui/keep-awake'
 import { Unread } from './ui/unread'
 
 let manager: SessionManager | undefined
@@ -65,6 +67,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     editor,
     surfaces,
+    new KeepAwake(sessionManager),
     notifier,
     vscode.commands.registerCommand('agentdeck.testNotification', async () => {
       const event = await vscode.window.showQuickPick(['finished', 'approval', 'question', 'failed'], { placeHolder: 'Which notification?' })
@@ -100,6 +103,12 @@ export function activate(context: vscode.ExtensionContext): void {
       } catch (error) {
         void vscode.window.showErrorMessage((error as Error).message)
       }
+    }),
+    vscode.commands.registerCommand('agentdeck.addToChat', async (uri?: vscode.Uri, selected?: vscode.Uri[]) => {
+      const uris = selected?.length ? selected : uri ? [uri] : vscode.window.activeTextEditor ? [vscode.window.activeTextEditor.document.uri] : []
+      const files = uris.filter((candidate) => candidate.scheme === 'file')
+      if (files.length === 0) return
+      await surfaces.insertAttachments(files.map((file) => attachFile(join(storage, 'attachments'), file.fsPath, vscode.workspace.asRelativePath(file))))
     }),
     vscode.commands.registerCommand('agentdeck.moveSessionToLane', async (node: SessionNode) => {
       const none = { label: '$(circle-slash) No branch', lane: undefined }

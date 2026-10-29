@@ -6,7 +6,7 @@
   "private": true,
   "publisher": "ashmitb95",
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.106.0"
   },
   "main": "./dist/extension.js",
   "extensionKind": [
@@ -23,18 +23,27 @@
           "title": "AgentDeck",
           "icon": "media/agentdeck.svg"
         }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "agentdeck-chat",
+          "title": "AgentDeck",
+          "icon": "media/agentdeck.svg"
+        }
       ]
     },
     "views": {
       "agentdeck": [
         {
+          "id": "agentdeck.sessions",
+          "name": "Sessions"
+        }
+      ],
+      "agentdeck-chat": [
+        {
           "type": "webview",
           "id": "agentdeck.chat",
           "name": "Chat"
-        },
-        {
-          "id": "agentdeck.sessions",
-          "name": "Sessions"
         }
       ]
     },
@@ -182,6 +191,11 @@
           "type": "boolean",
           "default": true,
           "description": "Stay quiet while VS Code is focused and the chat is visible."
+        },
+        "agentdeck.keepAwake": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep the computer from sleeping while a chat is running (macOS and Linux)."
         }
       }
     },
@@ -219,6 +233,12 @@
         "command": "agentdeck.openSessionInSidebar",
         "title": "Open in Sidebar",
         "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.addToChat",
+        "title": "Add to AgentDeck Chat",
+        "category": "AgentDeck",
+        "icon": "$(comment-discussion)"
       },
       {
         "command": "agentdeck.forkSession",
@@ -422,8 +442,30 @@
           "command": "agentdeck.deleteSession",
           "when": "false"
         }
+      ],
+      "explorer/context": [
+        {
+          "command": "agentdeck.addToChat",
+          "when": "resourceScheme == file",
+          "group": "agentdeck@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "agentdeck.addToChat",
+          "when": "resourceScheme == file",
+          "group": "agentdeck@1"
+        }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "agentdeck.addToChat",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
     "build": "node esbuild.mjs",

@@ -14,9 +14,9 @@ describe('parseWorktrees', () => {
       'worktree /w/bare\nbare\n'
     ].join('\n')
     expect(parseWorktrees(text)).toEqual([
-      { path: '/w/api', main: true, branch: 'retry-fix' },
-      { path: '/w/api/.worktrees/auth', main: false, branch: 'feat/auth' },
-      { path: '/w/api/.worktrees/old', main: false }
+      { path: '/w/api', main: true, head: 'aaa', branch: 'retry-fix' },
+      { path: '/w/api/.worktrees/auth', main: false, head: 'bbb', branch: 'feat/auth' },
+      { path: '/w/api/.worktrees/old', main: false, head: 'ccc' }
     ])
   })
 })
@@ -52,8 +52,8 @@ describe('readRepo', () => {
       name: 'api',
       base: 'main',
       checkouts: [
-        { path: api, main: true, branch: 'retry-fix', dirty: 2 },
-        { path: join(api, '.worktrees', 'auth'), main: false, branch: 'auth', dirty: 0 }
+        { path: api, main: true, head: expect.stringMatching(/^[0-9a-f]{40}$/), branch: 'retry-fix', dirty: 2 },
+        { path: join(api, '.worktrees', 'auth'), main: false, head: expect.stringMatching(/^[0-9a-f]{40}$/), branch: 'auth', dirty: 0 }
       ]
     })
   })

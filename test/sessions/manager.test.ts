@@ -421,4 +421,41 @@ describe('SessionManager', () => {
     manager.notify(id, 'moved')
     expect(events).toContainEqual({ type: 'item', item: { kind: 'notice', id: expect.any(String), level: 'info', text: 'moved' } })
   })
+
+  it('sets the effort live and opens later sessions with it', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.warm(id)
+    await manager.setEffort(id, 'high')
+    expect(sessions[0].efforts).toEqual(['high'])
+    expect(manager.list()[0].record.effort).toBe('high')
+    await manager.stop(id)
+    await manager.warm(id)
+    expect(sessions[1].options.effort).toBe('high')
+  })
+
+  it('merges further typing into the last queued message', async () => {
+    const { manager } = setup()
+    const { id } = await manager.create('fake')
+    const events = watch(manager, id)
+    await manager.prompt(id, text('first'))
+    await manager.prompt(id, text('second'))
+    await manager.prompt(id, text('third'))
+    const queues = events.filter((event) => event.type === 'queue')
+    expect(queues.at(-1)).toMatchObject({ queue: [{ parts: [...text('second'), ...text('third')] }] })
+  })
+
+  it('steers a queued message into the running turn', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    const events = watch(manager, id)
+    await manager.prompt(id, text('first'))
+    await manager.prompt(id, text('also this'))
+    const queued = events.filter((event) => event.type === 'queue').at(-1)
+    const queuedId = queued?.type === 'queue' ? queued.queue[0].id : ''
+    await manager.steer(id, queuedId)
+    expect(sessions[0].steers).toEqual([text('also this')])
+    expect(events.filter((event) => event.type === 'queue').at(-1)).toMatchObject({ queue: [] })
+    expect(events.filter((event) => event.type === 'item' && event.item.kind === 'message' && event.item.role === 'user')).toHaveLength(2)
+  })
 })

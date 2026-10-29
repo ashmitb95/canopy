@@ -19,6 +19,7 @@ export type SessionRecord = {
   updatedAt: string
   mode: PermissionMode
   model?: string
+  effort?: string
   /** The provider's own session id, used to resume. */
   nativeId?: string
   /** False until a prompt was sent; a provider cannot resume a session it never saved. */

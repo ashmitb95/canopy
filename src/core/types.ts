@@ -136,12 +136,13 @@ export type CommandOption = { name: string; description?: string }
 /** Session state shown outside the transcript. The latest fact of each kind wins. */
 export type SessionFact =
   | { kind: 'model'; current: string; available: ModelOption[] }
+  | { kind: 'effort'; current?: string; available: string[] }
   | { kind: 'mode'; current: PermissionMode; available: readonly PermissionMode[] }
   | { kind: 'context'; usedTokens: number; maxTokens: number }
   | { kind: 'mcp'; servers: McpServer[] }
   | { kind: 'commands'; items: CommandOption[] }
 
-export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context'
+export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context' | 'steer' | 'effort'
 
 /** An account's usage limits as its CLI last reported them; shown with their age. */
 export type Quota = {
@@ -155,7 +156,7 @@ export type ProviderState = {
   account?: string
 }
 
-export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?: string; resumeId?: string }
+export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?: string; effort?: string; resumeId?: string }
 
 /** Where a user signs in to an MCP server: a web page, or a CLI flow in a terminal. */
 export type McpSignIn = { kind: 'url'; url: string } | { kind: 'terminal'; command: string; hint: string }
@@ -190,6 +191,10 @@ export interface ProviderSession {
   prompt(parts: PromptPart[]): Promise<void>
   cancel(): Promise<void>
   setModel?(id: string): Promise<void>
+  /** Sets the reasoning effort for this and later turns. */
+  setEffort?(effort: string): Promise<void>
+  /** Adds a message to the running turn instead of waiting for it to end. */
+  steer?(parts: PromptPart[]): Promise<void>
   setMode?(mode: PermissionMode): Promise<void>
   /** Settles a pending approval or question. */
   answer(itemId: string, response: PromptResponse): void

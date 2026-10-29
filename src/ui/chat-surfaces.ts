@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
-import type { Disposable } from '../core/emitter'
+import type { Disposable, Event } from '../core/emitter'
 import type { PromptPart, ProviderDefinition, ProviderState, Quota, SignInFlow } from '../core/types'
 import type { Env } from '../env'
 import type { Attention, SessionManager } from '../sessions/manager'
@@ -9,13 +9,16 @@ import { attachFile, saveImage } from './attachments'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
 import { FileSearch } from './file-search'
-import type { HostMessage, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
+import type { HostMessage, LaneInfo, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
 
 export const PANEL_TYPE = 'agentdeck.chatPanel'
 export const SIDEBAR_VIEW = 'agentdeck.chat'
 const SIDEBAR_SESSION_KEY = 'agentdeck.sidebarSession'
 const QUOTA_KEY = 'agentdeck.quota'
 const DEFAULT_PROVIDER = 'claude'
+
+/** Lanes for the chat's lane chip; absent when no folder is open. */
+export type LaneSource = { list(): LaneInfo[]; onDidChange: Event<void> }
 
 type SurfaceKind = 'panel' | 'view'
 
@@ -52,7 +55,8 @@ export class ChatSurfaces
     private readonly providers: ReadonlyMap<string, ProviderDefinition>,
     private readonly env: () => Promise<Env>,
     private readonly editor: EditorContextTracker,
-    private readonly diffs: DiffDocuments
+    private readonly diffs: DiffDocuments,
+    private readonly lanes?: LaneSource
   ) {
     this.attachmentsDir = join((context.storageUri ?? context.globalStorageUri).fsPath, 'attachments')
     this.quotas = context.globalState.get<Record<string, Quota>>(QUOTA_KEY) ?? {}
@@ -60,7 +64,9 @@ export class ChatSurfaces
       manager.onDidChange(() => {
         this.refreshTitles()
         this.postSessions()
+        this.postLanes()
       }),
+      ...(lanes ? [lanes.onDidChange(() => this.postLanes())] : []),
       editor.onDidChange((editorContext) => this.broadcast({ type: 'editorContext', context: editorContext })),
       manager.onQuota(({ providerId, quota }) => {
         this.quotas[providerId] = quota
@@ -222,6 +228,7 @@ export class ChatSurfaces
           attachments: surface.webview.asWebviewUri(vscode.Uri.file(this.attachmentsDir)).toString()
         })
         this.postSessions(surface)
+        this.postLanes(surface)
         await this.postProviders(surface)
         for (const [providerId, quota] of Object.entries(this.quotas)) this.post(surface, { type: 'quota', providerId, quota })
         for (const [providerId, { progress }] of this.signIns) this.post(surface, { type: 'signInProgress', providerId, progress })
@@ -273,6 +280,15 @@ export class ChatSurfaces
       case 'reviewChanges':
         if (sessionId) await this.diffs.openAll(sessionId, message.itemIds)
         return
+      case 'setLane':
+        if (sessionId) await this.manager.setLane(sessionId, message.laneId)
+        return
+      case 'newLane':
+        await vscode.commands.executeCommand('agentdeck.newLane')
+        return
+      case 'reviewLane':
+        await vscode.commands.executeCommand('agentdeck.reviewLane', message.laneId)
+        return
       case 'openSession':
         this.openPanel(message.sessionId)
         return
@@ -318,6 +334,7 @@ export class ChatSurfaces
     )
     void this.manager.warm(sessionId)
     void this.postProvider(surface)
+    this.postLanes(surface)
   }
 
   private async createFor(surface: Surface): Promise<string> {
@@ -455,9 +472,22 @@ export class ChatSurfaces
         providerId: record.providerId,
         status,
         updatedAt: record.updatedAt,
-        inTab: this.panels.has(record.id)
+        inTab: this.panels.has(record.id),
+        ...(record.laneId ? { laneId: record.laneId } : {})
       }))
     this.post(surface, { type: 'sessions', sessions })
+  }
+
+  /** Every surface gets the lane list and the lane its own chat is on. */
+  private postLanes(only?: Surface): void {
+    if (!this.lanes) return
+    const lanes = this.lanes.list()
+    for (const surface of only ? [only] : this.surfaces()) {
+      this.post(surface, { type: 'lanes', lanes })
+      if (!surface.sessionId) continue
+      const laneId = this.manager.list().find(({ record }) => record.id === surface.sessionId)?.record.laneId
+      this.post(surface, { type: 'lane', sessionId: surface.sessionId, ...(laneId ? { laneId } : {}) })
+    }
   }
 
   private refreshTitles(): void {

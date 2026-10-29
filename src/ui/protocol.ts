@@ -17,7 +17,17 @@ export type ProviderInfo = {
   state: ProviderState
 }
 
-export type SessionSummary = { id: string; title: string; providerId: string; status: SessionStatus; updatedAt: string; inTab: boolean }
+export type LaneInfo = { name: string; where: string }
+
+export type SessionSummary = {
+  id: string
+  title: string
+  providerId: string
+  status: SessionStatus
+  updatedAt: string
+  inTab: boolean
+  laneId?: string
+}
 
 /** Where a sign-in flow is; `null` clears it. */
 export type SignInProgress =
@@ -36,6 +46,10 @@ export type HostMessage =
   /** Recent sessions, for the sidebar's session switcher. */
   | { type: 'sessions'; sessions: SessionSummary[] }
   | { type: 'quota'; providerId: string; quota: Quota }
+  /** Lanes for the chat's lane chip; sent only when a folder is open. */
+  | { type: 'lanes'; lanes: LaneInfo[] }
+  /** The lane a chat is on. */
+  | { type: 'lane'; sessionId: string; laneId?: string }
   /** The sidebar has no session yet. */
   | { type: 'empty' }
   | { type: 'signInProgress'; providerId: string; progress: SignInProgress | null }
@@ -69,3 +83,6 @@ export type WebviewMessage =
   | { type: 'switchSession'; sessionId: string }
   | { type: 'reviewChanges'; itemIds: string[] }
   | { type: 'openSession'; sessionId: string }
+  | { type: 'setLane'; laneId?: string }
+  | { type: 'newLane' }
+  | { type: 'reviewLane'; laneId: string }

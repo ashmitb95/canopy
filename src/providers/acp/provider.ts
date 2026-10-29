@@ -20,11 +20,13 @@ import type {
   QuestionItem,
   SessionFact,
   SessionItem,
-  SignInEvent
+  SignInEvent,
+  WriteBoundary
 } from '../../core/types'
 import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
 import { encodePrompt, imageParts } from '../encode'
+import { writable } from '../boundary'
 import { PromptHolder } from '../prompt-holder'
 import { grokAnswers } from '../prompts'
 import { RpcPeer, type ServerRequest } from '../rpc'
@@ -40,7 +42,16 @@ const STDERR_TAIL = 4000
 type AcpModel = { modelId: string; name: string; description?: string | null; _meta?: { totalContextTokens?: number } | null }
 type SessionResult = { sessionId?: string; models?: { currentModelId: string; availableModels: AcpModel[] } | null }
 type PermissionOption = { optionId: string; name: string; kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always' }
-type PermissionRequest = { toolCall: { toolCallId: string; title?: string | null; kind?: string | null }; options: PermissionOption[] }
+type PermissionRequest = {
+  toolCall: {
+    toolCallId: string
+    title?: string | null
+    kind?: string | null
+    locations?: { path: string }[] | null
+    content?: { type: string; path?: string }[] | null
+  }
+  options: PermissionOption[]
+}
 
 type AgentQuestionRequest = {
   toolCallId: string
@@ -55,6 +66,7 @@ type AgentPlanRequest = { toolCallId: string; planContent?: string | null; plan?
 
 const selected = (optionId: string) => ({ outcome: { outcome: 'selected', optionId } })
 const CANCELLED = { outcome: { outcome: 'cancelled' } }
+const WRITES = new Set(['edit', 'delete', 'move'])
 
 const APPROVAL_TITLES: Record<string, string> = { edit: 'edit this file', execute: 'run this command', fetch: 'fetch this' }
 
@@ -109,6 +121,7 @@ class AcpSession implements ProviderSession {
   private models: (ModelOption & { contextWindow?: number })[] = []
   private model = ''
   private mode: PermissionMode
+  private boundary: WriteBoundary | undefined
   private replaying = false
   private imagesAccepted = false
   private commands: CommandOption[] = []
@@ -221,6 +234,10 @@ class AcpSession implements ProviderSession {
     this.holder.answer(itemId, response)
   }
 
+  setBoundary(boundary: WriteBoundary | undefined): void {
+    this.boundary = boundary
+  }
+
   async dispose(): Promise<void> {
     this.closed = true
     this.holder.dismissAll()
@@ -279,6 +296,8 @@ class AcpSession implements ProviderSession {
   }
 
   private permission({ toolCall, options }: PermissionRequest): Promise<unknown> {
+    const outside = this.outsideBoundary(toolCall)
+    if (outside) return outside
     const allow = options.find((option) => option.kind === 'allow_once') ?? options.find((option) => option.kind === 'allow_always')
     const autoAllow = this.mode === 'full-access' || (this.mode === 'accept-edits' && toolCall.kind === 'edit')
     if (autoAllow && allow) return Promise.resolve(selected(allow.optionId))
@@ -306,6 +325,22 @@ class AcpSession implements ProviderSession {
       const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
       const chosen = optionIds.get(optionId)
       return { resolved: optionId, result: chosen ? selected(chosen) : CANCELLED }
+    })
+  }
+
+  /** An edit outside the lane is refused without asking; the reason shows in the transcript. */
+  private outsideBoundary(toolCall: PermissionRequest['toolCall']): Promise<unknown> | undefined {
+    const boundary = this.boundary
+    if (!boundary || !WRITES.has(toolCall.kind ?? '')) return undefined
+    const paths = [
+      ...(toolCall.locations ?? []).map((location) => location.path),
+      ...(toolCall.content ?? []).flatMap((block) => (block.type === 'diff' && block.path ? [block.path] : []))
+    ]
+    const refused = paths.find((path) => !writable(boundary, path))
+    if (!refused) return undefined
+    return boundary.outside(refused).then((reason) => {
+      this.items.fire({ kind: 'notice', id: `notice:${toolCall.toolCallId}`, level: 'warning', text: reason })
+      return CANCELLED
     })
   }
 

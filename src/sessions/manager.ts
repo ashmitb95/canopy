@@ -149,7 +149,10 @@ export class SessionManager {
     const live = this.load(id)
     const writer = this.laneWriter(live)
     if (live.status === 'running' || live.status === 'needs-input' || writer) {
-      live.queue.push({ id: randomUUID(), parts })
+      // Further typing while busy joins the last queued message rather than lining up behind it.
+      const last = live.queue.at(-1)
+      if (last) last.parts = [...last.parts, ...parts]
+      else live.queue.push({ id: randomUUID(), parts })
       this.broadcast(live, { type: 'queue', queue: [...live.queue] })
       if (writer) this.notify(id, `Waiting: ${live.record.laneId} is busy in “${writer.record.title}”.`)
       return
@@ -187,6 +190,25 @@ export class SessionManager {
     live.record.mode = mode
     await this.save(live)
     await live.session?.setMode?.(mode)
+  }
+
+  async setEffort(id: string, effort: string): Promise<void> {
+    const live = this.load(id)
+    live.record.effort = effort
+    await this.save(live)
+    await live.session?.setEffort?.(effort)
+  }
+
+  /** Sends a queued message into the running turn now; when nothing is running it is simply sent. */
+  async steer(id: string, queuedId: string): Promise<void> {
+    const live = this.load(id)
+    const queued = live.queue.find((entry) => entry.id === queuedId)
+    if (!queued) return
+    live.queue = live.queue.filter((entry) => entry.id !== queuedId)
+    this.broadcast(live, { type: 'queue', queue: [...live.queue] })
+    if (!isBusy(live.status) || !live.session?.steer) return this.send(live, queued.parts)
+    this.upsert(live, { kind: 'message', id: `user:${randomUUID()}`, role: 'user', parts: queued.parts })
+    await live.session.steer(queued.parts)
   }
 
   async refreshMcp(id: string): Promise<void> {
@@ -327,6 +349,7 @@ export class SessionManager {
       cwd: this.deps.cwd,
       mode: live.record.mode,
       model: live.record.model,
+      ...(live.record.effort ? { effort: live.record.effort } : {}),
       resumeId
     })
     live.session = session

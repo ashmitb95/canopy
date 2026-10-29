@@ -114,11 +114,53 @@ describe('SessionManager', () => {
     await manager.prompt(id, text('run it'))
     sessions[0].emit(approval('approval:1'))
     expect(manager.list()[0].status).toBe('needs-input')
-    expect(attention).toEqual([{ sessionId: id, reason: 'needs-input' }])
+    expect(attention).toEqual([{ sessionId: id, reason: 'needs-input', prompt: { kind: 'approval', text: 'Allow Bash?' } }])
     manager.answer(id, 'approval:1', { kind: 'option', optionId: 'allow' })
     expect(sessions[0].answers).toEqual([['approval:1', { kind: 'option', optionId: 'allow' }]])
     sessions[0].emit(approval('approval:1', 'allow'))
     expect(manager.list()[0].status).toBe('running')
+  })
+
+  it('reports what a finished turn did, and failures', async () => {
+    const { manager, sessions } = setup()
+    const attention: Attention[] = []
+    manager.onAttention((event) => attention.push(event))
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('go'))
+    sessions[0].emit({ kind: 'diff', id: 'd1', path: '/w/a.ts', oldText: 'a', newText: 'b' })
+    sessions[0].emit({ kind: 'diff', id: 'd2', path: '/w/a.ts', oldText: 'b', newText: 'c' })
+    sessions[0].emit({ kind: 'diff', id: 'd3', path: '/w/b.ts', oldText: null, newText: 'x' })
+    sessions[0].emit({ kind: 'tool', id: 't1', title: 'pnpm test', toolKind: 'execute', status: 'done' })
+    sessions[0].emit({ kind: 'tool', id: 't2', title: 'read', toolKind: 'read', status: 'done' })
+    sessions[0].emit({ kind: 'turn', id: 'turn1', state: 'ended' })
+    expect(attention).toEqual([{ sessionId: id, reason: 'turn-ended', durationMs: expect.any(Number), edits: 2, commands: 1 }])
+  })
+
+  it('counts only the latest turn', async () => {
+    const { manager, sessions } = setup()
+    const attention: Attention[] = []
+    manager.onAttention((event) => attention.push(event))
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('one'))
+    sessions[0].emit({ kind: 'diff', id: 'd1', path: '/w/a.ts', oldText: 'a', newText: 'b' })
+    sessions[0].emit({ kind: 'turn', id: 'turn1', state: 'ended' })
+    await manager.prompt(id, text('two'))
+    sessions[0].emit({ kind: 'turn', id: 'turn2', state: 'ended' })
+    expect(attention[1]).toMatchObject({ reason: 'turn-ended', edits: 0, commands: 0 })
+  })
+
+  it('says which question is waiting', async () => {
+    const { manager, sessions } = setup()
+    const attention: Attention[] = []
+    manager.onAttention((event) => attention.push(event))
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('ask'))
+    sessions[0].emit({
+      kind: 'question',
+      id: 'question:1',
+      questions: [{ id: 'q1', question: 'Which color?', multiSelect: false, allowOther: true, options: [] }]
+    })
+    expect(attention).toEqual([{ sessionId: id, reason: 'needs-input', prompt: { kind: 'question', text: 'Which color?' } }])
   })
 
   it('needs input while a question is pending and resumes once it is answered', async () => {

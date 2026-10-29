@@ -8,6 +8,9 @@ export interface Memento {
 
 export type SessionStatus = 'idle' | 'running' | 'needs-input' | 'error' | 'stopped'
 
+/** Where a chat's lane was (path and HEAD per repo) when the chat last received its lane brief or update. */
+export type LaneSeen = { lane: string; at: string; repos: Record<string, { path: string; head?: string }> }
+
 export type SessionRecord = {
   id: string
   providerId: string
@@ -22,6 +25,7 @@ export type SessionRecord = {
   hasTurns: boolean
   /** The lane (branch) this chat works on; absent for chats on no lane. */
   laneId?: string
+  laneSeen?: LaneSeen
   /** Latest fact of each kind, shown before the CLI is running again. */
   facts: Partial<Record<SessionFact['kind'], SessionFact>>
 }

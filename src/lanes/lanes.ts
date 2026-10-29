@@ -55,3 +55,22 @@ export function laneFromPaths(repos: RepoState[], files: string[]): string | und
   const lanes = new Set(files.flatMap((file) => laneForPath(repos, file) ?? []))
   return lanes.size === 1 ? [...lanes][0] : undefined
 }
+
+export type LaneMove = { lane: string; repo: string; from?: string; to?: string }
+
+/** Lane checkouts that appeared, moved, or went away between two readings. */
+export function laneMoves(before: Lane[], after: Lane[]): LaneMove[] {
+  const paths = (lanes: Lane[]) =>
+    new Map(lanes.flatMap((lane) => lane.repos.map((repo) => [`${lane.name}\u0000${repo.repo}`, repo.path] as const)))
+  const was = paths(before)
+  const is = paths(after)
+  const moves: LaneMove[] = []
+  for (const key of new Set([...was.keys(), ...is.keys()])) {
+    const from = was.get(key)
+    const to = is.get(key)
+    if (from === to) continue
+    const [lane, repo] = key.split('\u0000')
+    moves.push({ lane, repo, ...(from ? { from } : {}), ...(to ? { to } : {}) })
+  }
+  return moves
+}

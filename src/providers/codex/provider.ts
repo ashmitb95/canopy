@@ -451,7 +451,7 @@ class CodexSession implements ProviderSession {
     const schema = request.requestedSchema as ElicitationSchema
     const questions = elicitationQuestions(schema)
     const item: QuestionItem = { kind: 'question', id, title: `${request.serverName}: ${request.message}`, questions }
-    return this.holder.hold(item, (response) =>
+    return this.holder.hold<unknown>(item, (response) =>
       response.kind === 'answers'
         ? {
             resolved: { answers: response.answers },

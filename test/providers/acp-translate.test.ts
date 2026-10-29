@@ -122,4 +122,18 @@ describe('AcpTranslator', () => {
   it('ignores updates it does not show', () => {
     expect(run([{ sessionUpdate: 'available_commands_update' }, { sessionUpdate: 'session_info_update' }])).toEqual([])
   })
+
+  it('remembers which diff items a tool call produced', () => {
+    const translator = new AcpTranslator(() => {})
+    translator.startTurn()
+    translator.feed({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 't7',
+      kind: 'edit',
+      status: 'pending',
+      content: [{ type: 'diff', path: '/w/a.md', oldText: 'a', newText: 'b' }]
+    })
+    expect(translator.diffIdsFor('t7')).toEqual(['t7:diff:0'])
+    expect(translator.diffIdsFor('nope')).toEqual([])
+  })
 })

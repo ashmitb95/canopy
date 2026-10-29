@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recentSessions } from '../../src/ui/unread'
+import { recentSessions } from '../../src/ui/recent'
 
 const day = 86_400_000
 const at = (daysAgo: number) => new Date(Date.UTC(2026, 9, 30) - daysAgo * day).toISOString()

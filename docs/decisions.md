@@ -8,9 +8,9 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 | 2 | Subscriptions are used only through each provider's official CLI | Anthropic restricts subscription OAuth tokens in third-party products; driving the user's logged-in CLI keeps auth with the vendor. The extension never reads, stores, or forwards credentials and never calls provider APIs directly. |
 | 3 | Claude via the Agent SDK pointed at the user's installed `claude`; Codex via `codex app-server`; everything else via ACP | Native protocols give full fidelity for the two most used providers; ACP makes each further agent a config entry. |
 | 4 | One shared item model (`SessionItem`) and a declared capability set per provider | The UI renders one format and shows a control only when the provider supports it, so new providers and new features meet without special cases. |
-| 5 | Sessions run in the open workspace folder; agents manage git worktrees themselves | Requiring worktree setup before chatting is the friction to avoid. |
+| 5 | Sessions run in the open workspace folder; agents manage git worktrees themselves | Requiring worktree setup before chatting is the friction to avoid. *Refined by 31–33: agents still may; AgentDeck tracks the result and moves lanes on request.* |
 | 6 | One login per provider | Multiple accounts add complexity without a current need. |
-| 7 | No multi-agent coordinator for now | The goal is running many providers from one place, not orchestrating them. |
+| 7 | No multi-agent coordinator for now | The goal is running many providers from one place, not orchestrating them. *Superseded by 30: a light, app-side lane coordinator that agents never see.* |
 | 8 | Sessions persist and resume across reloads; nothing runs while VS Code is closed | Resume is cheap because providers keep their own transcripts; background running would need a daemon. |
 | 9 | Chats render in editor tabs and in the sidebar, from one chat app | Tabs allow side-by-side sessions; the sidebar matches the official Claude and Codex extensions. |
 | 10 | Quota, skills, MCP status, and models come only from what the CLI reports | Follows from 2. Trade-off: quota refreshes only while a session runs, so it is shown with its age. |
@@ -32,6 +32,13 @@ Settled product and architecture decisions, with the reason for each. The [spec]
 | 26 | Claude runs the newest official CLI: `claude` on PATH or the binary bundled with the Claude Code extension, whichever reports the higher version | The extension updates its CLI on its own; a standalone install can lag hundreds of releases behind and miss new models (seen: PATH 2.1.111 without Opus 5.5, extension 2.1.311 with it). |
 | 27 | ACP agents share one provider; each agent is an `AcpAgentSpec` (command, install folders, auth method, sign-in check). Grok is the first | Adding OpenCode, Gemini, or Cursor's `agent acp` becomes a spec entry plus a fixture. |
 | 28 | ACP permission modes are enforced by the adapter (it answers permission requests in *Accept edits* and *Full access*) | Modes switch mid-session without restarting the agent with flags such as Grok's `--always-approve`. |
+| 29 | The chat's baseline is parity with AFK Pilot | It is the most complete multi-provider agent chat for VS Code; matching it is table stakes, not the product. Checklist in the [roadmap](roadmap.md). |
+| 30 | AgentDeck's specialization is lanes and the Control Center: the app coordinates lanes and chats; agents never call coordination tools | Canopy's lesson: an agent spending context on orchestration understands less code. The app already runs the agents, so it knows when turns run and can guard paths. [Design](superpowers/specs/2026-10-29-lanes-and-control-center.md). |
+| 31 | Every chat runs at the workspace root; where to work is an instruction and a permission boundary | Provider sessions (Claude's are keyed by folder) always resume; moving a lane never moves a chat. |
+| 32 | Derive Git state, store only intent (`.agentdeck/` at the workspace root holds goals, plans, notes, summaries) | Canopy's `canopy.toml` and state files described Git and drifted. Derived state cannot go stale; stored intent is stamped with commits and reconciled. |
+| 33 | Main is where code runs: lanes move into the main checkout on request; moved-out lanes wait warm in `<repo>/.worktrees/<lane>` | Worktree-first tools leave work in checkouts that often do not run (env files, dependencies). Uncommitted changes travel with their lane; nothing switches mid-turn. |
+| 34 | Workflows (Research, Plan, Build, Review stages with per-task-type default providers) are opt-in and never advance on their own | Explicit handoffs keep each stage a real, reviewable session without an autonomous router. |
+| 35 | Notifications are native, from AgentDeck's own session events, carrying over claude-notifier's behaviour; spawned CLIs get `CLAUDE_NOTIFIER_DISABLE=1` | AgentDeck knows every event directly; the env var stops claude-notifier's hooks double-notifying. |
 
 ## Findings from the proof of concept
 

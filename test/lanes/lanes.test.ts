@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { groupSessions } from '../../src/lanes/group'
-import { deriveLanes, laneForPath, laneFromPaths } from '../../src/lanes/lanes'
+import { deriveLanes, laneDescription, laneForPath, laneFromPaths } from '../../src/lanes/lanes'
 import type { RepoState } from '../../src/lanes/state'
 
 const repos: RepoState[] = [
@@ -72,5 +72,14 @@ describe('groupSessions', () => {
       ],
       loose: [sessions[1]]
     })
+  })
+})
+
+describe('laneDescription', () => {
+  it('says where the lane lives in each repo, with uncommitted files', () => {
+    expect(laneDescription(deriveLanes(repos).find((lane) => lane.name === 'retry-fix') ?? { name: '', repos: [] })).toBe(
+      'api main ●2 · ui worktree ●1'
+    )
+    expect(laneDescription({ name: 'p', repos: [] })).toBe('no checkout')
   })
 })

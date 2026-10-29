@@ -20,6 +20,8 @@ export type SessionRecord = {
   nativeId?: string
   /** False until a prompt was sent; a provider cannot resume a session it never saved. */
   hasTurns: boolean
+  /** The lane (branch) this chat works on; absent for chats on no lane. */
+  laneId?: string
   /** Latest fact of each kind, shown before the CLI is running again. */
   facts: Partial<Record<SessionFact['kind'], SessionFact>>
 }

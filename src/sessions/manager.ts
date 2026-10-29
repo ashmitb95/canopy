@@ -181,6 +181,19 @@ export class SessionManager {
     this.changed.fire()
   }
 
+  async setLane(id: string, laneId: string | undefined): Promise<void> {
+    const live = this.load(id)
+    if (laneId === undefined) delete live.record.laneId
+    else live.record.laneId = laneId
+    await this.save(live)
+    this.changed.fire()
+  }
+
+  /** Files the chat's diffs touched, as the provider reported them (absolute, or relative to the workspace root). */
+  diffPaths(id: string): string[] {
+    return [...this.load(id).items.values()].flatMap((item) => (item.kind === 'diff' ? [item.path] : []))
+  }
+
   /** Stops the CLI. The session stays listed and resumes on the next prompt. */
   async stop(id: string): Promise<void> {
     const live = this.live.get(id)

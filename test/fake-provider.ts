@@ -9,13 +9,15 @@ import type {
   ProviderSession,
   Quota,
   SessionFact,
-  SessionItem
+  SessionItem,
+  WriteBoundary
 } from '../src/core/types'
 
 export class FakeSession implements ProviderSession {
   readonly prompts: PromptPart[][] = []
   readonly answers: [string, PromptResponse][] = []
   readonly modes: PermissionMode[] = []
+  boundaries: (WriteBoundary | undefined)[] = []
   disposed = false
   private readonly items = new Emitter<SessionItem>()
   private readonly facts = new Emitter<SessionFact>()
@@ -43,6 +45,10 @@ export class FakeSession implements ProviderSession {
 
   answer(itemId: string, response: PromptResponse): void {
     this.answers.push([itemId, response])
+  }
+
+  setBoundary(boundary: WriteBoundary | undefined): void {
+    this.boundaries.push(boundary)
   }
 
   async dispose(): Promise<void> {

@@ -334,4 +334,49 @@ describe('SessionManager', () => {
     await manager.setLane(id, 'b')
     expect(manager.list()[0].record.laneSeen).toBeUndefined()
   })
+
+  it('lets one chat per lane run; the other waits and goes when the first ends', async () => {
+    const { manager, sessions } = setup()
+    const first = await manager.create('fake')
+    const second = await manager.create('fake')
+    await manager.setLane(first.id, 'x')
+    await manager.setLane(second.id, 'x')
+    await manager.prompt(first.id, text('one'))
+    const events = watch(manager, second.id)
+    await manager.prompt(second.id, text('two'))
+    expect(manager.busyOn(['x']).map((record) => record.id)).toEqual([first.id])
+    expect(events.some((event) => event.type === 'item' && event.item.kind === 'notice' && /x is busy/.test(event.item.text))).toBe(true)
+    expect(sessions.length).toBe(1)
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended' })
+    await settle()
+    await settle()
+    expect(sessions[1].prompts).toEqual([text('two')])
+  })
+
+  it('passes the boundary to the provider before each prompt', async () => {
+    const { provider, sessions } = fakeProvider()
+    const boundary = { roots: ['/w/api'], except: [], outside: async () => 'no' }
+    const manager = new SessionManager({
+      providers: new Map([[provider.id, provider]]),
+      store: new SessionStore(new MemoryMemento()),
+      journalDir: mkdtempSync(join(tmpdir(), 'agentdeck-manager-')),
+      cwd: '/work',
+      env: async () => ({ PATH: '/bin' }),
+      boundary: async (record) => (record.laneId ? boundary : undefined)
+    })
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('a'))
+    sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended' })
+    await manager.setLane(id, 'x')
+    await manager.prompt(id, text('b'))
+    expect(sessions[0].boundaries).toEqual([undefined, boundary])
+  })
+
+  it('posts notices into a chat', async () => {
+    const { manager } = setup()
+    const { id } = await manager.create('fake')
+    const events = watch(manager, id)
+    manager.notify(id, 'moved')
+    expect(events).toContainEqual({ type: 'item', item: { kind: 'notice', id: expect.any(String), level: 'info', text: 'moved' } })
+  })
 })

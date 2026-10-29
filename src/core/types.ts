@@ -80,6 +80,12 @@ export type PromptResponse =
   | { kind: 'option'; optionId: string }
   | { kind: 'answers'; answers: QuestionAnswer[] }
   | { kind: 'dismiss' }
+
+/**
+ * Where a chat may write for its coming turns: under `roots` but not under `except` (other lanes' checkouts nested
+ * inside a root). `outside` explains a refused path, and may act first (e.g. join the lane to a new repo).
+ */
+export type WriteBoundary = { roots: string[]; except: string[]; outside(path: string): Promise<string> }
 export type TurnItem = {
   kind: 'turn'
   id: string
@@ -187,6 +193,8 @@ export interface ProviderSession {
   setMode?(mode: PermissionMode): Promise<void>
   /** Settles a pending approval or question. */
   answer(itemId: string, response: PromptResponse): void
+  /** Limits writes from the next turn on; undefined lifts the limit. Reads stay open. */
+  setBoundary?(boundary: WriteBoundary | undefined): void
   refreshMcp?(): Promise<void>
   reconnectMcp?(server: string): Promise<void>
   /** Starts an MCP server's sign-in from the running CLI, when the provider supports that. */

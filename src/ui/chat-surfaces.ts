@@ -81,8 +81,13 @@ export class ChatSurfaces
     )
   }
 
-  /** Starts a chat with a provider, or shows the in-app provider chooser when none is given. */
+  /** Starts a chat with a provider; with none given, asks which in a quick pick. */
   async newChat(where: SurfaceKind, providerId?: string): Promise<void> {
+    if (!providerId) {
+      const picked = await this.pickProvider()
+      if (picked === null) return
+      providerId = picked
+    }
     if (providerId) {
       const record = await this.manager.create(providerId)
       if (where === 'panel') this.openPanel(record.id)
@@ -93,6 +98,29 @@ export class ChatSurfaces
     await this.context.workspaceState.update(SIDEBAR_SESSION_KEY, undefined)
     await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
     if (this.sidebar) this.clear(this.sidebar)
+  }
+
+  /**
+   * The installed providers, plus "Manage providers…" for the in-app chooser. Resolves
+   * undefined for the chooser (also when nothing is installed) and null when dismissed.
+   */
+  private async pickProvider(): Promise<string | undefined | null> {
+    const infos = await Promise.all([...this.providers.values()].map((provider) => this.info(provider)))
+    const usable = infos.filter((info) => info.state.status !== 'not-installed')
+    if (usable.length === 0) return undefined
+    const choice = await vscode.window.showQuickPick(
+      [
+        ...usable.map((info) => ({
+          label: info.label,
+          description: info.state.status === 'signed-out' ? 'signed out' : info.state.account,
+          id: info.id as string | undefined
+        })),
+        { label: '', kind: vscode.QuickPickItemKind.Separator, id: undefined },
+        { label: '$(settings-gear) Manage providers…', id: undefined }
+      ],
+      { placeHolder: 'New chat with…' }
+    )
+    return choice ? choice.id : null
   }
 
   private openBlankPanel(): void {

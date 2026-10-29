@@ -154,14 +154,60 @@ const chat: HostMessage[] = [
   }
 ]
 
+const prompts: SessionItem[] = [
+  { kind: 'message', id: 'pu1', role: 'user', parts: [{ type: 'text', text: 'Plan the retry fix.' }] },
+  {
+    kind: 'approval',
+    id: 'approval:plan',
+    title: 'Ready to code?',
+    subject: {
+      kind: 'plan',
+      text: '1. Schedule the backoff with `await sleep(delay)`.\n2. Add a regression test with real timers.\n3. Run the suite 20 times.',
+      filePath: '/work/.claude/plans/retry.md'
+    },
+    options: [
+      { id: 'approve:ask', label: 'Approve · Ask before edits' },
+      { id: 'approve:accept-edits', label: 'Approve · Accept edits' },
+      { id: 'approve:auto', label: 'Approve · Auto' },
+      { id: 'keep-planning', label: 'Keep planning' }
+    ]
+  },
+  {
+    kind: 'question',
+    id: 'question:1',
+    questions: [
+      {
+        id: 'q1',
+        header: 'Backoff',
+        question: 'Which backoff should the retry use?',
+        multiSelect: false,
+        allowOther: true,
+        options: [
+          { id: 'o1', label: 'Exponential', description: '100ms, 200ms, 400ms…' },
+          { id: 'o2', label: 'Fixed', description: '250ms every time' }
+        ]
+      },
+      { id: 'q2', question: 'Which suites should run?', multiSelect: true, allowOther: true, options: [{ id: 'o1', label: 'api' }, { id: 'o2', label: 'ui' }] }
+    ]
+  }
+]
+
 // `?scenario=new` shows the provider chooser instead of a chat.
-const messages: HostMessage[] = new URLSearchParams(location.search).get('scenario') === 'new'
+const scenario = new URLSearchParams(location.search).get('scenario')
+const messages: HostMessage[] =
+  scenario === 'new'
     ? [
         providers,
         { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
         { type: 'empty' }
       ]
-    : chat
+    : scenario === 'prompts'
+      ? [
+          providers,
+          { type: 'provider', provider: claude },
+          { type: 'session', sessionId: 's1', event: { type: 'snapshot', record, status: 'needs-input', items: prompts, queue: [] } }
+        ]
+      : chat
 
 // Posted after the app has mounted and subscribed.
 setTimeout(() => {

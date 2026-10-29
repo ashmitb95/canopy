@@ -45,8 +45,8 @@ Open this folder in VS Code and press F5: an Extension Development Host opens on
 ## Docs
 
 - [Design spec](docs/superpowers/specs/2026-10-28-agentdeck-design.md) — roadmap, architecture, provider contracts, sessions, UI, theming
-- [Roadmap](docs/roadmap.md) — chat parity with AFK Pilot, then lanes and the Control Center
-- [Lanes and the Control Center](docs/superpowers/specs/2026-10-29-lanes-and-control-center.md) — AgentDeck's specialization
+- [Roadmap](docs/roadmap.md) — chat parity with AFK Pilot, then lanes: a harness for providers, handoffs, and worktrees
+- [Lanes](docs/superpowers/specs/2026-10-29-lanes-and-control-center.md) — AgentDeck's specialization
 - [Decisions](docs/decisions.md) — what was decided and why
 - [MVP plans](docs/superpowers/plans/2026-10-28-mvp-overview.md) — how the MVP was built
 - [Look and feel](docs/design/README.md) — the mockups behind the UI

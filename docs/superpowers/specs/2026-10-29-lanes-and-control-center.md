@@ -1,6 +1,6 @@
-# Lanes and the Control Center — design
+# Lanes — design
 
-AgentDeck's specialization. The chat (at parity with AFK Pilot) is a component; the **Control Center** is the primitive that drives it. A **lane** is a unit of work, a feature, that spans one or more repos, owns its chats, and carries its own memory. AgentDeck tracks where each lane's code lives, moves lanes into and out of the main checkouts when asked, keeps moved-out lanes warm, and tells every chat where to work.
+AgentDeck's specialization: a harness that manages providers, handoffs, and worktrees. The chat (at parity with AFK Pilot) is a component; lanes are the primitive underneath it, kept implicit in the UI. A **lane** is a unit of work, a feature, that spans one or more repos, owns its chats, and carries its own memory. AgentDeck tracks where each lane's code lives, moves lanes into and out of the main checkouts when asked, keeps moved-out lanes warm, and tells every chat where to work.
 
 This supersedes decision 5 ("agents manage worktrees themselves") with *agents still may, and AgentDeck tracks the result*, and decision 7 ("no coordinator") with a light, app-side coordinator that agents never see.
 
@@ -109,7 +109,7 @@ Both are encoded like editor context (a tagged block appended to the prompt). Qu
 
 **Warm-up** (bootstrap) for a lane checkout outside main: copy the configured env files (`.env*` and others listed in `config.toml`) from the main checkout, then run the configured setup command (e.g. `pnpm install`) in that folder. Progress and failures show on the lane. A warm lane is one whose worktrees exist and whose setup last succeeded.
 
-**Creating a lane:** from the Control Center or a chat ("New lane from this chat"): name, goal, repos to join, and where to start (main, or worktrees). Creating in worktrees runs warm-up.
+**Creating a lane:** from the sidebar or a chat ("New lane from this chat"): name, goal, repos to join, and where to start (main, or worktrees). Creating in worktrees runs warm-up.
 
 ## Enforcement
 
@@ -129,17 +129,21 @@ AgentDeck watches each repo's `.git` (HEAD, refs, worktrees) and recomputes deri
 
 ## Workflows inside a lane
 
-A lane can run a workflow: ordered stages, each a real chat with its own provider, model, mode, approvals, and resume. Task types to start: **Research, Plan, Build, Review**, each with a default provider, model, and mode set in `.agentdeck/config.toml` or the Control Center (e.g. Research → Grok, Plan → Claude in Plan mode, Build → Codex in Accept edits, Review → Claude). *Next stage* asks the current chat for its handoff brief (saved as its chat summary), lets you edit it, and starts the next stage with the lane brief plus that handoff. Stages never advance on their own; one stage writes at a time. *Hand off to…* is the one-off version outside a workflow.
+A lane can run a workflow: ordered stages, each a real chat with its own provider, model, mode, approvals, and resume. Task types to start: **Research, Plan, Build, Review**, each with a default provider, model, and mode set in `.agentdeck/config.toml` (e.g. Research → Grok, Plan → Claude in Plan mode, Build → Codex in Accept edits, Review → Claude). *Next stage* asks the current chat for its handoff brief (saved as its chat summary), lets you edit it, and starts the next stage with the lane brief plus that handoff. Stages never advance on their own; one stage writes at a time. *Hand off to…* is the one-off version outside a workflow.
 
 ## Notifications
 
 AgentDeck notifies natively from its own session events (no hooks): turn finished, needs approval or an answer, failed. Carried over from claude-notifier: per-event sounds and levels, volume, a minimum-duration threshold, auto-mute when the chat is visible and VS Code is focused, the chat name plus what happened ("edited 2 files · ran 5 commands", the command awaiting approval, the question asked), and remote audio for SSH/WSL hosts. Messages lead with the lane and stage: `retry-fix · Build · Codex — needs approval: pnpm db:migrate`. CLIs AgentDeck spawns get `CLAUDE_NOTIFIER_DISABLE=1` so claude-notifier's hooks do not double-notify.
 
-## The Control Center
+## UI: minimal, built as needed
 
-- **Board:** per repo, which lane holds main; active lanes with their per-repo locations, warm-up state, dirty and ahead/behind; parked lanes; a rail of what needs you (approvals, questions, failed turns, conflicts). Actions: *Switch into main*, *Warm up*, *New chat*, *Start workflow*, *Archive*.
-- **Lane view:** goal; per-repo cards (branch, location, dirty, ahead/behind, base); plan and notes (open in editor); the lane's chats with provider, stage, status; activity history; *Review changes* across repos (multi-diff); later *Commit / Push / PR* per repo and *Ship*.
-- **Sidebar:** lanes, each with its chats, plus the "main / no lane" group; the chat itself is unchanged.
+Lanes are a foundation, not a product surface to manage. The UI stays the chat plus its chat list, and grows only when a foundation feature needs a control.
+
+- **Sidebar:** today's chat list, grouped by lane (branch). Each group header shows where its code lives per repo (*main* or *worktree*). Chat rows show the provider, a writing mark while a turn edits, and *needs you*. Chats on no lane sit in a *No branch* group.
+- **Group actions** (context menu): *Move into main*, *Move to worktree*, *New chat here*, *Review changes*, *Archive*.
+- **In the chat:** switches, joins, and moves appear as one-line notices; the composer shows the chat's lane and lets you change it.
+- **Context sharing has no UI.** Goals, notes, and chat summaries live in `.agentdeck/` and reach chats through the brief and delta.
+- **No board, lane page, stage tiles, or context panels.** Workflows and handoffs are orchestration: they run through commands and the composer, not dedicated views.
 
 ## Later (carried over from canopy)
 

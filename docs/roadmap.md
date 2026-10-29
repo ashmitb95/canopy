@@ -3,7 +3,7 @@
 AgentDeck has two jobs:
 
 1. **A chat at parity with AFK Pilot**, the strongest multi-provider coding-agent chat for VS Code, on the user's own subscriptions, with native Claude and Codex protocols and ACP for the rest.
-2. **Its specialization: lanes and the Control Center** ([design](superpowers/specs/2026-10-29-lanes-and-control-center.md)) — multi-repo feature lanes, a main checkout that lanes move into and out of, warm worktrees, lane memory, workflows, and notifications.
+2. **Its specialization: a harness for providers, handoffs, and worktrees**, built on lanes ([design](superpowers/specs/2026-10-29-lanes-and-control-center.md)) — multi-repo feature lanes, a main checkout that lanes move into and out of, warm worktrees, lane memory, workflows, and notifications.
 
 Built so far (plans 1–11, [overview](superpowers/plans/2026-10-28-mvp-overview.md)): Claude, Codex, and Grok; sessions with resume; tabs and sidebar; tool, diff, and plan cards; approvals; model and mode pickers; context meter; quota; MCP status and sign-in; guided sign-in and welcome; searchable switcher; turn footers; approval toasts; rich composer with `@`, `/`, attachments, and images; agent questions, plan review, and richer approvals.
 
@@ -53,7 +53,7 @@ Plans:
 - **15 — Voice dictation:** spike microphone access in a webview first; fall back to a host-side recorder.
 - **16 — More agents:** Cursor, OpenCode, Gemini CLI, Muse, Antigravity as ACP specs with recorded fixtures; provider config editing.
 
-## Phase B — lanes and the Control Center
+## Phase B — lanes (foundations first, minimal UI)
 
 From the [design](superpowers/specs/2026-10-29-lanes-and-control-center.md):
 
@@ -61,7 +61,7 @@ From the [design](superpowers/specs/2026-10-29-lanes-and-control-center.md):
 - **18 — Workspace and lane tracking:** repo discovery, derived per-repo lane state, Git watchers and reconciliation, chat ↔ lane links, the "main / no lane" group.
 - **19 — Lane memory and briefs:** `.agentdeck/` layout, stamping, chat summaries, the brief and the delta in prompts.
 - **20 — Switch and warm-up:** the switch steps with stash carry-over and failure handling, worktree creation, bootstrap, chat notices, lane path enforcement (Claude, Codex writable roots, ACP).
-- **21 — The Control Center:** board, lane view, lanes in the sidebar, multi-repo *Review changes*.
+- **21 — Lanes in the chat list:** group chats by lane with per-repo location, group actions, composer lane chip, multi-repo *Review changes*. No board or lane pages (decision 36).
 - **22 — Workflows inside lanes:** task types and defaults, stages, handoff briefs, *Hand off to…*.
 - **Later:** PR and review-thread triage, issue linking, cross-lane conflicts, lane preflight, commit/push/PR per repo.
 

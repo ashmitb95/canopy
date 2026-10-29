@@ -1,7 +1,8 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
-import type { ToolItem, ToolKind } from '../../../src/core/types'
+import type { SessionItem, ToolItem, ToolKind } from '../../../src/core/types'
 import { Codicon } from '../components/codicon'
+import { ItemView } from './item-view'
 
 const ICONS: Record<ToolKind, string> = {
   read: 'file',
@@ -19,7 +20,7 @@ const STATUS: Record<ToolItem['status'], { label: string; icon: string; classNam
   failed: { label: 'Failed', icon: 'close', className: 'bg-destructive/15 text-destructive' }
 }
 
-export function ToolCard({ item }: { item: ToolItem }) {
+export function ToolCard({ item, steps = [] }: { item: ToolItem; steps?: SessionItem[] }) {
   const [verb, ...rest] = item.title.split(' ')
   const status = STATUS[item.status]
   const input = item.input === undefined ? null : JSON.stringify(item.input, null, 2)
@@ -29,6 +30,7 @@ export function ToolCard({ item }: { item: ToolItem }) {
         <Codicon name={ICONS[item.toolKind]} className="text-muted-foreground" />
         <span className="font-medium">{verb}</span>
         <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{rest.join(' ')}</span>
+        {steps.length > 0 && <span className="text-[10px] text-muted-foreground">{steps.length} steps</span>}
         <span className={cn('inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium', status.className)}>
           <Codicon name={status.icon} size={10} spin={item.status === 'running'} />
           {status.label}
@@ -36,6 +38,13 @@ export function ToolCard({ item }: { item: ToolItem }) {
         <Codicon name="chevron-down" className="text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-2 border-t px-3 py-2">
+        {steps.length > 0 && (
+          <div className="space-y-1.5 border-l pl-2">
+            {steps.map((step) => (
+              <ItemView key={step.id} item={step} />
+            ))}
+          </div>
+        )}
         {input && (
           <div>
             <div className="mb-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Input</div>

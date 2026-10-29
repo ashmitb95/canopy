@@ -6,6 +6,8 @@ import { ChatHeader } from './components/chat-header'
 import { Composer } from './components/composer'
 import { EmptyState } from './components/empty-state'
 import { SignInBanner } from './components/sign-in-banner'
+import { ExploredCard } from './items/explored-card'
+import { nestItems, renderUnits } from './units'
 import { QueueList } from './components/queue-list'
 import { WorkingStatus } from './components/working-status'
 import { onHostMessage, saveState, send } from './host'
@@ -47,15 +49,19 @@ export function App() {
         <ChatHeader state={state} />
         <Conversation className="min-h-0 flex-1">
           <ConversationContent className="gap-3 px-4 py-4">
-            {state.items.map((item) => {
-              const footer = footers.get(item.id)
-              return (
-                <Fragment key={item.id}>
-                  <ItemView item={item} />
-                  {footer && <TurnFooterView footer={footer} model={model} />}
-                </Fragment>
-              )
-            })}
+            {(() => {
+              const { top, children } = nestItems(state.items)
+              return renderUnits(top).map((unit) => {
+                const items = unit.type === 'item' ? [unit.item] : unit.items
+                const footer = items.flatMap((item) => [item, ...(children.get(item.id) ?? [])]).map((item) => footers.get(item.id)).find(Boolean)
+                return (
+                  <Fragment key={items[0].id}>
+                    {unit.type === 'item' ? <ItemView item={unit.item} steps={children.get(unit.item.id)} /> : <ExploredCard items={unit.items} />}
+                    {footer && <TurnFooterView footer={footer} model={model} />}
+                  </Fragment>
+                )
+              })
+            })()}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>

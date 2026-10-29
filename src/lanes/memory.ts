@@ -47,6 +47,17 @@ export class LaneMemory {
     writeFileSync(join(this.laneDir(lane), 'lane.toml'), stringifyToml({ ...this.lane(lane), goal }))
   }
 
+  /** The lane's own worktree toggle; undefined means the workspace default. */
+  worktrees(lane: string): boolean | undefined {
+    const value = this.lane(lane).worktrees
+    return typeof value === 'boolean' ? value : undefined
+  }
+
+  setWorktrees(lane: string, on: boolean): void {
+    this.ensure(lane)
+    writeFileSync(join(this.laneDir(lane), 'lane.toml'), stringifyToml({ ...this.lane(lane), worktrees: on }))
+  }
+
   /** When plan.md last changed, or undefined while it is empty. */
   planUpdated(lane: string): string | undefined {
     const path = this.planPath(lane)

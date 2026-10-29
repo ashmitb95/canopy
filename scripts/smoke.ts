@@ -68,7 +68,7 @@ function turn(manager: SessionManager, id: string, text: string): Promise<string
       if (item.kind === 'message' && item.role === 'assistant') replies.set(item.id, item.text)
       if (item.kind === 'approval' && !item.resolved) {
         console.log('approving:', item.title, item.detail ?? '')
-        manager.answer(id, item.id, 'allow')
+        manager.answer(id, item.id, { kind: 'option', optionId: 'allow' })
       }
       if (item.kind === 'tool' && item.status !== 'running') console.log(`tool ${item.status}:`, item.title)
       if (item.kind === 'notice') console.log(`notice (${item.level}):`, item.text)

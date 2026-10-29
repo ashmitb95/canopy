@@ -1,4 +1,4 @@
-import type { Capability, PermissionMode, PromptPart, ProviderState, Quota } from '../core/types'
+import type { Capability, PermissionMode, PromptPart, PromptResponse, ProviderState, Quota } from '../core/types'
 import type { SessionEvent } from '../sessions/manager'
 import type { SessionStatus } from '../sessions/store'
 
@@ -52,7 +52,7 @@ export type WebviewMessage =
   | { type: 'pickAttachments'; requestId: number }
   | { type: 'saveImage'; requestId: number; name: string; mimeType: string; data: string }
   | { type: 'cancel' }
-  | { type: 'answer'; itemId: string; optionId: string }
+  | { type: 'answer'; itemId: string; response: PromptResponse }
   | { type: 'removeQueued'; queuedId: string }
   | { type: 'newChat'; providerId?: string }
   | { type: 'signIn'; providerId?: string }

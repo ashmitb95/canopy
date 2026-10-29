@@ -239,7 +239,7 @@ export class ChatSurfaces
         if (sessionId) await this.manager.cancel(sessionId)
         return
       case 'answer':
-        if (sessionId) this.manager.answer(sessionId, message.itemId, message.optionId)
+        if (sessionId) this.manager.answer(sessionId, message.itemId, message.response)
         return
       case 'removeQueued':
         if (sessionId) this.manager.removeQueued(sessionId, message.queuedId)
@@ -416,7 +416,7 @@ export class ChatSurfaces
     const record = this.manager.list().find((entry) => entry.record.id === sessionId)?.record
     if (!record) return
     const label = this.providers.get(record.providerId)?.label ?? record.providerId
-    const choice = await vscode.window.showInformationMessage(`${label} needs your approval — ${record.title}`, 'Review')
+    const choice = await vscode.window.showInformationMessage(`${label} needs your input — ${record.title}`, 'Review')
     if (choice !== 'Review') return
     if (this.panels.has(sessionId) || this.sidebar?.sessionId !== sessionId) this.openPanel(sessionId)
     else await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)

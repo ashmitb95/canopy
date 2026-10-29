@@ -63,6 +63,7 @@ export function activate(context: vscode.ExtensionContext): void {
     : undefined
   const laneChanges = new LaneChanges()
   const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs, unread, laneSource)
+  void surfaces.markInstalled()
   const notifier = new Notifier(
     sessionManager,
     new Map([...providers].map(([id, provider]) => [id, provider.label])),
@@ -81,6 +82,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewPanelSerializer(PANEL_TYPE, surfaces),
     vscode.commands.registerCommand('agentdeck.newChat', () => surfaces.newChat('panel')),
     vscode.commands.registerCommand('agentdeck.sidebar.newChat', () => surfaces.newChat('view')),
+    vscode.commands.registerCommand('agentdeck.newChat.other', () => surfaces.newChat('view')),
+    ...[...providers.keys()].map((id) => vscode.commands.registerCommand(`agentdeck.newChat.${id}`, () => surfaces.newChat('view', id))),
     vscode.commands.registerCommand('agentdeck.openInEditor', () => surfaces.openSidebarInEditor()),
     vscode.commands.registerCommand('agentdeck.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),

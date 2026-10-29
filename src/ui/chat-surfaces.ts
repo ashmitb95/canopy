@@ -123,6 +123,14 @@ export class ChatSurfaces
     return choice ? choice.id : null
   }
 
+  /** Sets `agentdeck.installed.<id>` for each provider, which the New Chat menu shows by. */
+  async markInstalled(): Promise<void> {
+    for (const provider of this.providers.values()) {
+      const { state } = await this.info(provider)
+      await vscode.commands.executeCommand('setContext', `agentdeck.installed.${provider.id}`, state.status !== 'not-installed')
+    }
+  }
+
   private openBlankPanel(): void {
     const panel = vscode.window.createWebviewPanel(PANEL_TYPE, 'New chat', vscode.ViewColumn.Beside, {
       enableScripts: true,

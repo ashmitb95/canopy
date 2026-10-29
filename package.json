@@ -348,12 +348,47 @@
         "command": "agentdeck.deleteSession",
         "title": "Delete…",
         "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newChat.claude",
+        "title": "Claude",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newChat.codex",
+        "title": "Codex",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newChat.grok",
+        "title": "Grok",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newChat.cursor",
+        "title": "Cursor",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newChat.opencode",
+        "title": "OpenCode",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newChat.gemini",
+        "title": "Gemini",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newChat.other",
+        "title": "Other Agent…",
+        "category": "AgentDeck"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "agentdeck.sidebar.newChat",
+          "submenu": "agentdeck.newChatMenu",
           "when": "view == agentdeck.chat",
           "group": "navigation@1"
         },
@@ -368,7 +403,7 @@
           "group": "navigation@3"
         },
         {
-          "command": "agentdeck.sidebar.newChat",
+          "submenu": "agentdeck.newChatMenu",
           "when": "view == agentdeck.sessions",
           "group": "navigation@0"
         },
@@ -489,6 +524,34 @@
         {
           "command": "agentdeck.deleteSession",
           "when": "false"
+        },
+        {
+          "command": "agentdeck.newChat.claude",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.newChat.codex",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.newChat.grok",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.newChat.cursor",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.newChat.opencode",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.newChat.gemini",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.newChat.other",
+          "when": "false"
         }
       ],
       "explorer/context": [
@@ -504,6 +567,42 @@
           "when": "resourceScheme == file",
           "group": "agentdeck@1"
         }
+      ],
+      "agentdeck.newChatMenu": [
+        {
+          "command": "agentdeck.newChat.claude",
+          "when": "agentdeck.installed.claude",
+          "group": "1_providers@0"
+        },
+        {
+          "command": "agentdeck.newChat.codex",
+          "when": "agentdeck.installed.codex",
+          "group": "1_providers@1"
+        },
+        {
+          "command": "agentdeck.newChat.grok",
+          "when": "agentdeck.installed.grok",
+          "group": "1_providers@2"
+        },
+        {
+          "command": "agentdeck.newChat.cursor",
+          "when": "agentdeck.installed.cursor",
+          "group": "1_providers@3"
+        },
+        {
+          "command": "agentdeck.newChat.opencode",
+          "when": "agentdeck.installed.opencode",
+          "group": "1_providers@4"
+        },
+        {
+          "command": "agentdeck.newChat.gemini",
+          "when": "agentdeck.installed.gemini",
+          "group": "1_providers@5"
+        },
+        {
+          "command": "agentdeck.newChat.other",
+          "group": "2_more@1"
+        }
       ]
     },
     "keybindings": [
@@ -512,6 +611,13 @@
         "key": "ctrl+alt+a",
         "mac": "cmd+alt+a",
         "when": "editorTextFocus"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "agentdeck.newChatMenu",
+        "label": "New Chat",
+        "icon": "$(add)"
       }
     ]
   },

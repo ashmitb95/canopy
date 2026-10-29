@@ -238,6 +238,32 @@ export class SessionManager {
     this.changed.fire()
   }
 
+  /** A new chat with this chat's transcript, resuming a forked copy of the provider's session. */
+  async fork(id: string): Promise<SessionRecord> {
+    const live = this.load(id)
+    if (!live.record.hasTurns) throw new Error('Send a message first; there is nothing to fork yet.')
+    const session = live.session ?? (await this.connect(live))
+    if (!session.fork) throw new Error('This provider cannot fork a conversation.')
+    const nativeId = await session.fork()
+    const now = new Date().toISOString()
+    const record: SessionRecord = {
+      ...structuredClone(live.record),
+      id: randomUUID(),
+      title: `${live.record.title} (fork)`,
+      createdAt: now,
+      updatedAt: now,
+      nativeId,
+      hasTurns: true
+    }
+    delete record.laneSeen
+    await this.deps.store.put(record)
+    const journal = new Journal(this.journalPath(record.id))
+    for (const item of live.items.values()) journal.append(settled(item))
+    journal.flush()
+    this.changed.fire()
+    return record
+  }
+
   async setLane(id: string, laneId: string | undefined): Promise<void> {
     const live = this.load(id)
     if (laneId === undefined) delete live.record.laneId

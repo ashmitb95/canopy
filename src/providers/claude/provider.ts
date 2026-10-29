@@ -75,7 +75,7 @@ export const claudeProvider: ProviderDefinition = {
     if (!path) throw new Error('The claude CLI was not found.')
     return claudeSignIn(path, claudeEnv(env), onEvent)
   },
-  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact']),
+  capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact', 'fork']),
   modes: MODE_LIST,
 
   async probe(env: Env): Promise<ProviderState> {
@@ -291,6 +291,12 @@ class ClaudeSession implements ProviderSession {
   async reconnectMcp(server: string): Promise<void> {
     await this.query.reconnectMcpServer(server)
     await this.refreshMcp()
+  }
+
+  async fork(): Promise<string> {
+    const { forkSession } = await import('@anthropic-ai/claude-agent-sdk')
+    const { sessionId } = await forkSession(this.nativeId, { dir: this.options.cwd })
+    return sessionId
   }
 
   async dispose(): Promise<void> {

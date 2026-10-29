@@ -148,7 +148,7 @@ export type SessionFact =
   | { kind: 'mcp'; servers: McpServer[] }
   | { kind: 'commands'; items: CommandOption[] }
 
-export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context' | 'steer' | 'effort' | 'compact'
+export type Capability = 'resume' | 'interrupt' | 'models' | 'setModel' | 'modes' | 'setMode' | 'mcpStatus' | 'context' | 'steer' | 'effort' | 'compact' | 'fork'
 
 /** An account's usage limits as its CLI last reported them; shown with their age. */
 export type Quota = {
@@ -196,6 +196,8 @@ export interface ProviderSession {
   /** Starts a turn. Resolves once the prompt is handed to the CLI; a `turn` item marks its end. */
   prompt(parts: PromptPart[]): Promise<void>
   cancel(): Promise<void>
+  /** Copies the conversation into a new provider session; returns its native id. */
+  fork?(): Promise<string>
   setModel?(id: string): Promise<void>
   /** Sets the reasoning effort for this and later turns. */
   setEffort?(effort: string): Promise<void>

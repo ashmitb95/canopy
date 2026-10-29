@@ -368,6 +368,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "agentdeck.sidebar.newChat",
+          "when": "view == agentdeck.sessions",
+          "group": "navigation@0"
+        },
+        {
           "command": "agentdeck.newLane",
           "when": "view == agentdeck.sessions",
           "group": "navigation@1"

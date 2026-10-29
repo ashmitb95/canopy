@@ -58,6 +58,7 @@ const STATUS: Record<string, ToolItem['status']> = {
 /** Turns ACP `session/update` notifications into session items. Facts are the provider's job. */
 export class AcpTranslator {
   private readonly items = new Map<string, SessionItem>()
+  private readonly diffs = new Map<string, string[]>()
   private turnId = ''
   private chunks = 0
   private stream: AssistantMessage | Thought | undefined
@@ -157,6 +158,7 @@ export class AcpTranslator {
     })
     ;(update.content ?? []).forEach((block, index) => {
       if (block.type !== 'diff') return
+      this.diffs.set(update.toolCallId, [...new Set([...(this.diffs.get(update.toolCallId) ?? []), `${update.toolCallId}:diff:${index}`])])
       this.upsert({
         kind: 'diff',
         id: `${update.toolCallId}:diff:${index}`,
@@ -165,6 +167,11 @@ export class AcpTranslator {
         newText: block.newText
       })
     })
+  }
+
+  /** The diff items a tool call produced, so its approval can offer Review changes. */
+  diffIdsFor(toolCallId: string): string[] {
+    return this.diffs.get(toolCallId) ?? []
   }
 
   private upsert(item: SessionItem): void {

@@ -12,9 +12,12 @@ import type {
   OpenOptions,
   PermissionMode,
   PromptPart,
+  PromptResponse,
   ProviderDefinition,
   ProviderSession,
   ProviderState,
+  Question,
+  QuestionItem,
   SessionFact,
   SessionItem,
   SignInEvent
@@ -22,6 +25,8 @@ import type {
 import type { Env } from '../../env'
 import { spawnGroup, stopGroup } from '../../process'
 import { encodePrompt, imageParts } from '../encode'
+import { PromptHolder } from '../prompt-holder'
+import { grokAnswers } from '../prompts'
 import { RpcPeer, type ServerRequest } from '../rpc'
 import { deviceLink, runLoginCli } from '../sign-in'
 import { type AcpAgentSpec, findAgentCli } from './spec'
@@ -36,6 +41,17 @@ type AcpModel = { modelId: string; name: string; description?: string | null; _m
 type SessionResult = { sessionId?: string; models?: { currentModelId: string; availableModels: AcpModel[] } | null }
 type PermissionOption = { optionId: string; name: string; kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always' }
 type PermissionRequest = { toolCall: { toolCallId: string; title?: string | null; kind?: string | null }; options: PermissionOption[] }
+
+type AgentQuestionRequest = {
+  toolCallId: string
+  questions: {
+    question: string
+    multiSelect?: boolean | null
+    options: { label: string; description?: string | null; preview?: string | null }[]
+  }[]
+}
+
+type AgentPlanRequest = { toolCallId: string; planContent?: string | null; plan?: string | null }
 
 const selected = (optionId: string) => ({ outcome: { outcome: 'selected', optionId } })
 const CANCELLED = { outcome: { outcome: 'cancelled' } }
@@ -89,7 +105,7 @@ class AcpSession implements ProviderSession {
   readonly onFact = this.facts.event
   readonly onExit = this.exits.event
   private readonly translator = new AcpTranslator((item) => this.items.fire(item))
-  private readonly approvals = new Map<string, { item: ApprovalItem; optionIds: Map<string, string>; resolve: (result: unknown) => void }>()
+  private readonly holder = new PromptHolder((item) => this.items.fire(item))
   private models: (ModelOption & { contextWindow?: number })[] = []
   private model = ''
   private mode: PermissionMode
@@ -182,7 +198,7 @@ class AcpSession implements ProviderSession {
 
   async cancel(): Promise<void> {
     this.translator.interrupted()
-    for (const id of [...this.approvals.keys()]) this.settle(id, CANCELLED, 'deny')
+    this.holder.dismissAll()
     this.rpc.notify('session/cancel', { sessionId: this.nativeId })
   }
 
@@ -201,16 +217,13 @@ class AcpSession implements ProviderSession {
     this.facts.fire({ kind: 'mode', current: mode, available: MODE_LIST })
   }
 
-  answer(itemId: string, optionId: string): void {
-    const pending = this.approvals.get(itemId)
-    if (!pending) return
-    const acpOption = pending.optionIds.get(optionId)
-    this.settle(itemId, acpOption ? selected(acpOption) : CANCELLED, optionId)
+  answer(itemId: string, response: PromptResponse): void {
+    this.holder.answer(itemId, response)
   }
 
   async dispose(): Promise<void> {
     this.closed = true
-    for (const id of [...this.approvals.keys()]) this.settle(id, CANCELLED, 'deny')
+    this.holder.dismissAll()
     await stopGroup(this.child)
   }
 
@@ -257,7 +270,11 @@ class AcpSession implements ProviderSession {
   }
 
   private serverRequest({ method, params }: ServerRequest): Promise<unknown> {
-    if (method === 'session/request_permission') return this.permission(params as PermissionRequest)
+    // Grok's extensions arrive with or without a leading underscore.
+    const name = method.replace(/^_/, '')
+    if (name === 'session/request_permission') return this.permission(params as PermissionRequest)
+    if (name === 'x.ai/ask_user_question') return this.question(params as AgentQuestionRequest)
+    if (name === 'x.ai/exit_plan_mode') return this.plan(params as AgentPlanRequest)
     return Promise.reject(new Error(`AgentDeck does not handle ${method}.`))
   }
 
@@ -269,7 +286,7 @@ class AcpSession implements ProviderSession {
     const choices: ApprovalOption[] = []
     for (const [kind, id, label] of [
       ['allow_once', 'allow', 'Allow once'],
-      ['allow_always', 'always', undefined],
+      ['allow_always', 'allowForSession', undefined],
       ['reject_once', 'deny', 'Deny']
     ] as const) {
       const option = options.find((candidate) => candidate.kind === kind)
@@ -282,19 +299,53 @@ class AcpSession implements ProviderSession {
       id: `approval:${toolCall.toolCallId}`,
       title: `Allow ${this.spec.label} to ${APPROVAL_TITLES[toolCall.kind ?? ''] ?? 'use this tool'}?`,
       detail: toolCall.title?.replaceAll('`', '') ?? undefined,
+      ...(this.translator.diffIdsFor(toolCall.toolCallId).length > 0 ? { diffIds: this.translator.diffIdsFor(toolCall.toolCallId) } : {}),
       options: choices
     }
-    return new Promise((resolve) => {
-      this.approvals.set(item.id, { item, optionIds, resolve })
-      this.items.fire(item)
+    return this.holder.hold(item, (response) => {
+      const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
+      const chosen = optionIds.get(optionId)
+      return { resolved: optionId, result: chosen ? selected(chosen) : CANCELLED }
     })
   }
 
-  private settle(itemId: string, result: unknown, resolved: string): void {
-    const pending = this.approvals.get(itemId)
-    if (!pending) return
-    this.approvals.delete(itemId)
-    this.items.fire({ ...pending.item, resolved })
-    pending.resolve(result)
+  private question(request: AgentQuestionRequest): Promise<unknown> {
+    const questions: Question[] = request.questions.map((question, index) => ({
+      id: `q${index + 1}`,
+      question: question.question,
+      multiSelect: question.multiSelect === true,
+      allowOther: true,
+      options: question.options.map((option, optionIndex) => ({
+        id: `o${optionIndex + 1}`,
+        label: option.label,
+        description: option.description ?? undefined,
+        preview: option.preview ?? undefined
+      }))
+    }))
+    const item: QuestionItem = { kind: 'question', id: `question:${request.toolCallId}`, questions }
+    return this.holder.hold(item, (response) =>
+      response.kind === 'answers'
+        ? { resolved: { answers: response.answers }, result: grokAnswers(questions, response.answers) }
+        : { resolved: 'dismissed', result: { outcome: 'cancelled' } }
+    )
+  }
+
+  /** Grok treats any error reply as a disconnected client, so every verdict is a result. */
+  private plan(request: AgentPlanRequest): Promise<unknown> {
+    const item: ApprovalItem = {
+      kind: 'approval',
+      id: `approval:plan:${request.toolCallId}`,
+      title: 'Ready to build?',
+      subject: { kind: 'plan', text: request.planContent ?? request.plan ?? '' },
+      options: [
+        { id: 'approve', label: 'Approve' },
+        { id: 'keep-planning', label: 'Keep planning' }
+      ]
+    }
+    return this.holder.hold(item, (response) => {
+      const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
+      const outcome = optionId === 'approve' ? 'approved' : optionId === 'keep-planning' ? 'cancelled' : 'abandoned'
+      return { resolved: optionId, result: { outcome } }
+    })
   }
 }

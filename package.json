@@ -84,6 +84,16 @@
         "category": "AgentDeck"
       },
       {
+        "command": "agentdeck.setLaneGoal",
+        "title": "Set Lane Goal\u2026",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.openLanePlan",
+        "title": "Open Lane Plan",
+        "category": "AgentDeck"
+      },
+      {
         "command": "agentdeck.stopSession",
         "title": "Stop",
         "category": "AgentDeck"
@@ -113,6 +123,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "agentdeck.openLanePlan",
+          "when": "view == agentdeck.sessions && viewItem == lane",
+          "group": "1_open@1"
+        },
+        {
+          "command": "agentdeck.setLaneGoal",
+          "when": "view == agentdeck.sessions && viewItem == lane",
+          "group": "2_edit@1"
+        },
         {
           "command": "agentdeck.openSession",
           "when": "view == agentdeck.sessions && viewItem == session",
@@ -159,6 +179,14 @@
         },
         {
           "command": "agentdeck.moveSessionToLane",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.setLaneGoal",
+          "when": "false"
+        },
+        {
+          "command": "agentdeck.openLanePlan",
           "when": "false"
         },
         {

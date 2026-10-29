@@ -15,7 +15,7 @@ export type SessionNode = {
   provider: string
   laneId?: string
 }
-type LaneNode = { kind: 'lane'; lane: Lane; sessions: SessionNode[] }
+export type LaneNode = { kind: 'lane'; lane: Lane; sessions: SessionNode[] }
 type LooseNode = { kind: 'loose'; sessions: SessionNode[] }
 type Node = SessionNode | LaneNode | LooseNode
 

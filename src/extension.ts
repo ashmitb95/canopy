@@ -2,7 +2,9 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { captureEnv, type Env } from './env'
-import { autoLink } from './lanes/auto-link'
+import { laneContext } from './lanes/lane-context'
+import { watchHistory, watchTurns } from './lanes/lane-turns'
+import { LaneMemory } from './lanes/memory'
 import { LaneTracker } from './lanes/tracker'
 import { providers } from './providers/registry'
 import { SessionManager } from './sessions/manager'
@@ -10,7 +12,7 @@ import { SessionStore } from './sessions/store'
 import { ChatSurfaces, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
 import { DIFF_SCHEME, DiffDocuments } from './ui/diff-documents'
 import { EditorContextTracker } from './ui/editor-context'
-import { laneDescription, type SessionNode, SessionsTree } from './ui/sessions-tree'
+import { type LaneNode, laneDescription, type SessionNode, SessionsTree } from './ui/sessions-tree'
 import { SessionsStatusBar } from './ui/status-bar'
 
 let manager: SessionManager | undefined
@@ -22,12 +24,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
   // Without a folder there is nothing to track (and the home folder is not scanned).
   const tracker = root ? new LaneTracker(root) : undefined
+  const memory = tracker ? new LaneMemory(tracker.root) : undefined
   manager = new SessionManager({
     providers,
     store: new SessionStore(context.workspaceState),
     journalDir: join(storage, 'sessions'),
     cwd: root ?? homedir(),
-    env: getEnv
+    env: getEnv,
+    decorate: tracker && memory ? laneContext(tracker, memory) : undefined
   })
   const sessionManager = manager
   const editor = new EditorContextTracker()
@@ -61,6 +65,16 @@ export function activate(context: vscode.ExtensionContext): void {
       const choice = await vscode.window.showQuickPick(choices, { placeHolder: `Move “${node.title}” to…` })
       if (choice) await sessionManager.setLane(node.id, choice.lane)
     }),
+    vscode.commands.registerCommand('agentdeck.setLaneGoal', async (node: LaneNode) => {
+      if (!memory) return
+      const goal = await vscode.window.showInputBox({ prompt: `Goal for ${node.lane.name}`, value: memory.goal(node.lane.name) ?? '' })
+      if (goal?.trim()) memory.setGoal(node.lane.name, goal.trim())
+    }),
+    vscode.commands.registerCommand('agentdeck.openLanePlan', async (node: LaneNode) => {
+      if (!memory) return
+      memory.ensure(node.lane.name)
+      await vscode.window.showTextDocument(vscode.Uri.file(memory.planPath(node.lane.name)))
+    }),
     vscode.commands.registerCommand('agentdeck.stopSession', (node: SessionNode) => sessionManager.stop(node.id)),
     vscode.commands.registerCommand('agentdeck.deleteSession', async (node: SessionNode) => {
       const choice = await vscode.window.showWarningMessage(`Delete “${node.title}”?`, { modal: true }, 'Delete')
@@ -72,7 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
     void tracker.refresh().catch(() => {})
     context.subscriptions.push(
       tracker,
-      autoLink(sessionManager, tracker),
+      ...(memory ? [watchTurns(sessionManager, tracker, memory), watchHistory(tracker, memory)] : []),
       // Saves change dirty counts; refocusing catches work done in a terminal or another app.
       vscode.workspace.onDidSaveTextDocument(() => tracker.schedule()),
       vscode.window.onDidChangeWindowState((state) => state.focused && tracker.schedule())

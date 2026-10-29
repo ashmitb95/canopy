@@ -14,6 +14,7 @@ import type {
   Quota,
   SessionFact,
   SessionItem,
+  TurnItem,
   WriteBoundary
 } from '../core/types'
 import type { Env } from '../env'
@@ -264,6 +265,45 @@ export class SessionManager {
     return record
   }
 
+  /**
+   * Removes a user message and everything after it, here and in the provider; returns the message's parts so the
+   * user can edit and resend them. `files` also restores files where the provider supports it.
+   */
+  async rewind(id: string, userItemId: string, files: boolean): Promise<PromptPart[]> {
+    const live = this.load(id)
+    if (isBusy(live.status)) throw new Error('Stop the running turn before rewinding.')
+    const items = [...live.items.values()]
+    const index = items.findIndex((item) => item.id === userItemId)
+    const target = items[index]
+    if (index < 0 || target.kind !== 'message' || target.role !== 'user') throw new Error('Rewind needs a message you sent.')
+    const kept = items.slice(0, index)
+    // A turn's started and ended items share an id, so the transcript holds its latest state; both carry promptRef.
+    const started = items.slice(index).find((item): item is TurnItem => item.kind === 'turn')
+    const keep = kept.findLast((item): item is TurnItem => item.kind === 'turn' && item.ref !== undefined)?.ref
+    if (live.record.hasTurns) {
+      const session = live.session ?? (await this.connect(live))
+      if (!session.rewind) throw new Error('This provider cannot rewind.')
+      const { restart } = await session.rewind({ prompt: started?.promptRef, keep, files })
+      if (restart) {
+        await this.stop(id)
+        this.setStatus(live, 'idle')
+        if (restart.resumeAt) live.record.resumeAt = restart.resumeAt
+        else {
+          live.record.hasTurns = false
+          delete live.record.nativeId
+        }
+      }
+    }
+    live.journal.flush()
+    live.items = new Map(kept.map((item) => [item.id, item]))
+    Journal.write(this.journalPath(id), kept)
+    delete live.record.laneSeen
+    await this.save(live)
+    this.broadcast(live, { type: 'snapshot', record: live.record, status: live.status, items: kept, queue: [...live.queue] })
+    this.changed.fire()
+    return target.parts
+  }
+
   async setLane(id: string, laneId: string | undefined): Promise<void> {
     const live = this.load(id)
     if (laneId === undefined) delete live.record.laneId
@@ -384,7 +424,8 @@ export class SessionManager {
       mode: live.record.mode,
       model: live.record.model,
       ...(live.record.effort ? { effort: live.record.effort } : {}),
-      resumeId
+      resumeId,
+      ...(live.record.resumeAt ? { resumeAt: live.record.resumeAt } : {})
     })
     live.session = session
     live.received = 0
@@ -401,6 +442,7 @@ export class SessionManager {
         : [])
     ]
     live.record.nativeId = session.nativeId
+    delete live.record.resumeAt
     await this.save(live)
     return session
   }

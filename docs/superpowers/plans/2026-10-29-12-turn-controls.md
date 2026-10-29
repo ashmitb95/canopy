@@ -341,20 +341,22 @@ In `webview/app/composer/prompt-document.ts`, add:
 export function toDocument(parts: PromptPart[]): JSONContent {
   const paragraphs: JSONContent[][] = [[]]
   const current = () => paragraphs[paragraphs.length - 1]
+  // Pills get a space on each side for reading; toParts trims text around them, so the parts come back unchanged.
+  const pill = (node: JSONContent) => current().push(...(current().length > 0 ? [{ type: 'text', text: ' ' }] : []), node, { type: 'text', text: ' ' })
   for (const part of parts) {
     if (part.type === 'text') {
       part.text.split('\n').forEach((line, index) => {
         if (index > 0) paragraphs.push([])
-        if (line) current().push({ type: 'text', text: `${line} ` })
+        if (line) current().push({ type: 'text', text: line })
       })
     } else if (part.type === 'file') {
-      current().push({ type: 'mention', attrs: { id: part.path, label: part.path.split('/').pop() ?? part.path, mentionSuggestionChar: '@' } }, { type: 'text', text: ' ' })
+      pill({ type: 'mention', attrs: { id: part.path, label: part.path.split('/').pop() ?? part.path, mentionSuggestionChar: '@' } })
     } else if (part.type === 'command') {
-      current().push({ type: 'mention', attrs: { id: part.name, label: part.name, mentionSuggestionChar: '/' } }, { type: 'text', text: ' ' })
+      pill({ type: 'mention', attrs: { id: part.name, label: part.name, mentionSuggestionChar: '/' } })
     } else if (part.type === 'pasted') {
-      current().push({ type: 'pastedText', attrs: { text: part.text } }, { type: 'text', text: ' ' })
+      pill({ type: 'pastedText', attrs: { text: part.text } })
     } else {
-      current().push({ type: 'imageAttachment', attrs: { path: part.path, mimeType: part.mimeType, name: part.name } }, { type: 'text', text: ' ' })
+      pill({ type: 'imageAttachment', attrs: { path: part.path, mimeType: part.mimeType, name: part.name } })
     }
   }
   return { type: 'doc', content: paragraphs.map((content) => ({ type: 'paragraph', ...(content.length > 0 ? { content } : {}) })) }

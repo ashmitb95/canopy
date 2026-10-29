@@ -276,4 +276,25 @@ describe('SessionManager', () => {
     const ended = events.find((event) => event.type === 'item' && event.item.kind === 'turn')
     expect(ended).toMatchObject({ item: { state: 'ended', at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) } })
   })
+
+  it('puts a chat on a lane and takes it off again', async () => {
+    const { manager } = setup()
+    const { id } = await manager.create('fake')
+    let changes = 0
+    manager.onDidChange(() => changes++)
+    await manager.setLane(id, 'retry-fix')
+    expect(manager.list()[0].record.laneId).toBe('retry-fix')
+    await manager.setLane(id, undefined)
+    expect(manager.list()[0].record.laneId).toBeUndefined()
+    expect(changes).toBe(2)
+  })
+
+  it('lists the files a chat edited', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('edit'))
+    sessions[0].emit({ kind: 'diff', id: 'd1', path: '/w/a.ts', oldText: 'a', newText: 'b' })
+    sessions[0].emit({ kind: 'diff', id: 'd2', path: '/w/b.ts', oldText: null, newText: 'c' })
+    expect(manager.diffPaths(id)).toEqual(['/w/a.ts', '/w/b.ts'])
+  })
 })

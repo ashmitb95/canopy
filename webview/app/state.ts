@@ -1,7 +1,7 @@
 import type { Quota, SessionItem } from '../../src/core/types'
 import type { QueuedPrompt, SessionEvent } from '../../src/sessions/manager'
 import type { SessionRecord, SessionStatus } from '../../src/sessions/store'
-import type { EditorContext, HostMessage, ProviderInfo, SessionSummary, SignInProgress } from '../../src/ui/protocol'
+import type { EditorContext, HostMessage, LaneInfo, ProviderInfo, SessionSummary, SignInProgress } from '../../src/ui/protocol'
 
 export type ChatState = {
   sessionId?: string
@@ -14,6 +14,8 @@ export type ChatState = {
   providers: ProviderInfo[]
   editorContext: EditorContext | null
   sessions: SessionSummary[]
+  /** Lanes for the lane chip; undefined when lanes are unavailable (no folder). */
+  lanes?: LaneInfo[]
   quotas: Record<string, Quota>
   signIns: Record<string, SignInProgress>
   attachmentsUri?: string
@@ -47,12 +49,19 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
     case 'editorContext':
       return { ...state, editorContext: message.context }
     case 'empty':
-      return { ...initialState, provider: state.provider, providers: state.providers, editorContext: state.editorContext, sessions: state.sessions, quotas: state.quotas, signIns: state.signIns, empty: true }
+      return { ...initialState, provider: state.provider, providers: state.providers, editorContext: state.editorContext, sessions: state.sessions, lanes: state.lanes, quotas: state.quotas, signIns: state.signIns, empty: true }
     case 'title':
       if (message.sessionId !== state.sessionId || !state.record) return state
       return { ...state, record: { ...state.record, title: message.title } }
     case 'sessions':
       return { ...state, sessions: message.sessions }
+    case 'lanes':
+      return { ...state, lanes: message.lanes }
+    case 'lane': {
+      if (message.sessionId !== state.sessionId || !state.record) return state
+      const { laneId: _previous, ...record } = state.record
+      return { ...state, record: message.laneId ? { ...record, laneId: message.laneId } : record }
+    }
     case 'quota':
       return { ...state, quotas: { ...state.quotas, [message.providerId]: message.quota } }
     case 'signInProgress': {

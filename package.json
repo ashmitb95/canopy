@@ -388,7 +388,7 @@
     "menus": {
       "view/title": [
         {
-          "submenu": "agentdeck.newChatMenu",
+          "submenu": "agentdeck.newChatMenu.chat",
           "when": "view == agentdeck.chat",
           "group": "navigation@1"
         },
@@ -403,7 +403,7 @@
           "group": "navigation@3"
         },
         {
-          "submenu": "agentdeck.newChatMenu",
+          "submenu": "agentdeck.newChatMenu.sessions",
           "when": "view == agentdeck.sessions",
           "group": "navigation@0"
         },
@@ -568,7 +568,43 @@
           "group": "agentdeck@1"
         }
       ],
-      "agentdeck.newChatMenu": [
+      "agentdeck.newChatMenu.sessions": [
+        {
+          "command": "agentdeck.newChat.claude",
+          "when": "agentdeck.installed.claude",
+          "group": "1_providers@0"
+        },
+        {
+          "command": "agentdeck.newChat.codex",
+          "when": "agentdeck.installed.codex",
+          "group": "1_providers@1"
+        },
+        {
+          "command": "agentdeck.newChat.grok",
+          "when": "agentdeck.installed.grok",
+          "group": "1_providers@2"
+        },
+        {
+          "command": "agentdeck.newChat.cursor",
+          "when": "agentdeck.installed.cursor",
+          "group": "1_providers@3"
+        },
+        {
+          "command": "agentdeck.newChat.opencode",
+          "when": "agentdeck.installed.opencode",
+          "group": "1_providers@4"
+        },
+        {
+          "command": "agentdeck.newChat.gemini",
+          "when": "agentdeck.installed.gemini",
+          "group": "1_providers@5"
+        },
+        {
+          "command": "agentdeck.newChat.other",
+          "group": "2_more@1"
+        }
+      ],
+      "agentdeck.newChatMenu.chat": [
         {
           "command": "agentdeck.newChat.claude",
           "when": "agentdeck.installed.claude",
@@ -615,7 +651,12 @@
     ],
     "submenus": [
       {
-        "id": "agentdeck.newChatMenu",
+        "id": "agentdeck.newChatMenu.sessions",
+        "label": "New Chat",
+        "icon": "$(add)"
+      },
+      {
+        "id": "agentdeck.newChatMenu.chat",
         "label": "New Chat",
         "icon": "$(add)"
       }

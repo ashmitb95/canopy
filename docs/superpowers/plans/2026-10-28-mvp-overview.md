@@ -19,6 +19,7 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 | 19 | [Lane memory and briefs](2026-10-29-19-lane-memory-and-briefs.md) | `.agentdeck/` lane memory, stamped chat summaries, lane brief and update in prompts, history of moves | Done |
 | 20 | [Switch, warm-up, and lane boundaries](2026-10-29-20-switch-and-warm-up.md) | Move lanes into and out of main with their work, warm-up, joining repos, one writer per lane, write boundaries in every provider | Done |
 | 21 | [Lanes in the chat](2026-10-29-21-lanes-in-the-chat.md) | Lane chip in the composer, switcher grouped by lane, review a lane's changes across repos | Done |
+| 22 | [Hand-offs and task types](2026-10-29-22-hand-offs.md) | Task types with default providers and modes, *Hand off to…* a new chat on the same lane | Done |
 
 ## Conventions for whoever executes a plan
 

@@ -62,7 +62,7 @@ From the [design](superpowers/specs/2026-10-29-lanes-and-control-center.md):
 - **19 — Lane memory and briefs:** `.agentdeck/` layout, stamping, chat summaries, the brief and the delta in prompts. ✓ done.
 - **20 — Switch and warm-up:** the switch steps with stash carry-over and failure handling, worktree creation, bootstrap, chat notices, lane path enforcement (Claude, Codex writable roots, ACP). ✓ done.
 - **21 — Lanes in the chat list:** group chats by lane with per-repo location, group actions, composer lane chip, multi-repo *Review changes*. No board or lane pages (decision 36). ✓ done.
-- **22 — Workflows inside lanes:** task types and defaults, stages, handoff briefs, *Hand off to…*.
+- **22 — Workflows inside lanes:** task types and defaults, stages, handoff briefs, *Hand off to…*. ✓ done (as hand-offs; no stage views, decision 36).
 - **Later:** PR and review-thread triage, issue linking, cross-lane conflicts, lane preflight, commit/push/PR per repo.
 
 ## Phase C — before others use it

@@ -18,9 +18,9 @@ Checklist against AFK Pilot's features (its README, October 2026). ✓ done · �
 | Permission cards with a native diff preview before approval | ✓ *Review changes* on edit approvals | 11 |
 | "Allow `npm` for this session" for commands | ✓ | 11 |
 | Modes incl. Claude **Auto**, switchable mid-turn | ✓ | 11 |
-| Reasoning effort, live | ○ | 12 |
-| Queue: edit, remove, merge further typing; **Steer** (Codex, Grok) | ◐ remove only | 12 |
-| Drafts kept per chat; prompt history (↑/↓) | ○ | 12 |
+| Reasoning effort, live | ✓ | 12 |
+| Queue: edit, remove, merge further typing; **Steer** (Codex, Grok) | ✓ (steer: Codex, Claude) | 12 |
+| Drafts kept per chat; prompt history (↑/↓) | ✓ | 12 |
 | Subagent cards | ○ (`parentId` stored) | 13 |
 | Tool batching and summaries ("Explored 5 items", "Edited 2 files"), inline diffs at real line numbers | ◐ | 13 |
 | Workflow / deep-research progress cards | ○ | 13 |
@@ -47,7 +47,7 @@ Checklist against AFK Pilot's features (its README, October 2026). ✓ done · �
 Plans:
 
 - **11 — Questions, plan review, and permissions.** First. Its path checks are also the enforcement layer lanes need.
-- **12 — Turn controls:** effort, steering, queue editing, drafts, prompt history.
+- **12 — Turn controls:** effort, steering, queue editing, drafts, prompt history. ✓ done.
 - **13 — Transcript depth:** subagent and workflow cards, tool batching, context and cost, LaTeX, Mermaid.
 - **14 — Session operations:** fork, rewind, unread badges, history actions, Explorer context menu, Secondary Side Bar default, keep-awake.
 - **15 — Voice dictation:** spike microphone access in a webview first; fall back to a host-side recorder.

@@ -23,7 +23,7 @@ export function LanePicker({ lanes, current }: { lanes?: LaneInfo[]; current?: s
         <Button size="xs" variant="ghost" className="min-w-0 text-muted-foreground" title={current ? `Lane: ${current}` : 'No lane'}>
           <Codicon name="git-branch" size={12} />
           <span className="hidden max-w-32 truncate @[26rem]:inline">{current ?? 'No lane'}</span>
-          <Codicon name="chevron-down" size={12} />
+          <span className="hidden @[26rem]:inline-flex"><Codicon name="chevron-down" size={12} /></span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-w-80">

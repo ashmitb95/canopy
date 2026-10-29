@@ -20,9 +20,9 @@ export function McpPopover({ fact }: { fact?: Extract<SessionFact, { kind: 'mcp'
   return (
     <Popover onOpenChange={(open) => open && send({ type: 'refreshMcp' })}>
       <PopoverTrigger asChild>
-        <Button size="xs" variant="ghost" className="text-muted-foreground">
+        <Button size="xs" variant="ghost" className="text-muted-foreground" title={`MCP: ${connected} connected`}>
           <Codicon name="plug" size={12} />
-          MCP {connected}
+          <span className="hidden @[26rem]:inline">MCP {connected}</span>
           {attention && <span className="size-1.5 rounded-full bg-warning" aria-label="Some servers need attention" />}
         </Button>
       </PopoverTrigger>

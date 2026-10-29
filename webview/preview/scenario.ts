@@ -13,6 +13,7 @@ const record: SessionRecord = {
   laneId: 'retry-fix',
   facts: {
     model: { kind: 'model', current: 'opus', available: [{ id: 'opus', label: 'Opus 5.5' }, { id: 'sonnet', label: 'Sonnet 5.5' }] },
+    effort: { kind: 'effort', current: 'high', available: ['low', 'medium', 'high', 'xhigh'] },
     mode: { kind: 'mode', current: 'ask', available: ['ask', 'accept-edits', 'plan', 'full-access'] },
     context: { kind: 'context', usedTokens: 76_000, maxTokens: 200_000 },
     mcp: {
@@ -111,7 +112,7 @@ const claude: ProviderInfo = {
   id: 'claude',
   label: 'Claude',
   installUrl: 'https://example.invalid',
-  capabilities: [],
+  capabilities: ['steer', 'effort'],
   modes: ['ask', 'accept-edits', 'plan', 'full-access'],
   state: { status: 'signed-in', account: 'me@example.com', version: '2.1.311' }
 }

@@ -19,13 +19,14 @@ export function ModelPicker({ fact }: { fact?: Extract<SessionFact, { kind: 'mod
   if (!fact) return null
   // The CLI reports the concrete model id; the picker lists aliases that resolve to it.
   const selected = selectedModel(fact)
-  const label = selected?.label ?? fact.current
+  // "Opus 5.5 (1M context)" shows as "Opus 5.5"; the menu keeps the full label.
+  const label = (selected?.label ?? fact.current).split(' (')[0]
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="xs" variant="ghost" className="min-w-0 shrink text-muted-foreground">
-          <span className="truncate">{label}</span>
-          <Codicon name="chevron-down" size={12} />
+        <Button size="xs" variant="ghost" className="min-w-[4.5rem] max-w-40 shrink text-muted-foreground" title={selected?.label ?? fact.current}>
+          <span className="min-w-0 truncate">{label}</span>
+          <span className="hidden @[26rem]:inline-flex"><Codicon name="chevron-down" size={12} /></span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-w-80">

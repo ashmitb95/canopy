@@ -26,7 +26,7 @@ export function ModePicker({ current, available }: { current: PermissionMode; av
         <Button size="xs" variant="ghost" className="text-muted-foreground" title={MODES[current].label}>
           <Codicon name={MODES[current].icon} size={12} />
           <span className="hidden @[26rem]:inline">{MODES[current].label}</span>
-          <Codicon name="chevron-down" size={12} />
+          <span className="hidden @[26rem]:inline-flex"><Codicon name="chevron-down" size={12} /></span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

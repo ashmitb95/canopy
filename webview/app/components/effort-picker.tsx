@@ -21,7 +21,7 @@ export function EffortPicker({ fact }: { fact?: Extract<SessionFact, { kind: 'ef
         <Button size="xs" variant="ghost" className="text-muted-foreground" title="Reasoning effort">
           <Codicon name="lightbulb" size={12} />
           <span className="hidden @[26rem]:inline">{fact.current ? label(fact.current) : 'Effort'}</span>
-          <Codicon name="chevron-down" size={12} />
+          <span className="hidden @[26rem]:inline-flex"><Codicon name="chevron-down" size={12} /></span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

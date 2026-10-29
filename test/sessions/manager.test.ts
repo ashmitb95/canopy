@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { ApprovalItem, PromptPart } from '../../src/core/types'
+import type { ApprovalItem, PromptPart, SessionItem } from '../../src/core/types'
 import { type Attention, type SessionEvent, SessionManager } from '../../src/sessions/manager'
 import { SessionStore } from '../../src/sessions/store'
 import { fakeProvider } from '../fake-provider'
@@ -115,10 +115,33 @@ describe('SessionManager', () => {
     sessions[0].emit(approval('approval:1'))
     expect(manager.list()[0].status).toBe('needs-input')
     expect(attention).toEqual([{ sessionId: id, reason: 'needs-input' }])
-    manager.answer(id, 'approval:1', 'allow')
-    expect(sessions[0].answers).toEqual([['approval:1', 'allow']])
+    manager.answer(id, 'approval:1', { kind: 'option', optionId: 'allow' })
+    expect(sessions[0].answers).toEqual([['approval:1', { kind: 'option', optionId: 'allow' }]])
     sessions[0].emit(approval('approval:1', 'allow'))
     expect(manager.list()[0].status).toBe('running')
+  })
+
+  it('needs input while a question is pending and resumes once it is answered', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.prompt(id, text('ask me'))
+    const question: SessionItem = {
+      kind: 'question',
+      id: 'question:1',
+      questions: [{ id: 'q1', question: 'Which color?', multiSelect: false, allowOther: true, options: [{ id: 'o1', label: 'Red' }] }]
+    }
+    sessions[0].emit(question)
+    expect(manager.list()[0].status).toBe('needs-input')
+    sessions[0].emit({ ...question, resolved: { answers: [{ questionId: 'q1', optionIds: ['o1'] }] } } as SessionItem)
+    expect(manager.list()[0].status).toBe('running')
+  })
+
+  it('records the permission mode a provider switches to', async () => {
+    const { manager, sessions } = setup()
+    const { id } = await manager.create('fake')
+    await manager.warm(id)
+    sessions[0].fact({ kind: 'mode', current: 'accept-edits', available: ['ask', 'accept-edits'] })
+    expect(manager.list()[0].record.mode).toBe('accept-edits')
   })
 
   it('fans out to every subscriber until one unsubscribes', async () => {
@@ -200,6 +223,7 @@ describe('SessionManager', () => {
       join(journalDir, `${id}.jsonl`),
       [
         JSON.stringify(approval('approval:old')),
+        JSON.stringify({ kind: 'question', id: 'question:old', questions: [] }),
         JSON.stringify({ kind: 'message', id: 'a1', role: 'assistant', text: 'par', streaming: true })
       ].join('\n') + '\n'
     )
@@ -207,6 +231,7 @@ describe('SessionManager', () => {
     const snapshot = watch(fresh.manager, id)[0] as Extract<SessionEvent, { type: 'snapshot' }>
     expect(snapshot.items).toEqual([
       { ...approval('approval:old'), resolved: 'expired' },
+      { kind: 'question', id: 'question:old', questions: [], resolved: 'expired' },
       { kind: 'message', id: 'a1', role: 'assistant', text: 'par', streaming: false }
     ])
   })

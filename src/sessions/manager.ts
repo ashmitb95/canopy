@@ -6,6 +6,7 @@ import type {
   McpSignIn,
   PermissionMode,
   PromptPart,
+  PromptResponse,
   ProviderDefinition,
   ProviderSession,
   Quota,
@@ -44,7 +45,7 @@ type Live = {
   items: Map<string, SessionItem>
   queue: QueuedPrompt[]
   journal: Journal
-  approvals: Set<string>
+  prompts: Set<string>
   subscribers: Set<(event: SessionEvent) => void>
   session?: ProviderSession
   opening?: Promise<ProviderSession>
@@ -139,8 +140,8 @@ export class SessionManager {
     await this.live.get(id)?.session?.cancel()
   }
 
-  answer(id: string, itemId: string, optionId: string): void {
-    this.live.get(id)?.session?.answer(itemId, optionId)
+  answer(id: string, itemId: string, response: PromptResponse): void {
+    this.live.get(id)?.session?.answer(itemId, response)
   }
 
   item(id: string, itemId: string): SessionItem | undefined {
@@ -218,7 +219,7 @@ export class SessionManager {
       items: new Map(Journal.read(path).map((item) => [item.id, settled(item)])),
       queue: [],
       journal: new Journal(path),
-      approvals: new Set(),
+      prompts: new Set(),
       subscribers: new Set(),
       listeners: [],
       received: 0,
@@ -290,26 +291,26 @@ export class SessionManager {
     live.items.set(item.id, item)
     live.journal.append(item)
     this.broadcast(live, { type: 'item', item })
-    if (item.kind === 'approval') this.approvalChanged(live, item.id, item.resolved)
+    if (item.kind === 'approval' || item.kind === 'question') this.promptChanged(live, item.id, item.resolved !== undefined)
     if (item.kind === 'turn' && item.state === 'ended') this.turnEnded(live)
   }
 
-  private approvalChanged(live: Live, id: string, resolved: string | undefined): void {
+  private promptChanged(live: Live, id: string, resolved: boolean): void {
     if (!resolved) {
-      live.approvals.add(id)
+      live.prompts.add(id)
       this.setStatus(live, 'needs-input')
       this.attention.fire({ sessionId: live.record.id, reason: 'needs-input' })
       return
     }
-    live.approvals.delete(id)
-    if (live.approvals.size === 0 && live.status === 'needs-input') this.setStatus(live, 'running')
+    live.prompts.delete(id)
+    if (live.prompts.size === 0 && live.status === 'needs-input') this.setStatus(live, 'running')
   }
 
   private turnEnded(live: Live): void {
     live.journal.flush()
     live.record.updatedAt = new Date().toISOString()
     void this.save(live)
-    live.approvals.clear()
+    live.prompts.clear()
     this.setStatus(live, 'idle')
     this.attention.fire({ sessionId: live.record.id, reason: 'turn-ended' })
     const next = live.queue.shift()
@@ -319,6 +320,7 @@ export class SessionManager {
   }
 
   private fact(live: Live, fact: SessionFact): void {
+    if (fact.kind === 'mode') live.record.mode = fact.current
     live.record.facts[fact.kind] = fact
     void this.save(live)
     this.broadcast(live, { type: 'fact', fact })
@@ -348,7 +350,7 @@ export class SessionManager {
 
   private fail(live: Live, text: string): void {
     this.upsert(live, { kind: 'notice', id: `notice:${randomUUID()}`, level: 'error', text, action: 'retry' })
-    live.approvals.clear()
+    live.prompts.clear()
     this.setStatus(live, 'error')
   }
 
@@ -370,7 +372,7 @@ export class SessionManager {
 
 /** Items from a previous run that can no longer change. */
 function settled(item: SessionItem): SessionItem {
-  if (item.kind === 'approval' && !item.resolved) return { ...item, resolved: 'expired' }
+  if ((item.kind === 'approval' || item.kind === 'question') && item.resolved === undefined) return { ...item, resolved: 'expired' }
   if ((item.kind === 'message' && item.role === 'assistant') || item.kind === 'thought') {
     return item.streaming ? { ...item, streaming: false } : item
   }

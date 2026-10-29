@@ -4,6 +4,7 @@ import type {
   OpenOptions,
   PermissionMode,
   PromptPart,
+  PromptResponse,
   ProviderDefinition,
   ProviderSession,
   Quota,
@@ -13,7 +14,7 @@ import type {
 
 export class FakeSession implements ProviderSession {
   readonly prompts: PromptPart[][] = []
-  readonly answers: [string, string][] = []
+  readonly answers: [string, PromptResponse][] = []
   readonly modes: PermissionMode[] = []
   disposed = false
   private readonly items = new Emitter<SessionItem>()
@@ -40,8 +41,8 @@ export class FakeSession implements ProviderSession {
     this.modes.push(mode)
   }
 
-  answer(itemId: string, optionId: string): void {
-    this.answers.push([itemId, optionId])
+  answer(itemId: string, response: PromptResponse): void {
+    this.answers.push([itemId, response])
   }
 
   async dispose(): Promise<void> {

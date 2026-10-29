@@ -15,6 +15,9 @@ export type PlanEntry = { text: string; status: 'pending' | 'in_progress' | 'don
 
 export type ApprovalOption = { id: string; label: string }
 
+/** What an approval is about, beyond a tool call: a plan to accept before the agent builds. */
+export type ApprovalSubject = { kind: 'plan'; text: string; filePath?: string }
+
 export type AssistantMessage = { kind: 'message'; id: string; role: 'assistant'; text: string; streaming: boolean }
 export type UserMessage = { kind: 'message'; id: string; role: 'user'; parts: PromptPart[] }
 export type Thought = { kind: 'thought'; id: string; text: string; streaming: boolean }
@@ -36,9 +39,47 @@ export type ApprovalItem = {
   id: string
   title: string
   detail?: string
+  /** Extra context from the provider, e.g. what the tool will be able to do. */
+  description?: string
+  /** Why the provider is asking, e.g. a blocked path or a matched rule. */
+  reason?: string
+  subject?: ApprovalSubject
+  /** Diff items this approval would apply, for Review changes. */
+  diffIds?: string[]
   options: ApprovalOption[]
+  /** The chosen option id, `dismissed`, or `expired`. */
   resolved?: string
 }
+
+export type PromptOption = { id: string; label: string; description?: string; preview?: string }
+
+export type Question = {
+  id: string
+  header?: string
+  question: string
+  options: PromptOption[]
+  multiSelect: boolean
+  /** Whether a typed answer is accepted besides the options. */
+  allowOther: boolean
+  /** A typed answer is a secret: masked while typing and never stored. */
+  secret?: boolean
+}
+
+export type QuestionAnswer = { questionId: string; optionIds: string[]; other?: string }
+
+export type QuestionItem = {
+  kind: 'question'
+  id: string
+  title?: string
+  questions: Question[]
+  resolved?: { answers: QuestionAnswer[] } | 'dismissed' | 'expired'
+}
+
+/** The user's reply to an approval or a question. */
+export type PromptResponse =
+  | { kind: 'option'; optionId: string }
+  | { kind: 'answers'; answers: QuestionAnswer[] }
+  | { kind: 'dismiss' }
 export type TurnItem = {
   kind: 'turn'
   id: string
@@ -65,10 +106,11 @@ export type SessionItem =
   | DiffItem
   | PlanItem
   | ApprovalItem
+  | QuestionItem
   | TurnItem
   | NoticeItem
 
-export type PermissionMode = 'ask' | 'accept-edits' | 'plan' | 'full-access'
+export type PermissionMode = 'ask' | 'accept-edits' | 'auto' | 'plan' | 'full-access'
 
 export type McpServer = {
   name: string
@@ -143,8 +185,8 @@ export interface ProviderSession {
   cancel(): Promise<void>
   setModel?(id: string): Promise<void>
   setMode?(mode: PermissionMode): Promise<void>
-  /** Settles a pending approval item with one of its option ids. */
-  answer(itemId: string, optionId: string): void
+  /** Settles a pending approval or question. */
+  answer(itemId: string, response: PromptResponse): void
   refreshMcp?(): Promise<void>
   reconnectMcp?(server: string): Promise<void>
   /** Starts an MCP server's sign-in from the running CLI, when the provider supports that. */

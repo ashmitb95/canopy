@@ -33,8 +33,8 @@ Checklist against AFK Pilot's features (its README, October 2026). ✓ done · �
 | Default to the Secondary Side Bar | ✓ | 14 |
 | Keep the machine awake while a turn runs | ✓ (macOS, Linux) | 14 |
 | Voice dictation | ○ | 15 (spike first) |
-| More agents: Cursor (`agent acp`), OpenCode, Gemini CLI, Muse, Antigravity | ◐ Grok | 16 |
-| Edit provider config files from settings | ○ | 16 |
+| More agents: Cursor (`agent acp`), OpenCode, Gemini CLI, Muse, Antigravity | ◐ specs for Cursor, OpenCode, Gemini; custom agents; live checks once installed | 16 |
+| Edit provider config files from settings | ✓ | 16 |
 | Parallel sessions with status dots | ✓ | — |
 | Paste and attach images; `@` files; `/` commands | ✓ | — |
 | Model picker, live | ✓ | — |
@@ -52,7 +52,7 @@ Plans:
 - **14 — Session operations:** fork, rewind, unread badges, history actions, Explorer context menu, Secondary Side Bar default, keep-awake. ✓ done (rewind moves to 14b).
 - **14b — Rewind:** per-provider turn references; Claude resumeSessionAt and file checkpoints, Codex thread/revert.
 - **15 — Voice dictation:** spike microphone access in a webview first; fall back to a host-side recorder.
-- **16 — More agents:** Cursor, OpenCode, Gemini CLI, Muse, Antigravity as ACP specs with recorded fixtures; provider config editing.
+- **16 — More agents:** Cursor, OpenCode, Gemini CLI, Muse, Antigravity as ACP specs with recorded fixtures; provider config editing. ✓ done (recorded fixtures and live checks wait for the CLIs to be installed).
 
 ## Phase B — lanes (foundations first, minimal UI)
 

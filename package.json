@@ -263,6 +263,11 @@
         "icon": "$(account)"
       },
       {
+        "command": "agentdeck.openProviderConfig",
+        "title": "Open Provider Config…",
+        "category": "AgentDeck"
+      },
+      {
         "command": "agentdeck.openSession",
         "title": "Open in Editor",
         "category": "AgentDeck"

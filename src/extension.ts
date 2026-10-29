@@ -15,6 +15,7 @@ import { SessionManager } from './sessions/manager'
 import { SessionStore } from './sessions/store'
 import { attachFile } from './ui/attachments'
 import { ChatSurfaces, type LaneSource, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
+import { configFiles } from './ui/config-files'
 import { DIFF_SCHEME, DiffDocuments } from './ui/diff-documents'
 import { EditorContextTracker } from './ui/editor-context'
 import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
@@ -112,6 +113,15 @@ export function activate(context: vscode.ExtensionContext): void {
       const files = uris.filter((candidate) => candidate.scheme === 'file')
       if (files.length === 0) return
       await surfaces.insertAttachments(files.map((file) => attachFile(join(storage, 'attachments'), file.fsPath, vscode.workspace.asRelativePath(file))))
+    }),
+    vscode.commands.registerCommand('agentdeck.openProviderConfig', async () => {
+      const files = configFiles(homedir(), root)
+      if (files.length === 0) return void vscode.window.showInformationMessage('No provider config files found.')
+      const choice = await vscode.window.showQuickPick(
+        files.map((file) => ({ label: file.label, description: file.path.replace(homedir(), '~'), path: file.path })),
+        { placeHolder: 'Open which config?' }
+      )
+      if (choice) await vscode.window.showTextDocument(vscode.Uri.file(choice.path))
     }),
     vscode.commands.registerCommand('agentdeck.moveSessionToLane', async (node: SessionNode) => {
       const none = { label: '$(circle-slash) No branch', lane: undefined }

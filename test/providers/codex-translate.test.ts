@@ -151,4 +151,21 @@ describe('CodexTranslator', () => {
       ])
     ).toEqual([])
   })
+
+  it('remembers which diff items a file change produced', () => {
+    const translator = new CodexTranslator(() => {})
+    translator.feed('item/started', {
+      item: {
+        type: 'fileChange',
+        id: 'f9',
+        status: 'inProgress',
+        changes: [
+          { path: '/w/a.ts', kind: { type: 'update', move_path: null }, diff: '@@ -1 +1 @@\n-a\n+b' },
+          { path: '/w/b.ts', kind: { type: 'add' }, diff: 'new' }
+        ]
+      }
+    })
+    expect(translator.diffIdsFor('f9')).toEqual(['f9:0', 'f9:1'])
+    expect(translator.diffIdsFor('missing')).toEqual([])
+  })
 })

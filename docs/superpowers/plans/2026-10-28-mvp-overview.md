@@ -18,6 +18,7 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 | 12 | [Turn controls](2026-10-29-12-turn-controls.md) | Reasoning effort, steering, queue editing and merging, drafts per chat, prompt history | Done |
 | 13 | [Transcript depth](2026-10-30-13-transcript-depth.md) | Subagent steps nested, Explored batches, context popover with cost and Compact, LaTeX and Mermaid | Done |
 | 14 | [Session operations](2026-10-30-14-session-operations.md) | Fork, unread markers, chat menu, 30-day list, Add to AgentDeck Chat, Secondary Side Bar, keep-awake | Done |
+| 14b | [Rewind](2026-10-30-14b-rewind.md) | Rewind to before a message (Claude with file restore, Codex) | Done |
 | 16 | [More agents and provider config](2026-10-30-16-more-agents.md) | Cursor, OpenCode, Gemini over ACP; custom ACP agents; Open Provider Config | Done (live checks pending installs) |
 | 17 | [Notifications](2026-10-29-17-notifications.md) | Native sound and popups for finished turns, approvals, questions, and failures; claude-notifier's settings; `CLAUDE_NOTIFIER_DISABLE` for spawned CLIs | Done |
 | 18 | [Workspace and lane tracking](2026-10-29-18-lane-tracking.md) | Repos and checkouts read live from Git, lanes derived from branches, chats linked to lanes, Sessions grouped by lane | Done |

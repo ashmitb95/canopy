@@ -27,7 +27,7 @@ Checklist against AFK Pilot's features (its README, October 2026). ✓ done · �
 | Context and cost popover (billed totals) and Compact | ✓ | 13 |
 | LaTeX and Mermaid rendering | ✓ | 13 |
 | Fork conversation | ✓ (Claude, Codex) | 14 |
-| Rewind (conversation, optionally files) | ○ | 14b |
+| Rewind (conversation, optionally files) | ✓ (Claude: files too; Codex: conversation) | 14b |
 | History: unread result badges, rename and delete inline, 30-day list | ✓ | 14 |
 | Add to chat from the Explorer and editor context menu; keybinding | ✓ | 14 |
 | Default to the Secondary Side Bar | ✓ | 14 |
@@ -50,7 +50,7 @@ Plans:
 - **12 — Turn controls:** effort, steering, queue editing, drafts, prompt history. ✓ done.
 - **13 — Transcript depth:** subagent and workflow cards, tool batching, context and cost, LaTeX, Mermaid. ✓ done.
 - **14 — Session operations:** fork, rewind, unread badges, history actions, Explorer context menu, Secondary Side Bar default, keep-awake. ✓ done (rewind moves to 14b).
-- **14b — Rewind:** per-provider turn references; Claude resumeSessionAt and file checkpoints, Codex thread/revert.
+- **14b — Rewind:** per-provider turn references; Claude resumeSessionAt and file checkpoints, Codex thread/revert. ✓ done.
 - **15 — Voice dictation:** spike microphone access in a webview first; fall back to a host-side recorder.
 - **16 — More agents:** Cursor, OpenCode, Gemini CLI, Muse, Antigravity as ACP specs with recorded fixtures; provider config editing. ✓ done (recorded fixtures and live checks wait for the CLIs to be installed).
 

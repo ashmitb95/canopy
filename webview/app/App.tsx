@@ -62,7 +62,7 @@ export function App() {
         <div className="space-y-2 px-3 pb-3">
           <SignInBanner provider={state.provider} />
           <WorkingStatus status={state.status} since={since} />
-          <QueueList queue={state.queue} />
+          <QueueList queue={state.queue} canSteer={state.provider?.capabilities.includes('steer') ?? false} />
           <Composer state={state} />
         </div>
       </div>

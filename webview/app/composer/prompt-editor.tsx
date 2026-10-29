@@ -1,4 +1,4 @@
-import { mergeAttributes } from '@tiptap/core'
+import { Extension, mergeAttributes } from '@tiptap/core'
 import Mention from '@tiptap/extension-mention'
 import Placeholder from '@tiptap/extension-placeholder'
 import { EditorContent, type JSONContent, useEditor } from '@tiptap/react'
@@ -8,7 +8,8 @@ import type { CommandOption, PromptPart } from '../../../src/core/types'
 import type { Attachment, FileMatch } from '../../../src/ui/protocol'
 import { ask } from '../host'
 import { commandMenu, fileMenu, ImageAttachment, PASTE_LINES, PastedText, SubmitOnEnter } from './nodes'
-import { toParts } from './prompt-document'
+import { History } from './history'
+import { toDocument, toParts } from './prompt-document'
 import { renderMenu } from './suggestion-menu'
 
 export type PromptEditorHandle = {
@@ -16,6 +17,8 @@ export type PromptEditorHandle = {
   insert: (attachments: Attachment[]) => void
   /** Types @ so the file menu opens. */
   mention: () => void
+  getContent: () => JSONContent
+  setContent: (doc: JSONContent | undefined) => void
 }
 
 type Props = {
@@ -23,6 +26,8 @@ type Props = {
   commands: CommandOption[]
   onSubmit: (parts: PromptPart[]) => void
   onEmptyChange: (empty: boolean) => void
+  history: PromptPart[][]
+  onChange?: (doc: JSONContent) => void
 }
 
 function attachmentNode(attachment: Attachment): JSONContent {
@@ -41,7 +46,7 @@ function toBase64(buffer: ArrayBuffer): string {
 }
 
 export const PromptEditor = forwardRef<PromptEditorHandle, Props>(function PromptEditor(
-  { placeholder, commands, onSubmit, onEmptyChange },
+  { placeholder, commands, onSubmit, onEmptyChange, history, onChange },
   ref
 ) {
   const placeholderRef = useRef(placeholder)
@@ -49,6 +54,13 @@ export const PromptEditor = forwardRef<PromptEditorHandle, Props>(function Promp
   const commandsRef = useRef(commands)
   commandsRef.current = commands
   const submitRef = useRef(() => {})
+  const historyRef = useRef(history)
+  historyRef.current = history
+  const changeRef = useRef(onChange)
+  changeRef.current = onChange
+  const browsing = useRef<History | null>(null)
+  const loading = useRef(false)
+  const loadRef = useRef((_doc: JSONContent | undefined) => {})
 
   const editor = useEditor({
     extensions: [
@@ -102,7 +114,27 @@ export const PromptEditor = forwardRef<PromptEditorHandle, Props>(function Promp
       }),
       ImageAttachment,
       PastedText,
-      SubmitOnEnter.configure({ onSubmit: () => submitRef.current() })
+      SubmitOnEnter.configure({ onSubmit: () => submitRef.current() }),
+      Extension.create({
+        name: 'promptHistory',
+        addKeyboardShortcuts: () => ({
+          ArrowUp: ({ editor: current }) => {
+            if (!current.isEmpty && !browsing.current) return false
+            browsing.current ??= new History(historyRef.current)
+            const parts = browsing.current.up()
+            if (!parts) return false
+            loadRef.current(toDocument(parts))
+            return true
+          },
+          ArrowDown: () => {
+            const parts = browsing.current?.down()
+            if (!parts) return false
+            loadRef.current(parts.length > 0 ? toDocument(parts) : undefined)
+            if (parts.length === 0) browsing.current = null
+            return true
+          }
+        })
+      })
     ],
     editorProps: {
       attributes: { class: 'prompt-editor', role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Message' },
@@ -122,8 +154,20 @@ export const PromptEditor = forwardRef<PromptEditorHandle, Props>(function Promp
         return true
       }
     },
-    onUpdate: ({ editor: current }) => onEmptyChange(current.isEmpty)
+    onUpdate: ({ editor: current }) => {
+      if (!loading.current) browsing.current = null
+      onEmptyChange(current.isEmpty)
+      changeRef.current?.(current.getJSON())
+    }
   })
+
+  const load = (doc: JSONContent | undefined) => {
+    loading.current = true
+    if (doc) editor?.commands.setContent(doc, { emitUpdate: true })
+    else editor?.commands.clearContent(true)
+    loading.current = false
+  }
+  loadRef.current = load
 
   const insert = (attachments: Attachment[]) => {
     if (!editor || attachments.length === 0) return
@@ -136,12 +180,15 @@ export const PromptEditor = forwardRef<PromptEditorHandle, Props>(function Promp
     if (parts.length === 0) return
     onSubmit(parts)
     editor.commands.clearContent(true)
+    browsing.current = null
   }
 
   useImperativeHandle(ref, () => ({
     submit: () => submitRef.current(),
     insert,
-    mention: () => editor?.chain().focus().insertContent('@').run()
+    mention: () => editor?.chain().focus().insertContent('@').run(),
+    getContent: () => editor?.getJSON() ?? { type: 'doc' },
+    setContent: load
   }))
 
   return <EditorContent editor={editor} />

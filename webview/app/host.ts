@@ -12,8 +12,10 @@ export function send(message: WebviewMessage): void {
 
 /** Lets VS Code restore an editor tab's session after a reload. */
 export function saveState(state: { sessionId: string }): void {
-  api.setState(state)
+  api.setState({ ...(api.getState() as object | undefined), ...state })
 }
+
+export const persisted = { get: () => api.getState(), set: (value: unknown) => api.setState(value) }
 
 export function onHostMessage(listener: (message: HostMessage) => void): () => void {
   const handler = (event: MessageEvent<HostMessage>) => listener(event.data)

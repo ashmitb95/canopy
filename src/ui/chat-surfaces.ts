@@ -268,6 +268,12 @@ export class ChatSurfaces
       case 'setMode':
         if (sessionId) await this.manager.setMode(sessionId, message.mode)
         return
+      case 'setEffort':
+        if (sessionId) await this.manager.setEffort(sessionId, message.effort)
+        return
+      case 'steer':
+        if (sessionId) await this.manager.steer(sessionId, message.queuedId)
+        return
       case 'refreshMcp':
         if (sessionId) await this.manager.refreshMcp(sessionId)
         return

@@ -1,18 +1,25 @@
-import { type RefObject, useEffect, useRef, useState } from 'react'
+import type { JSONContent } from '@tiptap/core'
+import { type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { PromptPart } from '../../../src/core/types'
 import type { Attachment } from '../../../src/ui/protocol'
+import { Drafts } from '../composer/drafts'
+import { onEdit } from '../composer/edit-bus'
+import { toDocument } from '../composer/prompt-document'
 import { PromptEditor, type PromptEditorHandle } from '../composer/prompt-editor'
-import { ask, send } from '../host'
+import { ask, persisted, send } from '../host'
 import type { ChatState } from '../state'
 import { Codicon } from './codicon'
 import { ContextMeter } from './context-meter'
+import { EffortPicker } from './effort-picker'
 import { FilePill } from './file-pill'
 import { LanePicker } from './lane-picker'
 import { McpPopover } from './mcp-popover'
 import { ModelPicker } from './model-picker'
 import { ModePicker } from './mode-picker'
+
+const isEmptyDoc = (doc: JSONContent) => !(doc.content ?? []).some((block) => (block.content ?? []).length > 0)
 
 function AttachMenu({ editor }: { editor: RefObject<PromptEditorHandle | null> }) {
   return (
@@ -46,10 +53,25 @@ export function Composer({ state }: { state: ChatState }) {
   const context = includeContext ? state.editorContext : null
   const commands = state.facts.commands?.kind === 'commands' ? state.facts.commands.items : []
 
+  const drafts = useMemo(() => new Drafts(persisted), [])
+  const history = useMemo(
+    () => state.items.flatMap((item) => (item.kind === 'message' && item.role === 'user' ? [item.parts] : [])),
+    [state.items]
+  )
+
+  useEffect(() => {
+    editor.current?.setContent(state.sessionId ? drafts.load(state.sessionId) : undefined)
+  }, [state.sessionId, drafts])
+
+  useEffect(() => onEdit((parts) => editor.current?.setContent(toDocument(parts))), [])
+
   // A file the user removed is offered again once they switch to another file.
   useEffect(() => setIncludeContext(true), [state.editorContext?.path])
 
-  const submit = (parts: PromptPart[]) => send({ type: 'prompt', parts, includeContext: context !== null })
+  const submit = (parts: PromptPart[]) => {
+    send({ type: 'prompt', parts, includeContext: context !== null })
+    if (state.sessionId) drafts.save(state.sessionId, undefined)
+  }
 
   return (
     <div className="@container rounded-xl border bg-input/40 focus-within:border-ring">
@@ -64,11 +86,14 @@ export function Composer({ state }: { state: ChatState }) {
         commands={commands}
         onSubmit={submit}
         onEmptyChange={setEmpty}
+        history={history}
+        onChange={(doc) => state.sessionId && drafts.save(state.sessionId, isEmptyDoc(doc) ? undefined : doc)}
       />
       <div className="flex items-center gap-1 px-2 pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
           <AttachMenu editor={editor} />
           <ModelPicker fact={state.facts.model?.kind === 'model' ? state.facts.model : undefined} />
+          <EffortPicker fact={state.facts.effort?.kind === 'effort' ? state.facts.effort : undefined} />
           <ModePicker
             current={state.facts.mode?.kind === 'mode' ? state.facts.mode.current : (state.record?.mode ?? 'ask')}
             available={state.provider?.modes ?? []}

@@ -10,6 +10,7 @@ const record: SessionRecord = {
   updatedAt: '2026-10-28T10:04:00.000Z',
   mode: 'ask',
   hasTurns: true,
+  laneId: 'retry-fix',
   facts: {
     model: { kind: 'model', current: 'opus', available: [{ id: 'opus', label: 'Opus 5.5' }, { id: 'sonnet', label: 'Sonnet 5.5' }] },
     mode: { kind: 'mode', current: 'ask', available: ['ask', 'accept-edits', 'plan', 'full-access'] },
@@ -135,10 +136,12 @@ const chat: HostMessage[] = [
   {
     type: 'sessions',
     sessions: [
-      { id: 's1', title: 'Fix flaky retry test', providerId: 'claude', status: 'needs-input', updatedAt: '2026-10-28T10:04:00.000Z', inTab: false },
-      { id: 's2', title: 'Refactor auth middleware', providerId: 'claude', status: 'idle', updatedAt: '2026-10-28T09:00:00.000Z', inTab: true }
+      { id: 's1', title: 'Fix flaky retry test', providerId: 'claude', status: 'needs-input', updatedAt: '2026-10-28T10:04:00.000Z', inTab: false, laneId: 'retry-fix' },
+      { id: 's2', title: 'Refactor auth middleware', providerId: 'claude', status: 'idle', updatedAt: '2026-10-28T09:00:00.000Z', inTab: true },
+      { id: 's3', title: 'Token rotation', providerId: 'codex', status: 'idle', updatedAt: '2026-10-28T08:00:00.000Z', inTab: false, laneId: 'auth-refresh' }
     ]
   },
+  { type: 'lanes', lanes: [{ name: 'retry-fix', where: 'api main ●2 · ui worktree' }, { name: 'auth-refresh', where: 'ui worktree' }] },
   { type: 'provider', provider: claude },
   { type: 'editorContext', context: { path: '/work/src/api.test.ts', label: 'src/api.test.ts', range: [40, 72] } },
   {

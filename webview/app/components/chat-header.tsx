@@ -48,8 +48,7 @@ export function ChatHeader({ state }: { state: ChatState }) {
         <SessionSwitcher state={state} />
         <QuotaPill label={label} quota={quota} compact />
         <ChatMenu state={state} />
-        <ChatMenu state={state} />
-      <StatusBadge status={state.status} />
+        <StatusBadge status={state.status} />
       </header>
     )
   }

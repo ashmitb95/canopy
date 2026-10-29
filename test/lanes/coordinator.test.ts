@@ -49,7 +49,8 @@ function notices(manager: SessionManager, id: string): string[] {
   return seen
 }
 
-describe('LaneCoordinator', () => {
+// Real git under full-suite load exceeds the default 5s.
+describe('LaneCoordinator', { timeout: 20_000 }, () => {
   it('creates a lane in worktrees, warmed up, with its goal', async () => {
     const { api, memory, coordinator } = await setup()
     await coordinator.newLane('x', ['api'], { worktrees: true, goal: 'Do x' })

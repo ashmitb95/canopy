@@ -5,7 +5,8 @@ import { discoverRepos } from '../../src/lanes/discover'
 import { parseWorktrees, readRepo } from '../../src/lanes/state'
 import { repo, run, workspace } from './repos'
 
-describe('parseWorktrees', () => {
+// Real git under full-suite load exceeds the default 5s.
+describe('parseWorktrees', { timeout: 20_000 }, () => {
   it('reads the main checkout first, branches, detached heads, and skips bare entries', () => {
     const text = [
       'worktree /w/api\nHEAD aaa\nbranch refs/heads/retry-fix\n',
@@ -21,7 +22,7 @@ describe('parseWorktrees', () => {
   })
 })
 
-describe('discoverRepos', () => {
+describe('discoverRepos', { timeout: 20_000 }, () => {
   it('finds repos under the root, skipping their insides and dependency folders', async () => {
     const root = workspace()
     repo(join(root, 'ui'))
@@ -39,7 +40,7 @@ describe('discoverRepos', () => {
   })
 })
 
-describe('readRepo', () => {
+describe('readRepo', { timeout: 20_000 }, () => {
   it('reads checkouts, the base branch, and uncommitted files', async () => {
     const root = workspace()
     const api = repo(join(root, 'api'))

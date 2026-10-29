@@ -13,7 +13,8 @@ async function setup() {
 
 const branchIn = (path: string) => run(path, 'branch', '--show-current').trim()
 
-describe('moveIntoMain', () => {
+// Real git under full-suite load exceeds the default 5s.
+describe('moveIntoMain', { timeout: 20_000 }, () => {
   it('swaps lanes, carrying each lane’s uncommitted work', async () => {
     const { api, state } = await setup()
     run(api, 'branch', 'a')
@@ -50,7 +51,7 @@ describe('moveIntoMain', () => {
   })
 })
 
-describe('moveToWorktree', () => {
+describe('moveToWorktree', { timeout: 20_000 }, () => {
   it('moves the lane out of main with its work and puts base back', async () => {
     const { api, state } = await setup()
     run(api, 'checkout', '-q', '-b', 'x')
@@ -77,7 +78,7 @@ describe('moveToWorktree', () => {
   })
 })
 
-describe('joinRepo', () => {
+describe('joinRepo', { timeout: 20_000 }, () => {
   it('starts the lane in a worktree from base', async () => {
     const { api, state } = await setup()
     const path = await joinRepo(await state(), 'feat/x', true)

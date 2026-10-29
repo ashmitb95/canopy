@@ -6,7 +6,7 @@ const watch = process.argv.includes('--watch')
 const preview = process.argv.includes('--preview')
 
 const extension = {
-  entryPoints: { extension: 'src/extension.ts', smoke: 'scripts/smoke.ts', 'smoke-prompts': 'scripts/smoke-prompts.ts', 'smoke-lanes': 'scripts/smoke-lanes.ts', 'smoke-boundary': 'scripts/smoke-boundary.ts', 'record-claude': 'scripts/record-claude.ts', 'record-codex': 'scripts/record-codex.ts', 'record-grok': 'scripts/record-grok.ts' },
+  entryPoints: { extension: 'src/extension.ts', smoke: 'scripts/smoke.ts', 'smoke-prompts': 'scripts/smoke-prompts.ts', 'smoke-lanes': 'scripts/smoke-lanes.ts', 'smoke-boundary': 'scripts/smoke-boundary.ts', 'smoke-steer': 'scripts/smoke-steer.ts', 'record-claude': 'scripts/record-claude.ts', 'record-codex': 'scripts/record-codex.ts', 'record-grok': 'scripts/record-grok.ts' },
   outdir: 'dist',
   bundle: true,
   platform: 'node',

@@ -49,7 +49,7 @@ docsum/                          ← workspace root: every chat's cwd
 
 plus dirty (uncommitted) state, ahead/behind its upstream and its base, and merged-into-base.
 
-**Lane status (derived):** *active* (has a checkout somewhere), *parked* (branches only), *merged* (merged into base in every repo it touches; offer archive), *missing* (a lane with stored memory whose branch no longer exists anywhere; offer re-link or archive).
+**Lane status (derived):** *active* (has a checkout somewhere), *parked* (branches only), *merged* (merged into base in every repo it touches; offer archive), *missing* (a lane with stored memory whose branch no longer exists anywhere; offer re-link or archive). Archiving deletes the lane (see *Settled*).
 
 **The "main / no lane" group.** Chats not on a lane run against whatever each main checkout holds, exactly like today's chats.
 
@@ -145,9 +145,9 @@ AgentDeck notifies natively from its own session events (no hooks): turn finishe
 
 PR and review-thread triage on the lane view (with *Address in agent*), issue linking (Linear/GitHub) for lane goals, cross-lane conflict detection, and a lane-wide preflight.
 
-## Open questions
+## Settled
 
-- Two chats on the same lane at once: allowed for reading; for writing, one writer per lane path at a time (queue the second's turns, or warn)?
-- Lanes present in only some repos: joining a repo later from main vs from a worktree.
-- Root that is a repo *and* contains nested repos (submodules or vendored repos): ignore nested, or treat as separate repos?
-- How long to keep `history.jsonl` and chat summaries for archived lanes.
+- **One writer per lane.** While a chat on a lane runs a turn, no other chat on that lane can start one; their prompts queue with "waiting: <lane> is busy in <chat>". Read-only questions still wait (simplest rule; revisit if it chafes).
+- **A lane joins a repo when its work reaches it.** When a chat on a lane edits a repo the lane has not joined (the path guard sees it), AgentDeck joins it per the lane's worktree toggle: *on* → create `<repo>/.worktrees/<lane>` on a new branch from the repo's base, warm it up, and redirect the agent there; *off* → create the lane's branch in the repo's main checkout (after the main-lock check: main free and clean, or ask) and continue there. The transcript notes "<lane> joined <repo>".
+- **Main checkouts are the source of truth.** Worktrees are managed checkouts of the same repo, never separate repos. Discovery skips `.worktrees/` and anything nested inside a discovered repo.
+- **Archiving deletes.** Archive removes the lane's `.agentdeck/lanes/<lane>/` folder, its worktrees (after checking none has uncommitted work), and its chats. Branches are kept unless merged, and deleted then only after confirmation.

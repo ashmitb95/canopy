@@ -1,7 +1,7 @@
 import { sep } from 'node:path'
 import type { RepoState } from './state'
 
-export type LaneRepo = { repo: string; location: 'main' | 'worktree'; path: string; dirty: number }
+export type LaneRepo = { repo: string; location: 'main' | 'worktree'; path: string; dirty: number; head?: string }
 
 /** A lane is a branch: where it is checked out in each repo is read from Git, never stored. */
 export type Lane = { name: string; repos: LaneRepo[] }
@@ -27,7 +27,8 @@ export function deriveLanes(repos: RepoState[], linked: Iterable<string> = []): 
         repo: repo.name,
         location: checkout.main ? 'main' : 'worktree',
         path: checkout.path,
-        dirty: checkout.dirty
+        dirty: checkout.dirty,
+        ...(checkout.head ? { head: checkout.head } : {})
       })
     }
   }

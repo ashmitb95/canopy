@@ -3,7 +3,7 @@ import { basename, relative } from 'node:path'
 import { git } from './git'
 
 /** One checkout of a repo: the main checkout or a linked worktree. `branch` is absent on a detached HEAD. */
-export type Checkout = { path: string; main: boolean; branch?: string; dirty: number }
+export type Checkout = { path: string; main: boolean; head?: string; branch?: string; dirty: number }
 
 export type RepoState = {
   path: string
@@ -25,7 +25,8 @@ export function parseWorktrees(text: string): Omit<Checkout, 'dirty'>[] {
       const path = lines.find((line) => line.startsWith('worktree '))?.slice('worktree '.length)
       if (!path || lines.includes('bare')) return []
       const branch = lines.find((line) => line.startsWith('branch refs/heads/'))?.slice('branch refs/heads/'.length)
-      return [{ path, main: index === 0, ...(branch ? { branch } : {}) }]
+      const head = lines.find((line) => line.startsWith('HEAD '))?.slice('HEAD '.length)
+      return [{ path, main: index === 0, ...(head ? { head } : {}), ...(branch ? { branch } : {}) }]
     })
 }
 

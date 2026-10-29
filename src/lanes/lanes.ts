@@ -74,3 +74,9 @@ export function laneMoves(before: Lane[], after: Lane[]): LaneMove[] {
   }
   return moves
 }
+
+/** "api main ●2 · ui worktree": where the lane's code lives in each repo, with uncommitted files. */
+export function laneDescription(lane: Lane): string {
+  if (lane.repos.length === 0) return 'no checkout'
+  return lane.repos.map((repo) => `${repo.repo} ${repo.location}${repo.dirty > 0 ? ` ●${repo.dirty}` : ''}`).join(' · ')
+}

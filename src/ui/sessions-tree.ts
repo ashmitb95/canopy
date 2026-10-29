@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { groupSessions } from '../lanes/group'
-import { deriveLanes, type Lane } from '../lanes/lanes'
+import { deriveLanes, type Lane, laneDescription } from '../lanes/lanes'
 import type { LaneTracker } from '../lanes/tracker'
 import type { SessionManager } from '../sessions/manager'
 import type { SessionStatus } from '../sessions/store'
@@ -25,12 +25,6 @@ const ICONS: Record<SessionStatus, vscode.ThemeIcon> = {
   'needs-input': new vscode.ThemeIcon('bell-dot', new vscode.ThemeColor('editorWarning.foreground')),
   error: new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground')),
   stopped: new vscode.ThemeIcon('debug-stop')
-}
-
-/** "api main ●2 · ui worktree": where the lane's code lives in each repo, with uncommitted files. */
-export function laneDescription(lane: Lane): string {
-  if (lane.repos.length === 0) return 'no checkout'
-  return lane.repos.map((repo) => `${repo.repo} ${repo.location}${repo.dirty > 0 ? ` ●${repo.dirty}` : ''}`).join(' · ')
 }
 
 export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Disposable {

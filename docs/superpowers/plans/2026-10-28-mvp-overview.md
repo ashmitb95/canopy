@@ -16,6 +16,7 @@ The MVP scope is the table in the [spec](../specs/2026-10-28-agentdeck-design.md
 | 10 | [Rich composer](2026-10-29-10-rich-composer.md) | `@` files, `/` commands, attachments, pasted images and text | Done |
 | 11 | [Questions, plan review, and permissions](2026-10-29-11-questions-and-permissions.md) | Agent questions, plan approval with the next mode, richer approvals with Review changes, Claude Auto mode | Done |
 | 18 | [Workspace and lane tracking](2026-10-29-18-lane-tracking.md) | Repos and checkouts read live from Git, lanes derived from branches, chats linked to lanes, Sessions grouped by lane | Done |
+| 19 | [Lane memory and briefs](2026-10-29-19-lane-memory-and-briefs.md) | `.agentdeck/` lane memory, stamped chat summaries, lane brief and update in prompts, history of moves | Done |
 
 ## Conventions for whoever executes a plan
 

@@ -669,6 +669,7 @@
     "screenshot": "node scripts/screenshot.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p webview",
     "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test",
     "package": "pnpm build && vsce package --no-dependencies --skip-license --allow-missing-repository --no-rewrite-relative-links"
   },
   "dependencies": {

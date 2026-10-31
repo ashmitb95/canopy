@@ -1,4 +1,4 @@
-// System sounds, as in claude-notifier. Windows ignores volume; Linux plays freedesktop sounds.
+// System sounds. Windows ignores volume; Linux plays freedesktop sounds.
 const MAC_DIR = '/System/Library/Sounds'
 export const SOUNDS = ['Basso', 'Blow', 'Bottle', 'Frog', 'Funk', 'Glass', 'Hero', 'Morse', 'Ping', 'Pop', 'Purr', 'Sosumi', 'Submarine', 'Tink'] as const
 

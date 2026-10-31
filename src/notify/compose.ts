@@ -1,6 +1,6 @@
 import type { Attention } from '../sessions/manager'
 
-// From claude-notifier: ~40 characters per banner line, four body lines.
+// macOS banners fit ~40 characters per line, four body lines.
 const LINE = 40
 const BODY_LINES = 4
 const CHROME = 4

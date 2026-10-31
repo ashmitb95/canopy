@@ -31,7 +31,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const custom = vscode.workspace.getConfiguration('agentdeck').get<Record<string, unknown>[]>('customAgents', [])
   const providers = buildProviders(custom.flatMap((entry) => customAgent(entry) ?? []))
   let env: Promise<Env> | undefined
-  // claude-notifier's hooks stay quiet for the CLIs AgentDeck runs; AgentDeck notifies itself.
+  // claude-notifier's hooks read this; AgentDeck notifies for the CLIs it runs itself.
   const getEnv = () => (env ??= captureEnv().then((captured) => ({ ...captured, CLAUDE_NOTIFIER_DISABLE: '1' })))
   const storage = (context.storageUri ?? context.globalStorageUri).fsPath
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath

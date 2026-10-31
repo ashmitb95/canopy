@@ -28,7 +28,7 @@ function findTerminalNotifier(): string | undefined {
   return undefined
 }
 
-/** Native notifications from AgentDeck's own session events (decision 35). */
+/** Native notifications from AgentDeck's own session events. */
 export class Notifier implements vscode.Disposable {
   private readonly subscription: Disposable
   private readonly terminalNotifier = findTerminalNotifier()

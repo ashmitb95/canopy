@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./palettes.css";
 
 @source "./";
 @source "../node_modules/streamdown/dist/*.js";
@@ -8,7 +9,8 @@
 @custom-variant dark (&:is(.vscode-dark *, .vscode-high-contrast:not(.vscode-high-contrast-light) *));
 
 /*
- * The active VS Code theme is the only source of color: every token maps to a theme variable.
+ * The active VS Code theme is the source of color: every token maps to a theme variable.
+ * palettes.css overrides the brand and status tokens when a palette is chosen.
  * The last fallback on --border covers themes that define neither border variable.
  */
 :root {

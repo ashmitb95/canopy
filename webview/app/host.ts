@@ -30,6 +30,7 @@ let nextRequest = 0
 const replies = new Map<number, (value: unknown) => void>()
 
 window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
+  if (event.data.type === 'palette') document.body.dataset.palette = event.data.palette
   if (event.data?.type !== 'reply') return
   replies.get(event.data.requestId)?.(event.data.value)
   replies.delete(event.data.requestId)

@@ -1,0 +1,115 @@
+/*
+ * Brand palettes, chosen with `agentdeck.palette`: only brand and status colors, in a light and a dark
+ * version that follows the VS Code theme kind. Backgrounds, surfaces, text, and borders stay the theme's.
+ * Paper's main color is the theme's own text color, inverted. High-contrast themes keep their own colors.
+ */
+body.vscode-light[data-palette="paper"] {
+  --primary: var(--vscode-foreground);
+  --primary-foreground: var(--vscode-editor-background);
+  --badge: var(--vscode-foreground);
+  --badge-foreground: var(--vscode-editor-background);
+  --ring: var(--vscode-foreground);
+  --destructive: #9C1F18;
+  --success: #0A6641;
+  --warning: #AD0F4A;
+  --info: #085C9F;
+}
+body.vscode-dark[data-palette="paper"] {
+  --primary: var(--vscode-foreground);
+  --primary-foreground: var(--vscode-editor-background);
+  --badge: var(--vscode-foreground);
+  --badge-foreground: var(--vscode-editor-background);
+  --ring: var(--vscode-foreground);
+  --destructive: #FF9089;
+  --success: #62D6A2;
+  --warning: #FF85AE;
+  --info: #8CC8F8;
+}
+body.vscode-light[data-palette="peach"] {
+  --primary: #FFB98A;
+  --primary-foreground: #3A1E08;
+  --badge: #FFB98A;
+  --badge-foreground: #3A1E08;
+  --ring: #FFB98A;
+  --destructive: #A32A20;
+  --success: #1B6B45;
+  --warning: #A12447;
+  --info: #1F5F99;
+}
+body.vscode-dark[data-palette="peach"] {
+  --primary: #FFC7A1;
+  --primary-foreground: #3A1E08;
+  --badge: #FFC7A1;
+  --badge-foreground: #3A1E08;
+  --ring: #FFC7A1;
+  --destructive: #F7BDB6;
+  --success: #A6E3C2;
+  --warning: #F9B8C8;
+  --info: #A9CFF2;
+}
+body.vscode-light[data-palette="lilac"] {
+  --primary: #C9B4F5;
+  --primary-foreground: #21103F;
+  --badge: #C9B4F5;
+  --badge-foreground: #21103F;
+  --ring: #C9B4F5;
+  --destructive: #A32A20;
+  --success: #1B6B45;
+  --warning: #A12447;
+  --info: #1F5F99;
+}
+body.vscode-dark[data-palette="lilac"] {
+  --primary: #D3C2F8;
+  --primary-foreground: #21103F;
+  --badge: #D3C2F8;
+  --badge-foreground: #21103F;
+  --ring: #D3C2F8;
+  --destructive: #F7BDB6;
+  --success: #A6E3C2;
+  --warning: #F9B8C8;
+  --info: #A9CFF2;
+}
+body.vscode-light[data-palette="sage"] {
+  --primary: #B5D6A0;
+  --primary-foreground: #15290B;
+  --badge: #B5D6A0;
+  --badge-foreground: #15290B;
+  --ring: #B5D6A0;
+  --destructive: #A32A20;
+  --success: #1B6B45;
+  --warning: #A12447;
+  --info: #1F5F99;
+}
+body.vscode-dark[data-palette="sage"] {
+  --primary: #C2DEAF;
+  --primary-foreground: #15290B;
+  --badge: #C2DEAF;
+  --badge-foreground: #15290B;
+  --ring: #C2DEAF;
+  --destructive: #F7BDB6;
+  --success: #A6E3C2;
+  --warning: #F9B8C8;
+  --info: #A9CFF2;
+}
+body.vscode-light[data-palette="sky"] {
+  --primary: #A6D2F5;
+  --primary-foreground: #0A2740;
+  --badge: #A6D2F5;
+  --badge-foreground: #0A2740;
+  --ring: #A6D2F5;
+  --destructive: #A32A20;
+  --success: #1B6B45;
+  --warning: #A12447;
+  --info: #1F5F99;
+}
+body.vscode-dark[data-palette="sky"] {
+  --primary: #B4DAF7;
+  --primary-foreground: #0A2740;
+  --badge: #B4DAF7;
+  --badge-foreground: #0A2740;
+  --ring: #B4DAF7;
+  --destructive: #F7BDB6;
+  --success: #A6E3C2;
+  --warning: #F9B8C8;
+  --info: #A9CFF2;
+}

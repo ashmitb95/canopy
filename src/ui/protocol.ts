@@ -44,6 +44,7 @@ export type HostMessage =
   /** Every provider with its install and sign-in state, for the chooser. */
   | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'editorContext'; context: EditorContext | null }
+  | { type: 'palette'; palette: string }
   /** Recent sessions, for the sidebar's session switcher. */
   | { type: 'sessions'; sessions: SessionSummary[] }
   | { type: 'quota'; providerId: string; quota: Quota }

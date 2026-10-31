@@ -15,6 +15,7 @@ import type { Unread } from './unread'
 
 export const PANEL_TYPE = 'agentdeck.chatPanel'
 export const SIDEBAR_VIEW = 'agentdeck.chat'
+const PALETTES = ['theme', 'paper', 'peach', 'lilac', 'sage', 'sky']
 const SIDEBAR_SESSION_KEY = 'agentdeck.sidebarSession'
 const QUOTA_KEY = 'agentdeck.quota'
 const DEFAULT_PROVIDER = 'claude'
@@ -77,7 +78,10 @@ export class ChatSurfaces
         this.broadcast({ type: 'quota', providerId, quota })
       }),
       manager.onAttention((event) => this.attend(event)),
-      unread.onDidChange(() => this.postSessions())
+      unread.onDidChange(() => this.postSessions()),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('agentdeck.palette')) this.broadcast({ type: 'palette', palette: this.palette() })
+      })
     )
   }
 
@@ -631,6 +635,11 @@ export class ChatSurfaces
     return vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')
   }
 
+  private palette(): string {
+    const palette = vscode.workspace.getConfiguration('agentdeck').get<string>('palette', 'paper')
+    return PALETTES.includes(palette) ? palette : 'paper'
+  }
+
   private html(webview: vscode.Webview, kind: SurfaceKind): string {
     const nonce = randomBytes(16).toString('base64')
     const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.assets(), name))
@@ -653,7 +662,7 @@ export class ChatSurfaces
 <link rel="stylesheet" href="${asset('katex.css')}">
 <link rel="stylesheet" href="${asset('webview.css')}">
 </head>
-<body data-surface="${kind}">
+<body data-surface="${kind}" data-palette="${this.palette()}">
 <div id="root"></div>
 <script type="module" nonce="${nonce}" src="${asset('main.js')}"></script>
 </body>

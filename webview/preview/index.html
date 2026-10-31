@@ -14,7 +14,7 @@
 </script>
 </head>
 <body>
-<script>document.body.classList.add({ light: 'vscode-light', hc: 'vscode-high-contrast' }[window.previewTheme] ?? 'vscode-dark'); document.body.dataset.surface = new URLSearchParams(location.search).get('surface') ?? 'panel'</script>
+<script>document.body.classList.add({ light: 'vscode-light', hc: 'vscode-high-contrast' }[window.previewTheme] ?? 'vscode-dark'); document.body.dataset.surface = new URLSearchParams(location.search).get('surface') ?? 'panel'; document.body.dataset.palette = new URLSearchParams(location.search).get('palette') ?? 'theme'</script>
 <div id="root"></div>
 <script src="main.js"></script>
 <script src="scenario.js"></script>

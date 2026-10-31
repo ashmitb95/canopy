@@ -43,6 +43,7 @@ src/notify/       Pure builders for notification text and OS commands
 - The chat is one webview: a tab in the secondary sidebar (`agentdeck.chat`), or an editor tab through *Open in Editor*.
 - The Sessions tree (`agentdeck.sessions`) is in the primary sidebar, grouped by provider, then lane. Clicking a session opens it in the chat tab.
 - **+** is a submenu of per-provider commands, shown by the `agentdeck.installed.<id>` context keys. VS Code allows a submenu once per menu location, so each view has its own.
+- `agentdeck.palette` sets `data-palette` on the webview body; `webview/palettes.css` overrides only the brand and status tokens, in light and dark; backgrounds, surfaces, text, and borders stay the theme's. The Sessions tree is native, so it always follows the VS Code theme.
 - Webview menu items that open a VS Code picker must stop the menu returning focus to its trigger (`onCloseAutoFocus`), or the picker closes at once.
 
 ## Webview

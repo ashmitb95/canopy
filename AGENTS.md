@@ -53,6 +53,6 @@ Live scripts run real CLIs on the user's subscription, so they spend quota. Afte
 
 - Comments and docs describe what the code does and why, never how it was developed. No plan numbers, process narrative, or references to other products.
 - Prefer small modules with one responsibility. Match the style of the surrounding file.
-- Colors come only from VS Code theme variables, through the tokens in `webview/theme.css`.
+- Colors come only from the tokens in `webview/theme.css`: VS Code theme variables, with brand and status colors overridden by the palettes in `webview/palettes.css`. Backgrounds, surfaces, text, and borders always come from the theme.
 - A UI control appears only when the provider declares the matching capability; do not branch on provider id in the webview.
 - Commit in small working steps. Do not use `--amend` on shared work.

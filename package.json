@@ -235,6 +235,27 @@
               }
             }
           }
+        },
+        "agentdeck.palette": {
+          "type": "string",
+          "enum": [
+            "theme",
+            "paper",
+            "peach",
+            "lilac",
+            "sage",
+            "sky"
+          ],
+          "enumItemLabels": [
+            "VS Code theme only",
+            "Paper",
+            "Peach",
+            "Lilac",
+            "Sage",
+            "Sky"
+          ],
+          "default": "paper",
+          "description": "Brand and status colors for the chat, in light and dark to match your VS Code theme. Backgrounds, text, and borders always come from your theme. High-contrast themes keep their own colors."
         }
       }
     },

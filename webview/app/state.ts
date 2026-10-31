@@ -48,6 +48,8 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
     case 'insertAttachments':
     case 'editPrompt':
       return state
+    case 'palette':
+      return state
     case 'editorContext':
       return { ...state, editorContext: message.context }
     case 'empty':

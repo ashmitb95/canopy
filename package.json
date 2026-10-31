@@ -3,6 +3,7 @@
   "displayName": "AgentDeck",
   "description": "Chat with coding agents on your own subscriptions.",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "publisher": "ashmitb95",
   "engines": {

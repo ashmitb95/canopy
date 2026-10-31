@@ -5,8 +5,8 @@ import { soundCommand } from '../../src/notify/sound'
 
 describe('compose', () => {
   it('frames the workspace and event, the chat, then the detail', () => {
-    expect(compose({ workspace: 'docsum', event: '✅ finished', chat: 'retry-fix · Codex: Fix the retry', detail: ['Edited 2 files · ran 5 commands'] })).toEqual({
-      title: 'docsum | ✅ finished',
+    expect(compose({ workspace: 'my-app', event: '✅ finished', chat: 'retry-fix · Codex: Fix the retry', detail: ['Edited 2 files · ran 5 commands'] })).toEqual({
+      title: 'my-app | ✅ finished',
       body: '• retry-fix · Codex: Fix the retry •\n\nEdited 2 files · ran 5 commands'
     })
   })
@@ -19,12 +19,12 @@ describe('compose', () => {
 })
 
 describe('banner', () => {
-  const chat = { workspace: 'docsum', lane: 'retry-fix', provider: 'Codex', title: 'Fix the retry' }
+  const chat = { workspace: 'my-app', lane: 'retry-fix', provider: 'Codex', title: 'Fix the retry' }
 
   it('describes a finished turn by its work', () => {
     expect(banner(chat, { reason: 'turn-ended', durationMs: 1, edits: 2, commands: 5 })).toEqual({
       event: 'finished',
-      title: 'docsum | ✅ finished',
+      title: 'my-app | ✅ finished',
       body: '• retry-fix · Codex: Fix the retry •\n\nEdited 2 files · ran 5 commands'
     })
     expect(banner({ ...chat, lane: undefined }, { reason: 'turn-ended', durationMs: 1, edits: 1, commands: 0 }).body).toBe(
@@ -36,14 +36,14 @@ describe('banner', () => {
   it('shows the approval, the question, or the failure', () => {
     expect(banner(chat, { reason: 'needs-input', prompt: { kind: 'approval', text: 'Allow Codex to run this command?: pnpm db:migrate' } })).toMatchObject({
       event: 'approval',
-      title: 'docsum | ❗ needs approval'
+      title: 'my-app | ❗ needs approval'
     })
     expect(banner(chat, { reason: 'needs-input', prompt: { kind: 'question', text: 'Which TTL?' } })).toMatchObject({
       event: 'question',
-      title: 'docsum | ❓ question',
+      title: 'my-app | ❓ question',
       body: '• retry-fix · Codex: Fix the retry •\n\nWhich TTL?'
     })
-    expect(banner(chat, { reason: 'failed', text: 'boom\nstack' })).toMatchObject({ event: 'failed', title: 'docsum | ✖ failed', body: expect.stringMatching(/boom$/) })
+    expect(banner(chat, { reason: 'failed', text: 'boom\nstack' })).toMatchObject({ event: 'failed', title: 'my-app | ✖ failed', body: expect.stringMatching(/boom$/) })
   })
 })
 

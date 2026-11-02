@@ -41,6 +41,8 @@ export type GroupDeps = {
   manager: SessionManager
   providers: ReadonlyMap<string, ProviderDefinition>
   dir: string
+  /** Tool lines show paths relative to this. */
+  root?: string
 }
 
 const isBusy = (status: SessionStatus) => status === 'running' || status === 'needs-input'
@@ -108,11 +110,14 @@ export class GroupChat implements Disposable {
   /** Sends a message: each `@agent` part to that agent, the rest to whoever was last addressed. Says when each part arrives. */
   async send(text: string): Promise<{ id: string; target: string; delivery: Delivery }[]> {
     const results: { id: string; target: string; delivery: Delivery }[] = []
+    // The first message of an idle chat goes at once; the rest wait for it.
+    let busy = Boolean(this.current) || this.record.queue.length > 0 || Boolean(this.record.blocked)
     for (const segment of parseMentions(text, this.agents)) {
       const target = segment.target ?? this.record.target
       this.record.target = target
       const queued: QueuedMessage = { id: randomUUID(), target, text: segment.text }
-      results.push({ id: queued.id, target, delivery: await this.deliver(queued) })
+      results.push({ id: queued.id, target, delivery: await this.deliver(queued, busy) })
+      busy = true
     }
     this.save()
     this.changed()
@@ -120,7 +125,7 @@ export class GroupChat implements Disposable {
     return results
   }
 
-  private async deliver(message: QueuedMessage): Promise<Delivery> {
+  private async deliver(message: QueuedMessage, busy: boolean): Promise<Delivery> {
     const running = this.current?.agent === message.target && this.statuses.get(message.target) === 'running'
     if (running && this.deps.providers.get(message.target)?.capabilities.has('steer')) {
       await this.steer(message)
@@ -132,7 +137,7 @@ export class GroupChat implements Disposable {
       return 'end-of-turn'
     }
     this.record.queue.push(message)
-    return this.current ? 'queued' : 'now'
+    return busy ? 'queued' : 'now'
   }
 
   private async steer(message: QueuedMessage): Promise<void> {
@@ -294,7 +299,7 @@ export class GroupChat implements Disposable {
   }
 
   private activity(agent: string): string {
-    const lines = rollingLines(this.latest.get(agent) ?? [])
+    const lines = rollingLines(this.latest.get(agent) ?? [], this.deps.root)
     const tool = [...lines].reverse().find((line) => line.kind === 'tool' && line.live)
     return tool?.text ?? lines.at(-1)?.text ?? ''
   }

@@ -72,6 +72,9 @@ async function main(): Promise<void> {
   check('the tests really pass', passed)
   const ledger = chat.ledger.all()
   check('every agent spoke, in order', ledger.filter((entry) => entry.from !== 'user').map((entry) => entry.from).join() === 'codex,grok,claude', ledger.filter((entry) => entry.from !== 'user').map((entry) => entry.from).join())
+  const toolsBy = (agent: string) => chat.items().flatMap(({ agent: who, item }) => (who === agent && item.kind === 'tool' ? [item.title] : []))
+  console.log(`      tools: codex ${toolsBy('codex').length}, grok ${toolsBy('grok').length}, claude ${toolsBy('claude').length}: ${toolsBy('claude').map((title) => title.slice(0, 70)).join(' | ')}`)
+  check('the verifier really ran the tests, not just repeated a report', toolsBy('claude').some((title) => title.includes('--test')))
   const last = ledger.at(-1)?.text ?? ''
   check('the last agent knew what the others did', /slugify/i.test(last) && /test/i.test(last), last)
   const beforeFollowUp = chat.ledger.length

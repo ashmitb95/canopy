@@ -63,7 +63,7 @@ export async function createCore(options: CoreOptions): Promise<Core> {
     },
     boundary: async (record) => lanes?.boundary(record)
   })
-  chats = new GroupChats({ manager, providers: options.providers, dir: join(options.storage, 'groups') })
+  chats = new GroupChats({ manager, providers: options.providers, dir: join(options.storage, 'groups'), root: tracker.root })
   lanes = new LaneCoordinator({ tracker, memory, manager, env: async () => (await options.env()) as NodeJS.ProcessEnv })
   const watchers = [watchTurns(manager, tracker, memory), watchHistory(tracker, memory)]
   const { chats: readyChats, lanes: readyLanes } = { chats, lanes }

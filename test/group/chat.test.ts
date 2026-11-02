@@ -81,7 +81,7 @@ describe('GroupChat', () => {
 
   it('runs one agent at a time, in order', async () => {
     const results = await chat.send('@codex do this @grok do that')
-    expect(results.map((result) => result.target)).toEqual(['codex', 'grok'])
+    expect(results.map((result) => [result.target, result.delivery])).toEqual([['codex', 'now'], ['grok', 'queued']])
     await tick()
     expect(codex[0].prompts).toHaveLength(1)
     expect(grok).toHaveLength(0)

@@ -39,7 +39,8 @@ function lineStat(oldText: string | null, newText: string): string {
 }
 
 /** Items arrive as repeated snapshots by id, in stream order: the latest of each wins, at its first position. */
-export function rollingLines(stream: SessionItem[]): RollingLine[] {
+export function rollingLines(stream: SessionItem[], root?: string): RollingLine[] {
+  const short = (text: string) => (root ? text.split(`${root}/`).join('') : text)
   const latest = new Map<string, SessionItem>()
   for (const item of stream) latest.set(item.id, item)
   const diffs = [...latest.values()].filter((item) => item.kind === 'diff')
@@ -57,7 +58,7 @@ export function rollingLines(stream: SessionItem[]): RollingLine[] {
     if (item.kind === 'tool') {
       const diff = item.toolKind === 'edit' && item.paths?.length === 1 ? diffs.find((candidate) => candidate.kind === 'diff' && candidate.path === item.paths?.[0]) : undefined
       const stat = diff?.kind === 'diff' ? lineStat(diff.oldText, diff.newText) : undefined
-      lines.push({ id: item.id, kind: 'tool', text: clip(toolLine(item.title)), live: item.status === 'running', failed: item.status === 'failed', ...(stat ? { stat } : {}) })
+      lines.push({ id: item.id, kind: 'tool', text: clip(short(toolLine(item.title))), live: item.status === 'running', failed: item.status === 'failed', ...(stat ? { stat } : {}) })
       if (item.toolKind === 'execute' && item.output?.trim()) {
         const tail = item.output.trim().split('\n').slice(-OUTPUT_LINES)
         tail.forEach((text, index) => lines.push({ id: `${item.id}:out:${index}`, kind: 'output', text: clip(text), live: false }))

@@ -42,7 +42,7 @@ async function main(): Promise<void> {
       const items = stream.get(event.agent) ?? []
       items.push(event.item)
       stream.set(event.agent, items)
-      for (const line of rollingLines(items)) {
+      for (const line of rollingLines(items, core.tracker.root)) {
         if (line.live || printed.get(`${event.agent}:${line.id}`) === line.text) continue
         printed.set(`${event.agent}:${line.id}`, line.text)
         const mark = line.kind === 'tool' ? `${line.failed ? '✗' : '·'} ` : line.kind === 'output' ? '  ' : ''

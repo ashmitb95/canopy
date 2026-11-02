@@ -8,7 +8,7 @@ import { providers } from '../src/providers/registry'
 
 const TASK = 'This project has a bug: the comment in c.ts states the wrong limit. Find the real limit by reading a.ts and b.ts, fix the comment, add a test file check.test.mjs that uses node:assert to check pages equals 30 by computing it from the same numbers, and run it with node. Then reply with what you changed.'
 
-async function record(id: string, outDir: string): Promise<void> {
+async function record(id: string, outDir: string, narrate: boolean): Promise<void> {
   const definition = providers.get(id)
   if (!definition) return
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'poc-stream-')))
@@ -30,19 +30,19 @@ async function record(id: string, outDir: string): Promise<void> {
     events.push({ t: Date.now() - started, item })
     if (item.kind === 'turn' && item.state === 'ended') finish()
   })
-  await session.prompt([{ type: 'text', text: TASK }])
+  await session.prompt([{ type: 'text', text: narrate ? `${TASK} Before each step, say in one short line what you are doing or what you just found.` : TASK }])
   await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 240_000))])
   await session.dispose()
   // Temp paths and the home folder say nothing useful and should not leave this machine.
   const clean = JSON.stringify(events).split(repo).join('.').split(realpathSync(tmpdir())).join('/tmp').split(process.env.HOME ?? '\0').join('~')
-  writeFileSync(join(outDir, `${id}.json`), clean)
+  writeFileSync(join(outDir, `${id}${narrate ? '-narrated' : ''}.json`), clean)
   rmSync(repo, { recursive: true, force: true })
   console.log(`${id}: ${events.length} events, ${Math.round((Date.now() - started) / 1000)}s`)
 }
 
 async function main(): Promise<void> {
   const outDir = process.argv[2]
-  for (const id of ['claude', 'codex', 'grok']) await record(id, outDir).catch((error: Error) => console.log(`${id}: ERROR ${error.message.slice(0, 200)}`))
+  for (const id of process.argv.slice(3)) await record(id, outDir, true).catch((error: Error) => console.log(`${id}: ERROR ${error.message.slice(0, 200)}`))
   process.exit(0)
 }
 

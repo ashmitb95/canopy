@@ -7,6 +7,7 @@ Read before changing an area:
 - [docs/architecture.md](docs/architecture.md): layers, data flow, and the rules that constrain changes
 - [docs/providers.md](docs/providers.md): the provider contract, per-provider protocol facts, adding an agent
 - [docs/lanes.md](docs/lanes.md): the lane model, `.agentdeck/` files, switching, write boundaries
+- [docs/roadmap.md](docs/roadmap.md): planned work, with what to verify before building it
 
 ## Commands
 

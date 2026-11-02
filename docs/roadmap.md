@@ -29,6 +29,10 @@ AgentDeck keeps a ledger of each chat and how far each agent has read. Handoffs 
 - A snapshot before each delegate gives an exact diff and an undo. It must include untracked files, which `git stash create` leaves out, without disturbing the checkout; the proof of concept settles how.
 - The complete transcript is saved as a file the lead can read.
 
+### Live view of delegates
+
+A delegate's card shows a rolling window of its real stream: its text, tool lines, and the tail of command output, compacted (`poc/rolling.ts`). Delegates are told to say in one short line what they are doing or what they found before each step, because some agents otherwise work silently. The window never replaces recorded facts, and it collapses to the result when the delegate finishes.
+
 ### Permissions and questions
 
 - **Permissions and plan approvals:** always the user. A model never grants permission.

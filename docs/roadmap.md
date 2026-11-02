@@ -1,46 +1,77 @@
 # Roadmap
 
-Planned work, in rough order. [lanes.md](lanes.md) and [architecture.md](architecture.md) describe what exists today.
+AgentDeck is a multi-agent, multi-provider orchestrator for large features: different providers do different work, the harness moves the work between them, and the user stays in one conversation.
 
-## 1. Claude connection profiles
+Planned work, in priority order. [lanes.md](lanes.md) and [architecture.md](architecture.md) describe what exists today.
 
-Named profiles for how the Claude provider connects, such as `personal` and `work`, with a switcher inside the extension. A user can have several of each type.
+## 1. Orchestrated chats
 
-| Type | What the CLI gets | Where credentials live |
+One chat for a feature. Each stage runs on the provider set for it, for example Claude plans and Grok builds, and the harness handles every switch.
+
+Providers cannot share a live session: each keeps its own context in its own format. A chat is therefore a timeline over several provider sessions.
+
+- `SessionRecord` holds one provider session per provider, with the active one marked. The journal records which provider produced each item.
+- The transcript is one conversation, with a marker at each takeover.
+- A provider returning to the chat resumes its own session and receives only the handoffs since it last ran.
+- Chats that use one provider work as they do today. Routing is opt-in per lane.
+
+### Routing
+
+Each stage has a default provider, model, and mode from `[task.<id>]` in `.agentdeck/config.toml`. The composer can override the next stage.
+
+| Event | Default next step |
+|---|---|
+| Research finished | Plan |
+| Plan approved | Build |
+| Build turn finished, with its plan steps done | Review |
+| Review reports changes needed | Build, up to a set number of rounds |
+| Review passes | Done: notify the user |
+
+Stages advance only on these explicit events, never by inference from a message's content. A failed turn, a rate limit, or a pending approval or question stops the chain and tells the user. The user can stop or redirect at any point.
+
+To verify: how to tell "changes needed" from "passes" reliably. Candidates are a required verdict line in the review, or a structured output format.
+
+### Handoff documents
+
+The harness writes a document at every switch, without user involvement, to `.agentdeck/lanes/<lane>/handoffs/<n>-<from>-to-<to>.md`. Starting routing on a chat with no lane creates one.
+
+| Layer | Source | Contents |
 |---|---|---|
-| **Claude account** | Its own sign-in; `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` unset | The CLI, through Anthropic's flow |
-| **API key** | `ANTHROPIC_API_KEY`, optional `ANTHROPIC_BASE_URL` for a proxy | VS Code SecretStorage, or the user's environment |
-| **Amazon Bedrock** | `CLAUDE_CODE_USE_BEDROCK=1`, `AWS_PROFILE`, optional `AWS_REGION` and model pins | The AWS credential chain, or `AWS_BEARER_TOKEN_BEDROCK` in SecretStorage |
+| **Facts** | The harness, no model call | The user's messages verbatim, question answers, approvals and denials, commits, diff summary, uncommitted files, commands run and their results, plan progress |
+| **Reasoning** | The outgoing agent, in a hidden turn with a fixed template | Goal, what was done, decisions and why, approaches rejected, what remains, risks, where to look |
+| **Record** | The journal, rendered to a readable file | The stage's complete transcript, for anything the first two layers left out |
 
-Any profile can set `CLAUDE_CONFIG_DIR`, which keeps its history, settings, and MCP servers apart.
+- The incoming agent receives the document, stamped with each repo's commit. It can read the record when it needs more, so nothing is out of reach.
+- The hidden turn does not appear in the transcript, and it costs the outgoing provider's usage.
+- If the hidden turn fails or the provider has hit a limit, the document goes out with facts and the record only, and says so.
+- Handoffs replace the current chat summary as the source for handoffs. That summary holds only a file list and the end of the last reply.
 
-Behaviour:
+### Visibility
 
-- The switcher (status bar and chat header) lists configured profiles and always shows the active one. The active profile applies to new chats.
-- **A chat stays on the profile it started with**, shown on its row and header. Separate config directories hold separate sessions, and work conversations must not move to a personal account or the reverse. Changing a chat's profile means forking it, with a warning, from a handoff summary.
-- A profile sets environment variables on the spawned CLI only. It never edits the user's shell or CLI settings.
-- AgentDeck runs the `claude` binary directly, so shell functions and aliases around it do not apply. Profiles replace them inside the extension.
-- With no profile configured, the CLI's environment passes through untouched, so stop removing `ANTHROPIC_API_KEY` by default.
-- Hide what a backend lacks: quota on API key and Bedrock, WebSearch on Bedrock.
+At a glance, the user always knows which provider is doing what:
 
-To verify before building:
+- **Chat header:** a stage rail, such as `Plan · Claude ✓ → Build · Grok (working) → Review · Claude`, with the active stage marked. Its stages can be clicked to jump to that point.
+- **Transcript:** provider avatar on each reply, and a takeover marker with a link to the handoff document.
+- **During a switch:** a visible "Preparing handoff" state.
+- **Sessions and Lanes:** each row shows the active provider, stage, and current activity.
+- **Notifications:** name the stage and provider, and fire when the chain stops or finishes.
 
-- Whether `env` in the profile's `settings.json` (which `/setup-bedrock` writes) overrides the variables a profile sets. A separate `CLAUDE_CONFIG_DIR` per profile avoids the conflict.
-- How custom base URLs report models, context, and cost.
-- How existing chats, which have no profile, map to one. Default: the default config directory.
+### Constraints
 
-The hard rule on credentials in [AGENTS.md](../AGENTS.md) changes with this work: never read or store Claude account credentials; API keys the user adds go only in SecretStorage and only to the CLI's environment.
+- Controls follow the active provider: model, modes, effort, fork, and rewind differ by provider.
+- Rewind and fork stay within the current provider's stretch at first.
+- This replaces the rule that handoffs never advance on their own. The rule that remains: only explicit events advance them.
 
-## 2. Claude terms and naming
+## 2. Parallel work
 
-- Label the provider "Claude Agent" in menus not titled "Agents". Do not use "Claude Code" in product names or imply Anthropic's endorsement.
-- Show the active sign-in method instead of steering users to one.
-- Include third-party notices for the bundled Agent SDK, which is under Anthropic's Commercial Terms.
+Large features need more than one writer at a time, and a lane allows one. An approved plan splits into tasks, each with a provider, its own branch and worktree under the lane, and a dependency order. Tasks without dependencies run at once, and each gets a handoff document.
+
+To design: how tasks are declared in the plan, who integrates finished branches into the lane and resolves conflicts, how failures affect dependents, and limits on concurrency and usage.
 
 ## 3. Lanes and Sessions redesign
 
 - A collapsible **Lanes** section above **Sessions** in the primary sidebar, and a full view in an editor tab. Main is the most prominent element; warm lanes are one click from moving into main; cold lanes stay folded away.
-- Session rows show state, current activity, lane, and time: needs input (with the request and inline actions), working, waiting, finished, failed, idle.
+- Session rows show state, active provider, current activity, lane, and time: needs input (with the request and inline actions), working, waiting, finished, failed, idle.
 - Both become webviews, because a native tree cannot show this. Keyboard navigation and context menus must carry over.
 - New status data: a current-activity line summarized from each provider's tool events.
 - Show what changed in main to chats on other lanes, on their next turn.
@@ -50,7 +81,7 @@ Open: the lane layout (spine, stack, rail, or swap board).
 
 ## 4. New Worktree
 
-One action from the Lanes section and the full view: choose an agent, optionally an issue. It creates the branch and worktree, warms it up, and opens the chat. Everything downstream already follows from the lane.
+One action from the Lanes section and the full view: choose an agent, optionally an issue. It creates the branch and worktree, warms it up, and opens the chat. Everything downstream follows from the lane.
 
 To verify: renaming a branch from the first message when no issue was chosen.
 
@@ -61,27 +92,23 @@ Picking an issue seeds the lane: its goal, a link, and the description and comme
 - **GitHub:** through the user's `gh` login. AgentDeck stores no token.
 - **Linear:** an API key in SecretStorage first, OAuth later.
 
-## 6. One chat across providers
+## 6. Release
 
-One chat for a feature, where each stage runs on its own provider: for example, Claude plans and Grok builds. See [Routed chats](#routed-chats).
+- Claude terms: pass the CLI's environment through instead of removing `ANTHROPIC_API_KEY`, label the provider "Claude Agent" in menus not titled "Agents", avoid "Claude Code" in product names and any implied endorsement, and include notices for the bundled Agent SDK.
+- Name and icon, a private repository, fresh history before going public, code and security review, Windows and remote support or a stated lack of it, tests inside VS Code, Marketplace and Open VSX listings, and CI for provider version bumps.
 
-## 7. Release
+## 7. Claude connection settings (low priority)
 
-Name and icon, a private repository, fresh history before going public, code and security review, Windows and remote support or a stated lack of it, tests inside VS Code, Marketplace and Open VSX listings, and CI for provider version bumps.
+Set up subscription, API key, and Bedrock inside AgentDeck, and switch between whichever are configured.
 
-## Routed chats
+| Connection | What the CLI gets | Where credentials live |
+|---|---|---|
+| **Subscription** | Its own sign-in; `ANTHROPIC_API_KEY` unset | The CLI, through Anthropic's flow |
+| **API key** | `ANTHROPIC_API_KEY`, optional `ANTHROPIC_BASE_URL` | VS Code SecretStorage |
+| **Amazon Bedrock** | `CLAUDE_CODE_USE_BEDROCK=1`, `AWS_PROFILE`, optional `AWS_REGION` and model pins | The AWS credential chain, or `AWS_BEARER_TOKEN_BEDROCK` in SecretStorage |
 
-Providers cannot share a live session: each keeps its own context, in its own format. A single chat is therefore a timeline over several provider sessions.
+These set environment variables on the spawned CLI only. Each chat shows its connection.
 
-- `SessionRecord` holds one provider session per provider, with the active one marked. The journal records which provider produced each item.
-- **On a switch:** the incoming provider gets the lane brief, a handoff summary, and what changed since it last ran. A provider returning to the chat resumes its own session and gets only the delta.
-- **The transcript:** one continuous conversation, with a line where each provider takes over.
-- **Routing:** per-stage defaults from `[task.<id>]` in `.agentdeck/config.toml`, with a manual override in the composer.
-- **Triggers:** clear events only, such as approving a plan starting Build, or Build finishing starting Review. Never inferred from a message's content. Each stage is visible and can be stopped.
+To verify: whether `env` in the CLI's `settings.json` overrides these variables, whether a session resumes across connections, and what a backend lacks (quota on API key and Bedrock, WebSearch on Bedrock).
 
-Constraints:
-
-- A handoff carries a summary, not the full context, so plans and notes must hold what matters. Lane memory already does this.
-- Controls follow the active provider: model, modes, effort, fork, and rewind differ by provider.
-- Rewind and fork across a provider boundary need defined behaviour. Start by limiting them to the current provider's stretch.
-- This changes the rule that handoffs never advance on their own; it stays opt-in per lane.
+The hard rule on credentials in [AGENTS.md](../AGENTS.md) changes with this work: never read or store Claude account credentials; API keys the user adds go only in SecretStorage and only to the CLI's environment.

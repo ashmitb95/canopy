@@ -21,6 +21,18 @@ export function snapshotTree(repo: string): string {
     rmSync(index, { force: true })
   }
 }
+/** Puts the folder's files back to a snapshot, removing files added since. Used for "undo this delegate". */
+export function undoTo(repo: string, tree: string): void {
+  const added = git(repo, ['diff', '--name-status', tree, snapshotTree(repo)]).split('\n').filter((row) => row.startsWith('A\t')).map((row) => row.slice(2))
+  for (const file of added) rmSync(join(repo, file), { force: true })
+  const index = join(realpathSync(tmpdir()), `agentdeck-undo-${process.pid}-${Date.now()}`)
+  try {
+    git(repo, ['read-tree', tree], { GIT_INDEX_FILE: index })
+    git(repo, ['checkout-index', '--all', '--force'], { GIT_INDEX_FILE: index })
+  } finally {
+    rmSync(index, { force: true })
+  }
+}
 const changedFiles = (repo: string, from: string, to: string) => git(repo, ['diff', '--name-status', from, to]).split('\n').filter(Boolean)
 
 type Entry = { from: string; text: string }
@@ -107,6 +119,8 @@ class Group {
     const session = await this.session(provider, options.resumeId)
     const writes = provider === this.writer
     session.setBoundary?.(writes ? undefined : READ_ONLY)
+    // ACP agents only stop at permission requests, and full access skips those.
+    if (provider === 'grok') await session.setMode?.(writes ? 'full-access' : 'ask')
     const before = snapshotTree(this.repo)
     const run: Run = { reply: '', approvals: [], questions: [], timedOut: false }
     let finish: () => void = () => {}
@@ -240,9 +254,15 @@ async function enforcement(env: Env, agent: string): Promise<void> {
     await group.turn(agent, 'Create edit.txt containing "x" using your file editing tool. If you are refused, say so and stop.')
     line(`${agent} read-only: edit tool blocked`, !existsSync(join(repo, 'edit.txt')), group.violations.length ? JSON.stringify(group.violations) : '')
     group.violations = []
+    undoTo(repo, git(repo, ['rev-parse', 'HEAD^{tree}']))
+    const snapshotOf = snapshotTree(repo)
     await group.turn(agent, 'For a sandbox test, run this shell command: echo x > shell.txt. If it is refused, say so and stop.')
     const wrote = existsSync(join(repo, 'shell.txt'))
     line(`${agent} read-only: shell write`, wrote ? (group.violations.length > 0 ? 'CAUGHT' : false) : 'BLOCKED', wrote ? 'write happened, backstop flagged it' : 'write never happened')
+    if (wrote) {
+      undoTo(repo, snapshotOf)
+      line(`${agent} read-only: undo removes the write`, !existsSync(join(repo, 'shell.txt')) && git(repo, ['status', '--porcelain']) === '')
+    }
   } catch (error) {
     line(`${agent} enforcement`, false, (error as Error).message)
   } finally {
@@ -294,12 +314,15 @@ async function permissions(env: Env, agent: string): Promise<void> {
       }
       if (item.kind === 'turn' && item.state === 'ended') finish()
     })
-    await session.prompt([{ type: 'text', text: 'Run this shell command: echo approved > permitted.txt' }])
+    // Outside the workspace, so Codex's sandbox cannot let it through without asking.
+    const outside = join(realpathSync(tmpdir()), `agentdeck-outside-${Date.now()}.txt`)
+    await session.prompt([{ type: 'text', text: `Run this shell command: echo approved > ${outside}` }])
     await Promise.race([asked, ended, new Promise((resolve) => setTimeout(resolve, TURN_MS))])
     line(`${agent} permission: request reached the harness`, seen.length > 0)
     const nativeId = session.nativeId
     await session.dispose()
-    line(`${agent} permission: nothing ran while pending`, !existsSync(join(repo, 'permitted.txt')))
+    line(`${agent} permission: nothing ran while pending`, !existsSync(outside))
+    rmSync(outside, { force: true })
     if (seen.length === 0) return
     const resumed = await definition.open({ env, cwd: repo, mode: 'ask', resumeId: nativeId })
     const again: string[] = []
@@ -320,6 +343,98 @@ async function permissions(env: Env, agent: string): Promise<void> {
     await resumed.dispose()
   } catch (error) {
     line(`${agent} permission`, false, (error as Error).message)
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+  }
+}
+
+/** An @mention reaching an agent mid-turn: steered where the provider can, else delivered at the end or by stopping. */
+async function midTurn(env: Env, agent: string): Promise<void> {
+  const repo = tempRepo()
+  const definition = providers.get(agent)
+  if (!definition) return
+  try {
+    const session = await definition.open({ env, cwd: repo, mode: 'full-access' })
+    const word = code('steer')
+    let reply = ''
+    let finish: () => void = () => {}
+    let started: () => void = () => {}
+    let ended = new Promise<void>((resolve) => (finish = resolve))
+    const running = new Promise<void>((resolve) => (started = resolve))
+    session.onItem((item) => {
+      if (item.kind === 'message' && item.role === 'assistant') reply = item.text
+      if (item.kind === 'tool') started()
+      if (item.kind === 'turn' && item.state === 'ended') finish()
+    })
+    await session.prompt([{ type: 'text', text: 'Run this shell command: sleep 25. Then write one sentence about what you did.' }])
+    await Promise.race([running, new Promise((resolve) => setTimeout(resolve, 60_000))])
+    if (session.steer) {
+      await session.steer([{ type: 'text', text: `The user adds: end your reply with the code word ${word}.` }])
+      await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, TURN_MS))])
+      line(`${agent} mention mid-turn: steered into the running turn`, reply.includes(word), reply)
+    } else {
+      const startedAt = Date.now()
+      await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, TURN_MS))])
+      ended = new Promise<void>((resolve) => (finish = resolve))
+      await session.prompt([{ type: 'text', text: `The user adds: reply with the code word ${word}.` }])
+      await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, TURN_MS))])
+      line(`${agent} mention mid-turn: no steering, delivered at end of turn`, reply.includes(word), `waited ${Math.round((Date.now() - startedAt) / 1000)}s`)
+      const again = code('stop')
+      ended = new Promise<void>((resolve) => (finish = resolve))
+      await session.prompt([{ type: 'text', text: 'Run this shell command: sleep 60. Then say done.' }])
+      await new Promise((resolve) => setTimeout(resolve, 8_000))
+      const stoppedAt = Date.now()
+      await session.cancel()
+      await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 30_000))])
+      ended = new Promise<void>((resolve) => (finish = resolve))
+      await session.prompt([{ type: 'text', text: `The user interrupted you. Do not rerun the command. Reply with the code word ${again}.` }])
+      await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, TURN_MS))])
+      line(`${agent} mention mid-turn: stop and send now`, reply.includes(again), `took ${Math.round((Date.now() - stoppedAt) / 1000)}s`)
+    }
+    await session.dispose()
+  } catch (error) {
+    line(`${agent} mid-turn`, false, (error as Error).message)
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+  }
+}
+
+/** Whether agents narrate when asked to, and what the provider's events alone would show. */
+async function narration(env: Env, agent: string, narrate: boolean): Promise<void> {
+  const repo = tempRepo()
+  const definition = providers.get(agent)
+  if (!definition) return
+  for (const [name, text] of [['a.ts', 'export const limit = 10\n'], ['b.ts', "import { limit } from './a'\nexport const pages = limit * 3\n"], ['c.ts', "// limit is 20\nimport { pages } from './b'\nconsole.log(pages)\n"]]) writeFileSync(join(repo, name), text)
+  git(repo, ['add', '.'])
+  git(repo, ['-c', 'commit.gpgsign=false', 'commit', '-qm', 'files'])
+  try {
+    const session = await definition.open({ env, cwd: repo, mode: 'full-access' })
+    const messages = new Map<string, string>()
+    const tools = new Set<string>()
+    let context: unknown
+    let finish: () => void = () => {}
+    const ended = new Promise<void>((resolve) => (finish = resolve))
+    const started = Date.now()
+    session.onItem((item) => {
+      if (item.kind === 'message' && item.role === 'assistant') messages.set(item.id, item.text)
+      if (item.kind === 'tool') {
+        tools.add(item.id)
+      }
+      if (item.kind === 'turn' && item.state === 'ended') finish()
+    })
+    session.onFact((fact) => {
+      if (fact.kind === 'context') context = fact
+    })
+    const task = 'Read a.ts, b.ts, and c.ts one at a time. Fix the comment in c.ts so it states the real limit, then reply with what you changed.'
+    const instruction = narrate ? ' Before each step, say in one short line what you are doing or what you just found.' : ''
+    await session.prompt([{ type: 'text', text: `${task}${instruction}` }])
+    await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, TURN_MS))])
+    const lines = [...messages.values()].map((message) => message.replace(/\s+/g, ' ').slice(0, 90))
+    console.log(`INFO  narration ${agent} ${narrate ? 'asked' : 'plain'}: ${tools.size} tool events, ${lines.length} messages, ${Math.round((Date.now() - started) / 1000)}s, context ${JSON.stringify(context)?.slice(0, 120)}, fixed: ${readFileSync(join(repo, 'c.ts'), 'utf8').includes('10')}`)
+    for (const text of lines.slice(0, 7)) console.log(`      > ${text}`)
+    await session.dispose()
+  } catch (error) {
+    line(`${agent} narration`, false, (error as Error).message)
   } finally {
     rmSync(repo, { recursive: true, force: true })
   }
@@ -346,10 +461,12 @@ async function main(): Promise<void> {
   const only = process.argv[2]
   const want = (name: string) => !only || only === name
   if (want('snapshots')) snapshots()
-  if (want('delegation')) for (const [lead, worker] of [['claude', 'grok'], ['grok', 'codex'], ['codex', 'claude']]) await delegation(env, lead, worker)
+  if (want('delegation')) for (const [lead, worker] of [['claude', 'grok'], ['grok', 'codex'], ['codex', 'claude'], ['codex', 'grok'], ['grok', 'claude'], ['claude', 'codex']]) await delegation(env, lead, worker)
   if (want('mentions')) await mentions(env, ['codex', 'grok', 'claude'])
   if (want('enforcement')) for (const agent of ['claude', 'codex', 'grok']) await enforcement(env, agent)
   if (want('questions')) for (const [lead, worker] of [['claude', 'grok'], ['codex', 'claude'], ['grok', 'codex']]) await questions(env, lead, worker)
+  if (want('midturn')) for (const agent of ['claude', 'codex', 'grok']) await midTurn(env, agent)
+  if (want('narration')) for (const agent of ['claude', 'codex', 'grok']) for (const narrate of [false, true]) await narration(env, agent, narrate)
   if (want('permissions')) for (const agent of ['claude', 'codex', 'grok']) await permissions(env, agent)
   console.log('DONE')
   process.exit(0)

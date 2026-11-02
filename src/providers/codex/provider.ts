@@ -322,7 +322,7 @@ class CodexSession implements ProviderSession {
     })
     this.rpc.notify('initialized')
     const tool = this.options.toolServer
-    const params = { cwd: this.options.cwd, ...policy(this.mode), model: this.options.model ?? null, ...(tool ? { config: { mcp_servers: { [tool.name]: { url: tool.url } } } } : {}) }
+    const params = { cwd: this.options.cwd, ...policy(this.mode), model: this.options.model ?? null, ...(tool ? { config: { mcp_servers: { [tool.name]: { url: tool.url, default_tools_approval_mode: 'approve' } } } } : {}) }
     const result = this.options.resumeId
       ? await this.rpc.request<{ thread: { id: string }; model: string }>('thread/resume', { ...params, threadId: this.options.resumeId })
       : await this.rpc.request<{ thread: { id: string }; model: string }>('thread/start', params)

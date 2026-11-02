@@ -48,6 +48,8 @@ export type SessionManagerDeps = {
   decorate?: (record: SessionRecord, parts: PromptPart[]) => Promise<PromptPart[]>
   /** Where the chat may write for its next turn; asked before every prompt. */
   boundary?: (record: SessionRecord) => Promise<WriteBoundary | undefined>
+  /** A local tool server this session's CLI should connect to. */
+  toolServer?: (record: SessionRecord) => { name: string; url: string } | undefined
 }
 
 type Live = {
@@ -418,6 +420,7 @@ export class SessionManager {
     const provider = this.deps.providers.get(live.record.providerId)
     if (!provider) throw new Error(`Unknown provider: ${live.record.providerId}`)
     const resumeId = live.record.hasTurns ? live.record.nativeId : undefined
+    const toolServer = this.deps.toolServer?.(live.record)
     const session = await provider.open({
       env: await this.deps.env(),
       cwd: this.deps.cwd,
@@ -425,7 +428,8 @@ export class SessionManager {
       model: live.record.model,
       ...(live.record.effort ? { effort: live.record.effort } : {}),
       resumeId,
-      ...(live.record.resumeAt ? { resumeAt: live.record.resumeAt } : {})
+      ...(live.record.resumeAt ? { resumeAt: live.record.resumeAt } : {}),
+      ...(toolServer ? { toolServer } : {})
     })
     live.session = session
     live.received = 0

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { ProviderSession, SessionItem, WriteBoundary } from '../src/core/types'
 import { captureEnv, type Env } from '../src/env'
 import { providers } from '../src/providers/registry'
-import { startToolServer, type Tool, type ToolServer } from './tool-server'
+import { startToolServer, type Tool, type ToolServer } from '../src/group/tool-server'
 
 const TURN_MS = 240_000
 const git = (cwd: string, args: string[], env?: NodeJS.ProcessEnv) => execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...env } }).trim()

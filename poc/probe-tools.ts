@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { SessionItem } from '../src/core/types'
 import { captureEnv } from '../src/env'
 import { providers } from '../src/providers/registry'
-import { startToolServer } from './tool-server'
+import { startToolServer } from '../src/group/tool-server'
 
 const TIMEOUT_MS = 180_000
 

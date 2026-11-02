@@ -9,7 +9,8 @@ import { LaneMemory } from '../lanes/memory'
 import { LaneTracker } from '../lanes/tracker'
 import { SessionManager } from '../sessions/manager'
 import { type Memento, SessionStore } from '../sessions/store'
-import { GroupChats } from './chat'
+import { GroupChats, groupTools } from './chat'
+import { startToolServer } from './tool-server'
 
 /** Session records in a file, for hosts without VS Code's storage. */
 export class FileMemento implements Memento {
@@ -50,6 +51,11 @@ export async function createCore(options: CoreOptions): Promise<Core> {
   const decorateLane = laneContext(tracker, memory)
   let chats: GroupChats | undefined
   let lanes: LaneCoordinator | undefined
+  let toolUrl: string | undefined
+  const checkouts = (lane: string | undefined): string[] => {
+    const held = tracker.repos.flatMap((repo) => repo.checkouts.filter((checkout) => (lane ? checkout.branch === lane : checkout.primary)).map((checkout) => checkout.path))
+    return held.length > 0 ? held : [tracker.root]
+  }
   const manager = new SessionManager({
     providers: options.providers,
     store: new SessionStore(options.memento ?? new FileMemento(join(options.storage, 'sessions.json'))),
@@ -61,9 +67,13 @@ export async function createCore(options: CoreOptions): Promise<Core> {
       const withLane = await decorateLane(record, parts)
       return chats ? chats.decorate(record, withLane) : withLane
     },
-    boundary: async (record) => lanes?.boundary(record)
+    boundary: async (record) => chats?.boundary(record) ?? lanes?.boundary(record),
+    toolServer: (record) => (toolUrl ? chats?.toolServer(record, toolUrl) : undefined)
   })
-  chats = new GroupChats({ manager, providers: options.providers, dir: join(options.storage, 'groups'), root: tracker.root })
+  const memoryDir = (lane: string) => memory.laneDir(lane)
+  chats = new GroupChats({ manager, providers: options.providers, dir: join(options.storage, 'groups'), root: tracker.root, checkouts, memoryDir })
+  const server = await startToolServer(groupTools((caller, name, args) => chats?.handleTool(caller, name, args) ?? 'AgentDeck is not ready.'))
+  toolUrl = server.url
   lanes = new LaneCoordinator({ tracker, memory, manager, env: async () => (await options.env()) as NodeJS.ProcessEnv })
   const watchers = [watchTurns(manager, tracker, memory), watchHistory(tracker, memory)]
   const { chats: readyChats, lanes: readyLanes } = { chats, lanes }
@@ -75,6 +85,7 @@ export async function createCore(options: CoreOptions): Promise<Core> {
     chats: readyChats,
     dispose: async () => {
       for (const watcher of watchers) watcher.dispose()
+      server.close()
       readyChats.dispose()
       await manager.dispose()
       tracker.dispose()

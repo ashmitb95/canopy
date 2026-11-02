@@ -1,8 +1,8 @@
-// Proof of concept: one local MCP server over HTTP, reachable from any provider's CLI.
+// One local MCP server over HTTP, reachable from any provider's CLI. Only agents AgentDeck started know its address.
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
-export type Tool = { name: string; description: string; inputSchema: Record<string, unknown>; call: (args: Record<string, unknown>) => Promise<string> | string }
+export type Tool = { name: string; description: string; inputSchema: Record<string, unknown>; call: (args: Record<string, unknown>, caller: string) => Promise<string> | string }
 export type ToolServer = { url: string; close(): void; methods: string[] }
 
 export async function startToolServer(tools: Tool[]): Promise<ToolServer> {
@@ -30,7 +30,7 @@ export async function startToolServer(tools: Tool[]): Promise<ToolServer> {
       if (message.method === 'tools/call') {
         const tool = tools.find((candidate) => candidate.name === message.params?.name)
         if (!tool) return reply({ isError: true, content: [{ type: 'text', text: 'Unknown tool' }] })
-        return reply({ content: [{ type: 'text', text: await tool.call(message.params?.arguments ?? {}) }] })
+        return reply({ content: [{ type: 'text', text: await tool.call(message.params?.arguments ?? {}, req.url ?? '') }] })
       }
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not found' } }))
     })

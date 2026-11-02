@@ -1,4 +1,5 @@
-import { mkdtempSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -20,7 +21,11 @@ let grok: FakeSession[]
 let dir: string
 let memento: MemoryMemento
 
-function build(): void {
+function rebuild(root: string): void {
+  build(root)
+}
+
+function build(root?: string): void {
   const providers = [fakeProvider('claude', ['steer']), fakeProvider('codex', ['steer']), fakeProvider('grok')]
   ;[claude, codex, grok] = providers.map((provider) => provider.sessions)
   const map = new Map(providers.map(({ provider }) => [provider.id, provider]))
@@ -31,9 +36,10 @@ function build(): void {
     journalDir: join(dir, 'journal'),
     cwd: dir,
     env: async () => ({}),
-    decorate: (record, parts) => group?.decorate(record, parts) ?? Promise.resolve(parts)
+    decorate: (record, parts) => group?.decorate(record, parts) ?? Promise.resolve(parts),
+    boundary: async (record) => group?.boundary(record)
   })
-  group = new GroupChats({ manager, providers: map, dir: join(dir, 'groups') })
+  group = new GroupChats({ manager, providers: map, dir: join(dir, 'groups'), ...(root ? { root, checkouts: () => [root] } : {}) })
   chats = group
 }
 
@@ -233,5 +239,131 @@ describe('GroupChat', () => {
     codex[0].emit({ kind: 'tool', id: 't', title: 'Bash pnpm test', toolKind: 'execute', status: 'running' })
     await tick()
     expect(chat.state().members[0].activity).toBe('$ pnpm test')
+  })
+})
+
+describe('delegation', () => {
+  let repo: string
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
+  const lead = () => chats.create({ lead: 'claude', roster: { plan: 'claude', implement: 'codex', review: 'grok' }, verify: 'test -f built.txt' })
+
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), 'agentdeck-delegate-'))
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.email', 'x@example.com')
+    git('config', 'user.name', 'x')
+    writeFileSync(join(repo, 'a.txt'), 'a\n')
+    git('add', '.')
+    git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'i')
+    rebuild(repo)
+    chat = lead()
+  })
+
+  it('tells the lead the roster on its first turn only, and keeps it out of the transcript', async () => {
+    await chat.send('plan it')
+    await tick()
+    expect(texts(claude[0])[0]).toContain('Roster: plan: claude, implement: codex, review: grok')
+    await finish(claude[0], 'planned')
+    await chat.send('more')
+    await tick()
+    expect(texts(claude[0])[1]).not.toContain('Roster:')
+  })
+
+  it('runs a delegate only after the lead ends its turn, then wakes the lead with the report and facts', async () => {
+    await chat.send('build it')
+    await tick()
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Make built.txt', doneWhen: 'it exists' })).toContain('Accepted')
+    await tick()
+    expect(codex).toHaveLength(0)
+    await finish(claude[0], 'handing over')
+    expect(texts(codex[0])[0]).toContain('Task: Make built.txt')
+    expect(texts(codex[0])[0]).toContain('Before each step')
+    writeFileSync(join(repo, 'built.txt'), 'x\n')
+    codex[0].emit({ kind: 'tool', id: 't1', title: 'Run touch built.txt', toolKind: 'execute', status: 'done' })
+    await finish(codex[0], 'Built it.\nSTATUS: done')
+    await tick()
+    const report = texts(claude[0]).at(-1)
+    expect(report).toContain('Report from codex')
+    expect(report).toContain('A\tbuilt.txt')
+    expect(report).toContain('touch built.txt')
+    expect(report).toContain('AgentDeck ran test -f built.txt: passed')
+    expect(chat.state().delegations[0]).toMatchObject({ status: 'done' })
+    expect(readFileSync(chat.state().delegations[0].handoff ?? '', 'utf8')).toContain('Built it.')
+  })
+
+  it('reports what a failed verify really says, whatever the agent claims', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'Make it' })
+    await finish(claude[0], 'ok')
+    writeFileSync(join(repo, 'other.txt'), 'x\n')
+    await finish(codex[0], 'All good.\nSTATUS: done')
+    await tick()
+    expect(texts(claude[0]).at(-1)).toContain('FAILED')
+  })
+
+  it('shows when an agent ran nothing, and when it gave no status', async () => {
+    await chat.send('review')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'review', task: 'Run the tests' })
+    await finish(claude[0], 'ok')
+    await finish(grok[0], 'The tests pass.')
+    await tick()
+    const report = texts(claude[0]).at(-1)
+    expect(report).toContain('Commands run: none')
+    expect(report).toContain('did not give a status line')
+    expect(chat.state().delegations[0].status).toBe('unknown')
+  })
+
+  it('refuses delegation from anyone but the lead, to nobody, or to itself', async () => {
+    expect(chat.handleTool('codex', 'delegate', { to: 'review', task: 'x' })).toContain('Only the lead')
+    expect(chat.handleTool('claude', 'delegate', { to: 'research', task: 'x' })).toContain('Nobody holds')
+    expect(chat.handleTool('claude', 'delegate', { to: 'plan', task: 'x' })).toContain('That is you')
+  })
+
+  it('reminds a lead once if it says it will delegate but does not', async () => {
+    await chat.send('build')
+    await tick()
+    await finish(claude[0], "I'll hand this off to codex.")
+    expect(texts(claude[0]).at(-1)).toContain('no delegate call reached')
+    await finish(claude[0], "I'm handing it over.")
+    expect(claude[0].prompts).toHaveLength(2)
+  })
+
+  it('blocks writes for read-only roles, flags a write that got through, and can undo it', async () => {
+    expect(chat.readOnlyBoundary('claude')?.roots).toEqual([])
+    expect(await chat.readOnlyBoundary('claude')?.outside('x')).toContain('Delegate this edit to codex')
+    expect(chat.readOnlyBoundary('codex')).toBeUndefined()
+    await chat.send('look')
+    await tick()
+    writeFileSync(join(repo, 'sneaky.txt'), 'x\n')
+    writeFileSync(join(repo, 'a.txt'), 'changed\n')
+    await finish(claude[0], 'done')
+    await tick()
+    const [violation] = chat.state().violations
+    expect(violation.files).toEqual(expect.arrayContaining(['A\tsneaky.txt', 'M\ta.txt']))
+    chat.undoViolation(violation.id)
+    expect(existsSync(join(repo, 'sneaky.txt'))).toBe(false)
+    expect(readFileSync(join(repo, 'a.txt'), 'utf8')).toBe('a\n')
+  })
+
+  it('reports a failed delegate without waking the lead, and stops the queue', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    codex[0].exit('boom')
+    await tick()
+    expect(chat.state().delegations[0].status).toBe('failed')
+    expect(chat.state().blocked).toContain('codex')
+  })
+
+  it('lets a mention reach a delegate while it works', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    expect((await chat.send('@codex use a cursor'))[0].delivery).toBe('now')
+    expect(codex[0].steers).toHaveLength(1)
   })
 })

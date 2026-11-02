@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rolling delegate view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#888888}a:hover{color:#AAAAAA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4D86FF;outline-offset:2px}
+.st{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;font-size:11px;font-weight:800;line-height:1;box-sizing:border-box;flex:none}
+.spin{animation:spin .9s linear infinite}
+.caret{animation:blink 1s steps(2) infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes blink{50%{opacity:0}}
+</style>
+</helmet>
+<div style="width: 1000px; height: 880px; display: flex; flex-direction: column; overflow: hidden; background: {{t.ground}}; color: {{t.text}}; font-family: Geist, system-ui, sans-serif; font-size: 13px">
+
+<div style="flex: none; min-height: 48px; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 16px; background: #2A2C2E; color: #F4F2EA">
+<span style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; margin-right: 4px">REAL RECORDING</span>
+<sc-for list="{{recordings}}" as="r" hint-placeholder-count="4"><button onClick="{{r.pick}}" aria-pressed="{{r.on}}" style="height: 32px; padding: 0 10px; border-radius: 6px; border: {{r.border}}; background: #1A1C1E; color: #F4F2EA; font-weight: 600">{{r.label}}</button></sc-for>
+<button onClick="{{replay}}" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 0; background: #F4F2EA; color: #16140F; font-weight: 700; margin-left: 6px">Replay</button>
+<div style="flex: 1"></div>
+<button onClick="{{toggleTheme}}" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 0; background: #1A1C1E; color: #F4F2EA">{{themeLabel}}</button>
+</div>
+
+<main style="flex: 1; min-height: 0; overflow: auto; padding: 20px 28px; display: flex; flex-direction: column; gap: 14px">
+<div style="margin-left: 200px; padding: 10px 12px; border-radius: 10px; background: {{t.control}}">The comment in c.ts states the wrong limit. Fix it and add a test.</div>
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 6px; background: {{lead.bg}}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{{lead.letter}}</span><div style="line-height: 1.5"><strong style="font-weight: 600">{{lead.name}}</strong> <span style="color: {{t.muted}}; font-size: 12px">Lead</span><br>Implement belongs to {{worker.name}}, so I've handed this over.</div></div>
+
+<section aria-label="Delegate" style="margin-left: 32px; border-radius: 10px; overflow: hidden; background: {{t.surface}}">
+<button onClick="{{toggleLog}}" aria-expanded="{{logOpen}}" style="width: 100%; min-height: 58px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 0; background: {{t.surface}}; color: {{t.text}}; text-align: left">
+<span style="width: 26px; height: 26px; border-radius: 7px; background: {{worker.bg}}; color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{{worker.letter}}</span>
+<span style="flex: 1; min-width: 0"><span style="display: block; font-weight: 600">{{worker.name}} · Implement: Fix the comment and add a test</span><span style="display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: {{statusColor}}">{{status}}</span></span>
+<span style="color: {{t.muted}}; font-size: 12px">{{elapsed}}</span>
+<sc-if value="{{running}}" hint-placeholder-val="{{ true }}"><span class="st spin" style="border: 3px solid {{t.control}}; border-top-color: {{t.working}}; border-radius: 8px"></span></sc-if>
+<sc-if value="{{finished}}" hint-placeholder-val="{{ false }}"><span class="st" style="background: {{t.done}}; color: {{t.doneInk}}; border-radius: 5px">✓</span></sc-if>
+</button>
+<sc-if value="{{showWindow}}" hint-placeholder-val="{{ true }}">
+<div style="margin: 0 12px; padding: 10px 12px; border-radius: 8px; background: {{t.band}}; height: {{windowHeight}}; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; font-size: 12.5px; line-height: 1.45">
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="7">
+<div style="display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-left: {{l.indent}}; color: {{l.color}}; font-family: {{l.font}}; font-weight: {{l.weight}}">
+<span style="min-width: 0; flex: 1; white-space: {{l.wrap}}; overflow: hidden; text-overflow: ellipsis">{{l.text}}<sc-if value="{{l.live}}" hint-placeholder-val="{{ false }}"><span class="caret"> ▌</span></sc-if></span>
+<sc-if value="{{l.stat}}" hint-placeholder-val="{{ false }}"><span style="flex: none; font-family: 'Geist Mono', monospace; font-size: 11.5px">{{l.stat}}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{showWindow}}" hint-placeholder-val="{{ true }}"><div style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{t.muted}}"><span>@{{workerId}} to redirect</span><span>· Stop</span><button onClick="{{toggleFull}}" style="margin-left: auto; height: 30px; padding: 0 10px; border-radius: 6px; border: 0; background: {{t.control}}; color: {{t.text}}; font-weight: 600">{{fullLabel}}</button></div></sc-if>
+</section>
+
+<sc-if value="{{finished}}" hint-placeholder-val="{{ false }}"><div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 6px; background: {{lead.bg}}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{{lead.letter}}</span><div style="line-height: 1.5"><strong style="font-weight: 600">{{lead.name}}</strong> <span style="color: {{t.muted}}; font-size: 12px">Lead</span><br>{{worker.name}} is done, and the test passes. Want me to send it to review?</div></div></sc-if>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1000,"height":880}}'>
+const DATA_URL = '/_blob/c1f9e5445de5f9c518d3a52d0809d5d4';
+const THEMES = {
+  light: { ground: '#F6F3EA', band: '#F1EDE1', surface: '#FFFFFF', control: '#DED8C8', text: '#16140F', muted: '#5A5549', working: '#0B6FC2', workingText: '#085C9F', done: '#0D7A4F', doneInk: '#FFFFFF', doneText: '#0A6641', failed: '#9C1F18' },
+  dark: { ground: '#161512', band: '#1E1C18', surface: '#26241F', control: '#35322B', text: '#F3EFE4', muted: '#B0AA9B', working: '#6BB8F5', workingText: '#8CC8F8', done: '#46C98D', doneInk: '#04231A', doneText: '#62D6A2', failed: '#FF9089' }
+};
+const PEOPLE = { claude: { name: 'Claude', letter: 'C', bg: '#B8603F' }, codex: { name: 'Codex', letter: 'X', bg: '#4F63C9' }, grok: { name: 'Grok', letter: 'G', bg: '#5B6670' } };
+const RECORDINGS = [['claude', 'Claude'], ['claude-narrated', 'Claude, narrating'], ['codex', 'Codex'], ['codex-narrated', 'Codex, narrating'], ['grok-narrated', 'Grok, narrating']];
+const WINDOW_LINES = 8;
+const TAIL_MS = 1600;
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { recording: 'codex-narrated', now: 0, data: null, dark: false, full: false, logOpen: false };
+  }
+
+  componentDidMount() {
+    fetch(DATA_URL).then((response) => response.json()).then((data) => this.setState({ data }));
+    this.started = Date.now();
+    this.timer = setInterval(() => this.setState({ now: Date.now() - this.started }), 120);
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.timer);
+  }
+
+  restart(extra) {
+    this.started = Date.now();
+    this.setState({ now: 0, full: false, logOpen: false, ...extra });
+  }
+
+  renderVals() {
+    const { recording, now, data, dark, full, logOpen } = this.state;
+    const t = THEMES[dark ? 'dark' : 'light'];
+    const workerId = recording.split('-')[0];
+    const leadId = workerId === 'claude' ? 'codex' : 'claude';
+    const rec = data?.[recording];
+    const frames = rec?.frames ?? [];
+    const end = frames.at(-1)?.t ?? 0;
+    const finished = Boolean(rec) && now > end + TAIL_MS;
+    const frame = [...frames].reverse().find((candidate) => candidate.t <= now) ?? { lines: [] };
+    const all = frame.lines;
+    const newest = [...all].reverse().find((line) => line.kind === 'tool');
+    const tools = all.filter((line) => line.kind === 'tool').length;
+    const look = (line) => {
+      if (line.kind === 'tool') return { color: line.failed ? t.failed : t.text, font: "'Geist Mono', monospace", weight: 500, indent: '0' };
+      if (line.kind === 'output') return { color: t.muted, font: "'Geist Mono', monospace", weight: 400, indent: '14px' };
+      if (line.kind === 'thought') return { color: t.muted, font: 'inherit', weight: 400, indent: '0' };
+      return { color: t.text, font: 'inherit', weight: 400, indent: '0' };
+    };
+    const shown = full || logOpen ? all : all.slice(-WINDOW_LINES);
+    const seconds = Math.min(Math.floor(now / 1000), rec?.seconds ?? 0);
+    return {
+      t, finished, workerId,
+      running: !finished,
+      lead: PEOPLE[leadId],
+      worker: PEOPLE[workerId],
+      recordings: RECORDINGS.map(([id, label]) => ({ label, on: id === recording ? 'true' : 'false', border: id === recording ? '2px solid #F4F2EA' : '2px solid #1A1C1E', pick: () => this.restart({ recording: id }) })),
+      replay: () => this.restart({}),
+      toggleTheme: () => this.setState({ dark: !dark }),
+      themeLabel: dark ? 'Paper' : 'Paper Dark',
+      status: !rec ? 'Loading the recording' : finished ? `Report ready · ${tools} steps · test passed` : newest ? `Working · ${tools} ${tools === 1 ? 'step' : 'steps'}` : 'Starting',
+      statusColor: finished ? t.doneText : t.workingText,
+      elapsed: `${seconds}s`,
+      logOpen: logOpen ? 'true' : 'false',
+      toggleLog: () => this.setState({ logOpen: !logOpen }),
+      showWindow: !finished || logOpen,
+      windowHeight: full || logOpen ? 'auto' : '186px',
+      fullLabel: full ? 'Show less' : 'Show everything',
+      toggleFull: () => this.setState({ full: !full }),
+      lines: shown.map((line) => ({ ...line, ...look(line), stat: line.stat ?? '', wrap: full || logOpen ? 'normal' : 'nowrap' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

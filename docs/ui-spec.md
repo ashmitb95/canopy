@@ -25,6 +25,7 @@ Label for moving a lane into the primary checkout: "Switch to this lane" is prop
 | Lane view | `Lanes.dc.html` | Primary checkout and what it shares, warm lane cards, cold lanes |
 | Review | `Review.dc.html` | Who did what, each agent's report and changes, undo per agent |
 | Sidebar | `Side.dc.html` | Collapsible Lanes above Sessions, on every workspace screen |
+| Rolling window | `Rolling.dc.html` | A delegate's real stream, replayed from recordings |
 
 ## Delegate states
 
@@ -44,6 +45,19 @@ Every delegate card keeps one shape: avatar, role and task, a status line, a sta
 | Resuming after reload | Session restored | None |
 | Stopped by you | Partial changes kept | Review, Resume |
 | Paused | Too many rounds with the lead | Open |
+
+## Rolling window
+
+A delegate's card shows a fixed-height window of its real stream, following the newest line unless the user scrolls up.
+
+- **Shows:** the agent's text, thinking where the provider sends it, one line per tool, the tail of command output, and diff counts. File contents appear only when expanded.
+- **Breaks out:** permissions and questions leave the window as normal cards.
+- **On finish:** it collapses to the result, and a click reopens the full log.
+- Updates are batched a few times a second. Screen readers hear state changes, not every line.
+
+## Composer
+
+The composer always says who gets the message and when: "Grok gets this now" or "Grok gets this when it finishes", with *Stop and send now* where needed.
 
 ## Visual system
 

@@ -2,7 +2,7 @@
 
 AgentDeck is a multi-agent, multi-provider orchestrator for large features: different providers do different work, the harness moves the work between them, and the user stays in one conversation.
 
-Planned work, in priority order. [lanes.md](lanes.md) and [architecture.md](architecture.md) describe what exists today.
+Planned work, in priority order; [build-plan.md](build-plan.md) sets the order it gets built in. [lanes.md](lanes.md) and [architecture.md](architecture.md) describe what exists today.
 
 ## 1. Group chat across providers
 
@@ -40,9 +40,28 @@ A delegate's card shows a rolling window of its real stream: its text, tool line
 - **Questions in plain text:** detected through a required status line in the delegate's report (`done`, `blocked`, or `question`).
 - **Loops and limits:** a set number of rounds between two agents stops and asks the user. A lead at its limit passes questions straight to the user. A failed delegate reports to the lead, with no automatic switch to another provider.
 
+### Mentions
+
+`@agent` talks directly to whoever is doing the work. A working agent gets it now where the provider can steer (Claude, Codex); otherwise it arrives at the end of the turn, with *Stop and send now* for urgent messages (Grok). A paused agent gets it after the answer, a queued agent gets it with its task, and a finished agent resumes its session. It goes in the ledger, so the lead catches up; the user's instruction wins. A mention does not change a role's write access.
+
+### Settling
+
+A delegate's "done" is a claim. AgentDeck wakes the lead only once open tool calls, the process tree, and processes working in the folder show the work has stopped.
+
+- Compare against a baseline from before the turn, and ignore each CLI's own helpers.
+- A process listening on a port is a service: it is not waited for, and is recorded as left running.
+- A delegate that started background work gets one verification turn to check results and correct its report.
+- Past a time limit, the lead is told and decides. It stops work as a whole tree, not one process.
+- No CLI wakes itself when background work ends, so AgentDeck does the waking.
+- Codex did not keep background commands started with `&`: the work vanished while it could still report done. Reports therefore list what ran and which expected output is missing.
+
+### Quota
+
+Claude and Codex usage is already read. Show it beside each role and warn before delegating to a provider that is low, with no automatic switch. The ACP provider reads none yet, so Grok's source must be found; otherwise it shows as not reported.
+
 ### Proof of concept
 
-Before building, prove with real CLIs in temporary repos: `delegate` through the tool server from all three providers, the end-turn-and-wake flow, catch-up quality, enforcement and its backstop, snapshots, permissions and each kind of question, requests pending across a restart, and whether a lead invents answers.
+On `poc/`, with real CLIs on small tasks: delegation in all six lead and delegate pairs, catch-up, role enforcement, snapshots, questions, permissions including a restart, mid-turn mentions, and settling all pass. Not yet covered: mentions to paused or queued delegates, structured questions, large features, and a real project with a dev server.
 
 ## 2. Reliable lane switching
 
@@ -79,7 +98,7 @@ Worktrees live in generically named folders, `<repo>/.worktrees/wt-<n>`, and hol
 - Slot numbers can map to dev server ports (`wt-1` to a port offset), so warm lanes can run side by side.
 - Worktrees that users or agents created keep their names and are tracked as they are. Agents get current paths in the brief, and the UI always shows the lane, not the folder.
 
-To prove first, with no agents or quota: every row above in real repos, multi-repo all-or-nothing, and a failure injected at each step. `src/lanes/switch.ts` today removes the worktree, has no preflight or rollback, and can stop partway.
+Proved in `poc/swap.ts` with real repos: the preflight states, multi-repo all-or-nothing, a failure injected at each step, and recovery after a crash. `src/lanes/switch.ts` today still removes the worktree, has no preflight or rollback, and can stop partway.
 
 ## 3. Lanes and Sessions redesign
 

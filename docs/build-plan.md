@@ -10,11 +10,11 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 ## Phase 0: Ground work
 
-- Private GitHub repository; merge `poc/group-chat` and `mvp` into `main`.
+- Merge `poc/group-chat` and `mvp` into `main`.
 - Say "primary checkout" in code and docs.
 - Claude terms in the provider: stop removing `ANTHROPIC_API_KEY`, and report the sign-in method as a fact.
 
-**Done when:** tests pass on `main`, and the repository has a remote.
+**Done when:** tests pass on `main`.
 
 ## Phase 1: Lanes engine
 
@@ -91,7 +91,7 @@ Revisit the mockups before starting: the plumbing will have taught us things the
 
 ## Phase 8: Release
 
-Name and logo, provider labels and notices for Claude's terms, code and security review, tests inside VS Code, Marketplace and Open VSX listings, CI for provider version bumps, and a fresh history for the public repository.
+Rename to Canopy as v5, with old Canopy kept on a `v3` branch and detection of its `.canopy/` and `canopy.toml` files; logo, provider labels and notices for Claude's terms, code and security review, tests inside VS Code, Marketplace and Open VSX listings, CI for provider version bumps, and a single clean commit into the public `ashmitb95/canopy` repository, replacing the old Marketplace listing.
 
 ## After release
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionItem } from '../src/core/types'
-import { frameAt, rollingLines, toolLine } from './rolling'
+import { frameAt, plain, rollingLines, toolLine } from './rolling'
 
 const message = (text: string, streaming = false): SessionItem => ({ kind: 'message', id: 'm', role: 'assistant', text, streaming })
 
@@ -34,6 +34,15 @@ describe('rolling view', () => {
     ])
     expect(lines).toHaveLength(1)
     expect(lines[0].stat).toBe('+2 −1')
+  })
+
+  it('strips markup from prose, and counts diffs only on edits', () => {
+    expect(plain('- **`c.ts`:** see [c.ts](./c.ts)')).toBe('c.ts: see c.ts')
+    const lines = rollingLines([
+      { kind: 'tool', id: 'r', title: 'Read ./c.ts', toolKind: 'read', status: 'done', paths: ['./c.ts'] },
+      { kind: 'diff', id: 'd', path: './c.ts', oldText: 'a', newText: 'b' }
+    ])
+    expect(lines[0].stat).toBeUndefined()
   })
 
   it('replays a stream by time', () => {

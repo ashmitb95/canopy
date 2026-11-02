@@ -8,6 +8,9 @@ const WIDTH = 96
 
 const clip = (text: string) => (text.length > WIDTH ? `${text.slice(0, WIDTH - 1)}…` : text)
 
+/** The window shows prose, not markup. */
+export const plain = (text: string) => text.trim().replace(/^[-*]\s+/, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*/g, '').replace(/`/g, '')
+
 /** One line for a tool: the command or the file, without provider-specific wording. */
 export function toolLine(title: string): string {
   const command = /^(?:Bash|Run|Shell)\s+(.+)$/s.exec(title)
@@ -41,7 +44,7 @@ export function rollingLines(stream: SessionItem[]): RollingLine[] {
   const lines: RollingLine[] = []
   for (const item of latest.values()) {
     if (item.kind === 'message' && item.role === 'assistant' && item.text.trim()) {
-      for (const [index, paragraph] of item.text.trim().split(/\n+/).entries()) lines.push({ id: `${item.id}:${index}`, kind: 'text', text: paragraph.trim(), live: item.streaming })
+      for (const [index, paragraph] of item.text.trim().split(/\n+/).entries()) lines.push({ id: `${item.id}:${index}`, kind: 'text', text: plain(paragraph), live: item.streaming })
     }
     if (item.kind === 'thought' && item.text.trim()) lines.push({ id: item.id, kind: 'thought', text: item.text.trim().replace(/\s+/g, ' '), live: item.streaming })
     if (item.kind === 'plan') {
@@ -50,7 +53,7 @@ export function rollingLines(stream: SessionItem[]): RollingLine[] {
     }
     if (item.kind === 'notice') lines.push({ id: item.id, kind: 'notice', text: item.text, live: false })
     if (item.kind === 'tool') {
-      const diff = item.paths?.length === 1 ? diffs.find((candidate) => candidate.kind === 'diff' && candidate.path === item.paths?.[0]) : undefined
+      const diff = item.toolKind === 'edit' && item.paths?.length === 1 ? diffs.find((candidate) => candidate.kind === 'diff' && candidate.path === item.paths?.[0]) : undefined
       const stat = diff?.kind === 'diff' ? lineStat(diff.oldText, diff.newText) : undefined
       lines.push({ id: item.id, kind: 'tool', text: clip(toolLine(item.title)), live: item.status === 'running', failed: item.status === 'failed', ...(stat ? { stat } : {}) })
       if (item.toolKind === 'execute' && item.output?.trim()) {

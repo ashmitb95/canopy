@@ -1,5 +1,5 @@
 // A terminal host for the core: chat, @mention, answer, and watch the stream, with no UI.
-// Usage: node dist/driver.js [workspace] [--lead grok] [--implement codex] [--review claude] [--verify 'pnpm check'] [--lane name] [--mode full-access] [--new]
+// Usage: node dist/driver.js [workspace] [--lead grok] [--implement codex] [--review claude] [--verify 'pnpm check'] [--lane name] [--mode full-access] [--new] [--lead-can-edit]
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { PermissionMode, SessionItem } from '../src/core/types'
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
   if (unfinished.length > 0) console.log(`A move was left unfinished: ${unfinished.map((move) => `${move.lane} in ${move.repo}`).join(', ')}. Use /undo.`)
   const lead = flag('lead') ?? 'claude'
   const roster = { plan: lead, ...(flag('implement') ? { implement: flag('implement') } : {}), ...(flag('review') ? { review: flag('review') } : {}), ...(flag('research') ? { research: flag('research') } : {}) }
-  const chatOptions = { lead, roster, mode: (flag('mode') ?? 'ask') as PermissionMode, ...(flag('lane') ? { laneId: flag('lane') } : {}), ...(flag('verify') ? { verify: flag('verify') } : {}) }
+  const chatOptions = { lead, roster, enforce: !args.includes('--lead-can-edit'), mode: (flag('mode') ?? 'ask') as PermissionMode, ...(flag('lane') ? { laneId: flag('lane') } : {}), ...(flag('verify') ? { verify: flag('verify') } : {}) }
   let chat: GroupChat = (args.includes('--new') ? undefined : core.chats.list().at(-1)) ?? core.chats.create(chatOptions)
   const pending: { agent: string; item: Extract<SessionItem, { kind: 'approval' | 'question' }> }[] = []
   const printed = new Map<string, string>()

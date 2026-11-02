@@ -23,18 +23,18 @@ export function matchEnvFiles(from: string, patterns: string[]): string[] {
 
 export type WarmResult = { copied: string[]; setup?: { command: string; ok: boolean; output: string } }
 
-/** Readies a checkout outside main: copies env files from the main checkout (never overwriting), then runs the setup command. */
+/** Readies a checkout outside the primary checkout: copies env files from the primary checkout (never overwriting), then runs the setup command. */
 export async function warmUp(
-  main: string,
+  primary: string,
   target: string,
   envFiles: string[],
   setup: string | undefined,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<WarmResult> {
-  const copied = matchEnvFiles(main, envFiles).filter((name) => !existsSync(join(target, name)))
+  const copied = matchEnvFiles(primary, envFiles).filter((name) => !existsSync(join(target, name)))
   for (const name of copied) {
     mkdirSync(dirname(join(target, name)), { recursive: true })
-    copyFileSync(join(main, name), join(target, name))
+    copyFileSync(join(primary, name), join(target, name))
   }
   if (!setup) return { copied }
   const outcome = await new Promise<{ ok: boolean; output: string }>((resolve) =>

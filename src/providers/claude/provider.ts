@@ -58,13 +58,6 @@ const MODES: Record<PermissionMode, SdkPermissionMode> = {
 }
 const MODE_LIST: readonly PermissionMode[] = ['ask', 'accept-edits', 'auto', 'plan', 'full-access']
 
-/** An inherited API key would bill the API instead of the claude.ai subscription. */
-export function claudeEnv(env: Env): Env {
-  const copy = { ...env }
-  delete copy.ANTHROPIC_API_KEY
-  return copy
-}
-
 export const claudeProvider: ProviderDefinition = {
   id: 'claude',
   label: 'Claude',
@@ -73,7 +66,7 @@ export const claudeProvider: ProviderDefinition = {
   async startSignIn(env: Env, onEvent: (event: SignInEvent) => void) {
     const path = await findClaude(env)
     if (!path) throw new Error('The claude CLI was not found.')
-    return claudeSignIn(path, claudeEnv(env), onEvent)
+    return claudeSignIn(path, env, onEvent)
   },
   capabilities: new Set(['resume', 'interrupt', 'models', 'setModel', 'modes', 'setMode', 'mcpStatus', 'context', 'effort', 'steer', 'compact', 'fork', 'rewind', 'rewindFiles']),
   modes: MODE_LIST,
@@ -81,7 +74,7 @@ export const claudeProvider: ProviderDefinition = {
   async probe(env: Env): Promise<ProviderState> {
     const path = await findClaude(env)
     if (!path) return { status: 'not-installed' }
-    const options = { env: claudeEnv(env), timeout: 15_000 }
+    const options = { env: env, timeout: 15_000 }
     try {
       const [version, auth] = await Promise.all([run(path, ['--version'], options), authStatus(path, options)])
       return {
@@ -157,6 +150,7 @@ class ClaudeSession implements ProviderSession {
   private efforts = new Map<string, string[]>()
   private effort: string | undefined
   private costUsd: number | undefined
+  private apiKeyNoted = false
 
   constructor(
     query: QueryFn,
@@ -171,7 +165,7 @@ class ClaudeSession implements ProviderSession {
       options: {
         pathToClaudeCodeExecutable: cliPath,
         cwd: options.cwd,
-        env: claudeEnv(options.env),
+        env: options.env,
         model: options.model,
         ...(options.effort ? { effort: options.effort as EffortLevel } : {}),
         ...(options.toolServer ? { mcpServers: { [options.toolServer.name]: { type: 'http' as const, url: options.toolServer.url } } } : {}),
@@ -338,6 +332,7 @@ class ClaudeSession implements ProviderSession {
     try {
       for await (const message of this.query) {
         this.translator.feed(message)
+        if (message.type === 'system' && message.subtype === 'init') this.noteSignIn(message.apiKeySource)
         if (message.type === 'system' && message.subtype === 'init') void this.refreshMcp().catch(() => undefined)
         if (message.type === 'system' && message.subtype === 'init' && message.model !== this.model) {
           this.model = message.model
@@ -356,6 +351,14 @@ class ClaudeSession implements ProviderSession {
       if (!this.closed) error = caught instanceof Error ? caught.message : String(caught)
     }
     this.exits.fire({ error })
+  }
+
+  /** The CLI decides how it signs in; say so when usage is billed to an API key instead of the account. */
+  private noteSignIn(source: string | undefined): void {
+    this.facts.fire({ kind: 'signIn', method: !source || source === 'none' ? 'account' : 'api-key', ...(source && source !== 'none' ? { source } : {}) })
+    if (this.apiKeyNoted || !source || source === 'none') return
+    this.apiKeyNoted = true
+    this.items.fire({ kind: 'notice', id: `sign-in:${this.nativeId}`, level: 'info', text: `Claude is using an API key (${source}), so usage is billed to that key.` })
   }
 
   private async loadFacts(): Promise<void> {

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { parseToml } from './toml'
 
 export type WorkspaceConfig = {
-  /** Files copied from a main checkout into a new worktree: names or paths relative to the repo; a trailing `*` matches the rest of a name. */
+  /** Files copied from a primary checkout into a new worktree: names or paths relative to the repo; a trailing `*` matches the rest of a name. */
   envFiles: string[]
   /** Setup command per repo name, run in a new worktree (e.g. `pnpm install`). */
   setup: Record<string, string>

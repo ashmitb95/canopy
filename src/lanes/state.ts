@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs'
 import { basename, relative } from 'node:path'
 import { git } from './git'
 
-/** One checkout of a repo: the main checkout or a linked worktree. `branch` is absent on a detached HEAD. */
-export type Checkout = { path: string; main: boolean; head?: string; branch?: string; dirty: number }
+/** One checkout of a repo: the primary checkout or a linked worktree. `branch` is absent on a detached HEAD. */
+export type Checkout = { path: string; primary: boolean; head?: string; branch?: string; dirty: number }
 
 export type RepoState = {
   path: string
@@ -14,7 +14,7 @@ export type RepoState = {
   checkouts: Checkout[]
 }
 
-/** Parses `git worktree list --porcelain`; the first entry is the main checkout. */
+/** Parses `git worktree list --porcelain`; the first entry is the primary checkout. */
 export function parseWorktrees(text: string): Omit<Checkout, 'dirty'>[] {
   return text
     .split('\n\n')
@@ -26,7 +26,7 @@ export function parseWorktrees(text: string): Omit<Checkout, 'dirty'>[] {
       if (!path || lines.includes('bare')) return []
       const branch = lines.find((line) => line.startsWith('branch refs/heads/'))?.slice('branch refs/heads/'.length)
       const head = lines.find((line) => line.startsWith('HEAD '))?.slice('HEAD '.length)
-      return [{ path, main: index === 0, ...(head ? { head } : {}), ...(branch ? { branch } : {}) }]
+      return [{ path, primary: index === 0, ...(head ? { head } : {}), ...(branch ? { branch } : {}) }]
     })
 }
 
@@ -45,7 +45,7 @@ async function baseBranch(path: string): Promise<string | undefined> {
 
 async function dirtyFiles(path: string): Promise<number> {
   const status = await git(path, ['status', '--porcelain']).catch(() => '')
-  // The worktrees folder sits inside the main checkout; it is not uncommitted work.
+  // The worktrees folder sits inside the primary checkout; it is not uncommitted work.
   return status.split('\n').filter((line) => line && line !== '?? .worktrees/').length
 }
 

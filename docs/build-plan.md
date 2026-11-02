@@ -8,7 +8,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 - **No UI work until phase 7.** The current UI stays as it is and is not extended. It may lag behind or lose features while the core changes; use the last packaged build for day-to-day work until then.
 - **Provable without a window.** Every phase ends with `pnpm check` passing and live scripts against real CLIs. Phase 2 adds a terminal driver, so real features can run through the core long before there is a UI for it.
 
-## Phase 0: Ground work
+## Phase 0: Ground work (done)
 
 - Merge `poc/group-chat` and `mvp` into `main`.
 - Say "primary checkout" in code and docs.

@@ -160,8 +160,8 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!repos || repos.length === 0) return
       const where = await vscode.window.showQuickPick(
         [
-          { label: 'Worktrees', description: 'Separate checkouts, warmed up; main stays as it is', worktrees: true },
-          { label: 'Main checkout', description: 'Work where the code runs (main must be free)', worktrees: false }
+          { label: 'Worktrees', description: 'Separate checkouts, warmed up; the primary checkout stays as it is', worktrees: true },
+          { label: 'Primary checkout', description: 'Work where the code runs (it must be free)', worktrees: false }
         ],
         { placeHolder: 'Where does the lane start?' }
       )
@@ -170,8 +170,8 @@ export function activate(context: vscode.ExtensionContext): void {
         lanes.newLane(name.trim(), repos.map((repo) => repo.label), { worktrees: where.worktrees, goal: goal?.trim() || undefined })
       )
     }),
-    vscode.commands.registerCommand('agentdeck.laneIntoMain', (node: LaneNode) =>
-      lanes ? runLane(`Moving ${node.lane.name} into main…`, () => lanes.moveIntoMain(node.lane.name)) : undefined
+    vscode.commands.registerCommand('agentdeck.laneIntoPrimary', (node: LaneNode) =>
+      lanes ? runLane(`Moving ${node.lane.name} to the primary checkout…`, () => lanes.moveIntoPrimary(node.lane.name)) : undefined
     ),
     vscode.commands.registerCommand('agentdeck.laneToWorktree', (node: LaneNode) =>
       lanes ? runLane(`Moving ${node.lane.name} to worktrees…`, () => lanes.moveToWorktree(node.lane.name)) : undefined

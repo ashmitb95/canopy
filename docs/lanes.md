@@ -7,7 +7,7 @@ A lane is a unit of work: branch `X` in every repo that has it. Chats link to a 
 ```
 workspace/                  ← every chat's cwd
 ├─ .agentdeck/              ← stored intent
-├─ ui/                      ← repo: main checkout on some branch
+├─ ui/                      ← repo: primary checkout on some branch
 │  └─ .worktrees/retry-fix/ ← worktree of branch retry-fix
 └─ api/
 ```
@@ -40,9 +40,9 @@ TOML is a small subset (`toml.ts`): `key = <JSON>` lines and `[table]` headers. 
 
 ## Moving lanes
 
-`switch.ts`: `moveIntoMain`, `moveToWorktree`, `joinRepo`. Uncommitted work travels in uniquely named stashes (`agentdeck:<lane>:<ts>`). Nothing moves while an affected chat is mid-turn. A stash that does not re-apply stops the move and stays in place.
+`switch.ts`: `moveIntoPrimary`, `moveToWorktree`, `joinRepo`. Uncommitted work travels in uniquely named stashes (`agentdeck:<lane>:<ts>`). Nothing moves while an affected chat is mid-turn. A stash that does not re-apply stops the move and stays in place.
 
-`warmup.ts`: a new worktree gets the configured env files copied from the main checkout, then the repo's setup command.
+`warmup.ts`: a new worktree gets the configured env files copied from the primary checkout, then the repo's setup command.
 
 ## Coordination
 

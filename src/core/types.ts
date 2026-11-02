@@ -139,6 +139,8 @@ export type CommandOption = { name: string; description?: string }
 
 /** Session state shown outside the transcript. The latest fact of each kind wins. */
 export type SessionFact =
+  /** How the provider's CLI signed in; `source` names where an API key came from. */
+  | { kind: 'signIn'; method: 'account' | 'api-key'; source?: string }
   | { kind: 'model'; current: string; available: ModelOption[] }
   | { kind: 'effort'; current?: string; available: string[] }
   | { kind: 'mode'; current: PermissionMode; available: readonly PermissionMode[] }

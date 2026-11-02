@@ -9,8 +9,8 @@ const repos: RepoState[] = [
     name: 'api',
     base: 'main',
     checkouts: [
-      { path: '/w/api', main: true, branch: 'retry-fix', dirty: 2 },
-      { path: '/w/api/.worktrees/auth', main: false, branch: 'auth', dirty: 0 }
+      { path: '/w/api', primary: true, branch: 'retry-fix', dirty: 2 },
+      { path: '/w/api/.worktrees/auth', primary: false, branch: 'auth', dirty: 0 }
     ]
   },
   {
@@ -18,9 +18,9 @@ const repos: RepoState[] = [
     name: 'ui',
     base: 'main',
     checkouts: [
-      { path: '/w/ui', main: true, branch: 'main', dirty: 0 },
-      { path: '/w/ui/.worktrees/retry-fix', main: false, branch: 'retry-fix', dirty: 1 },
-      { path: '/w/ui/.worktrees/old', main: false, dirty: 0 }
+      { path: '/w/ui', primary: true, branch: 'main', dirty: 0 },
+      { path: '/w/ui/.worktrees/retry-fix', primary: false, branch: 'retry-fix', dirty: 1 },
+      { path: '/w/ui/.worktrees/old', primary: false, dirty: 0 }
     ]
   }
 ]
@@ -33,7 +33,7 @@ describe('deriveLanes', () => {
       {
         name: 'retry-fix',
         repos: [
-          { repo: 'api', location: 'main', path: '/w/api', dirty: 2 },
+          { repo: 'api', location: 'primary', path: '/w/api', dirty: 2 },
           { repo: 'ui', location: 'worktree', path: '/w/ui/.worktrees/retry-fix', dirty: 1 }
         ]
       }
@@ -95,7 +95,7 @@ describe('groupByProvider', () => {
 describe('laneDescription', () => {
   it('says where the lane lives in each repo, with uncommitted files', () => {
     expect(laneDescription(deriveLanes(repos).find((lane) => lane.name === 'retry-fix') ?? { name: '', repos: [] })).toBe(
-      'api main ●2 · ui worktree ●1'
+      'api primary ●2 · ui worktree ●1'
     )
     expect(laneDescription({ name: 'p', repos: [] })).toBe('no checkout')
   })

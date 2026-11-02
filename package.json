@@ -342,8 +342,8 @@
         "category": "AgentDeck"
       },
       {
-        "command": "agentdeck.laneIntoMain",
-        "title": "Move into Main",
+        "command": "agentdeck.laneIntoPrimary",
+        "title": "Move to Primary Checkout",
         "category": "AgentDeck"
       },
       {
@@ -452,7 +452,7 @@
           "group": "2_edit@1"
         },
         {
-          "command": "agentdeck.laneIntoMain",
+          "command": "agentdeck.laneIntoPrimary",
           "when": "view == agentdeck.sessions && viewItem == lane",
           "group": "3_move@1"
         },
@@ -532,7 +532,7 @@
           "when": "false"
         },
         {
-          "command": "agentdeck.laneIntoMain",
+          "command": "agentdeck.laneIntoPrimary",
           "when": "false"
         },
         {

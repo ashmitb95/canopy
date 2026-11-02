@@ -6,7 +6,7 @@ import { chatSummary } from '../../src/lanes/summary'
 const lane: Lane = {
   name: 'retry-fix',
   repos: [
-    { repo: 'api', location: 'main', path: '/w/api', dirty: 2, head: 'aaaaaaa111' },
+    { repo: 'api', location: 'primary', path: '/w/api', dirty: 2, head: 'aaaaaaa111' },
     { repo: 'ui', location: 'worktree', path: '/w/ui/.worktrees/retry-fix', dirty: 0, head: 'bbbbbbb222' }
   ]
 }
@@ -26,11 +26,11 @@ describe('buildBrief', () => {
       [
         '<lane name="retry-fix">',
         'Goal: Make retry reliable',
-        'Code: api/ (main checkout, 2 uncommitted) · ui/.worktrees/retry-fix (worktree, clean)',
+        'Code: api/ (primary checkout, 2 uncommitted) · ui/.worktrees/retry-fix (worktree, clean)',
         'Plan: .agentdeck/lanes/retry-fix/plan.md (updated 2026-10-29T10:00:00.000Z)',
         'Notes: .agentdeck/lanes/retry-fix/notes.md (1 entry)',
         'Earlier chats: Research · grok (.agentdeck/lanes/retry-fix/chats/a.md)',
-        'Rules: edit only inside the code paths above. Do not switch branches in main checkouts. Keep plan.md current as steps finish; add decisions and findings to notes.md as "- " bullets.',
+        'Rules: edit only inside the code paths above. Do not switch branches in primary checkouts. Keep plan.md current as steps finish; add decisions and findings to notes.md as "- " bullets.',
         '</lane>'
       ].join('\n')
     )
@@ -88,7 +88,7 @@ describe('laneMoves', () => {
   it('lists checkouts that appeared, moved, or went away', () => {
     const after: Lane[] = [
       { name: 'retry-fix', repos: [{ repo: 'api', location: 'worktree', path: '/w/api/.worktrees/retry-fix', dirty: 0 }] },
-      { name: 'auth', repos: [{ repo: 'api', location: 'main', path: '/w/api', dirty: 0 }] }
+      { name: 'auth', repos: [{ repo: 'api', location: 'primary', path: '/w/api', dirty: 0 }] }
     ]
     expect(laneMoves([lane], after)).toEqual([
       { lane: 'retry-fix', repo: 'api', from: '/w/api', to: '/w/api/.worktrees/retry-fix' },

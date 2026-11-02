@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readRepo } from '../../src/lanes/state'
-import { joinRepo, moveIntoMain, moveToWorktree, SwitchError, worktreePath } from '../../src/lanes/switch'
+import { joinRepo, moveIntoPrimary, moveToWorktree, SwitchError, worktreePath } from '../../src/lanes/switch'
 import { repo, run, workspace } from './repos'
 
 async function setup() {
@@ -14,7 +14,7 @@ async function setup() {
 const branchIn = (path: string) => run(path, 'branch', '--show-current').trim()
 
 // Real git under full-suite load exceeds the default 5s.
-describe('moveIntoMain', { timeout: 20_000 }, () => {
+describe('moveIntoPrimary', { timeout: 20_000 }, () => {
   it('swaps lanes, carrying each lane’s uncommitted work', async () => {
     const { api, state } = await setup()
     run(api, 'branch', 'a')
@@ -23,7 +23,7 @@ describe('moveIntoMain', { timeout: 20_000 }, () => {
     writeFileSync(join(api, 'b-work.txt'), 'b')
     writeFileSync(join(api, '.worktrees', 'a', 'a-work.txt'), 'a')
 
-    expect(await moveIntoMain(await state(), 'a')).toEqual({ movedOut: 'b', worktree: worktreePath(api, 'b') })
+    expect(await moveIntoPrimary(await state(), 'a')).toEqual({ movedOut: 'b', worktree: worktreePath(api, 'b') })
     expect(branchIn(api)).toBe('a')
     expect(readFileSync(join(api, 'a-work.txt'), 'utf8')).toBe('a')
     expect(existsSync(join(api, 'b-work.txt'))).toBe(false)
@@ -36,23 +36,23 @@ describe('moveIntoMain', { timeout: 20_000 }, () => {
   it('checks out a parked lane, or creates it from base', async () => {
     const { api, state } = await setup()
     run(api, 'branch', 'parked')
-    expect(await moveIntoMain(await state(), 'parked')).toEqual({})
+    expect(await moveIntoPrimary(await state(), 'parked')).toEqual({})
     expect(branchIn(api)).toBe('parked')
     run(api, 'checkout', '-q', 'main')
-    expect(await moveIntoMain(await state(), 'fresh')).toEqual({})
+    expect(await moveIntoPrimary(await state(), 'fresh')).toEqual({})
     expect(branchIn(api)).toBe('fresh')
   })
 
-  it('refuses when main holds uncommitted work on the base branch', async () => {
+  it('refuses when the primary checkout holds uncommitted work on the base branch', async () => {
     const { api, state } = await setup()
     writeFileSync(join(api, 'README.md'), 'changed')
-    await expect(moveIntoMain(await state(), 'x')).rejects.toBeInstanceOf(SwitchError)
+    await expect(moveIntoPrimary(await state(), 'x')).rejects.toBeInstanceOf(SwitchError)
     expect(branchIn(api)).toBe('main')
   })
 })
 
 describe('moveToWorktree', { timeout: 20_000 }, () => {
-  it('moves the lane out of main with its work and puts base back', async () => {
+  it('moves the lane out of the primary checkout with its work and puts base back', async () => {
     const { api, state } = await setup()
     run(api, 'checkout', '-q', '-b', 'x')
     writeFileSync(join(api, 'x-work.txt'), 'x')
@@ -86,15 +86,15 @@ describe('joinRepo', { timeout: 20_000 }, () => {
     expect(branchIn(path)).toBe('feat/x')
   })
 
-  it('starts the lane in main when worktrees are off and main is free', async () => {
+  it('starts the lane in the primary checkout when worktrees are off and it is free', async () => {
     const { api, state } = await setup()
     expect(await joinRepo(await state(), 'y', false)).toBe(api)
     expect(branchIn(api)).toBe('y')
   })
 
-  it('refuses main when another lane holds it', async () => {
+  it('refuses the primary checkout when another lane holds it', async () => {
     const { api, state } = await setup()
     run(api, 'checkout', '-q', '-b', 'other')
-    await expect(joinRepo(await state(), 'y', false)).rejects.toThrow(/main checkout is busy/)
+    await expect(joinRepo(await state(), 'y', false)).rejects.toThrow(/primary checkout is busy/)
   })
 })

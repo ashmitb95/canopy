@@ -6,7 +6,7 @@ import { readConfig } from './config'
 import { deriveLanes } from './lanes'
 import type { LaneMemory } from './memory'
 import type { RepoState } from './state'
-import { joinRepo, moveIntoMain, moveToWorktree, SwitchError } from './switch'
+import { joinRepo, moveIntoPrimary, moveToWorktree, SwitchError } from './switch'
 import type { LaneTracker } from './tracker'
 import { warmUp } from './warmup'
 
@@ -24,7 +24,7 @@ const inside = (root: string, path: string) => path === root || path.startsWith(
 export class LaneCoordinator {
   constructor(private readonly deps: CoordinatorDeps) {}
 
-  /** Creates a lane in the given repos, in worktrees (warmed up) or in the main checkouts. */
+  /** Creates a lane in the given repos, in worktrees (warmed up) or in the primary checkouts. */
   async newLane(name: string, repoNames: string[], options: { worktrees: boolean; goal?: string }): Promise<void> {
     const { tracker, memory } = this.deps
     memory.ensure(name)
@@ -38,21 +38,21 @@ export class LaneCoordinator {
     await tracker.refresh()
   }
 
-  /** Brings the lane into the main checkout of every repo it is in; lanes there move to worktrees and are warmed up. */
-  async moveIntoMain(lane: string): Promise<string[]> {
+  /** Brings the lane into the primary checkout of every repo it is in; lanes there move to worktrees and are warmed up. */
+  async moveIntoPrimary(lane: string): Promise<string[]> {
     const { tracker } = this.deps
     await tracker.refresh()
     const repos = this.reposOf(lane)
     if (repos.length === 0) throw new SwitchError(`${lane} has no checkout to move.`)
     const holders = repos.flatMap((repo) => {
-      const branch = repo.checkouts.find((checkout) => checkout.main)?.branch
+      const branch = repo.checkouts.find((checkout) => checkout.primary)?.branch
       return branch && branch !== repo.base && branch !== lane ? [branch] : []
     })
     this.assertIdle([lane, ...holders])
     const lines: string[] = []
     for (const repo of repos) {
-      const result = await moveIntoMain(repo, lane)
-      lines.push(`${lane} took ${repo.name}/ main`)
+      const result = await moveIntoPrimary(repo, lane)
+      lines.push(`${lane} moved to the primary checkout of ${repo.name}/`)
       if (result.movedOut && result.worktree) {
         lines.push(`${result.movedOut} moved to ${this.rel(result.worktree)}`)
         void this.warm(repo, result.movedOut, result.worktree)
@@ -62,12 +62,12 @@ export class LaneCoordinator {
     return lines
   }
 
-  /** Moves the lane out of every main checkout it holds; main goes back to base. */
+  /** Moves the lane out of every primary checkout it holds; the base branch goes back in. */
   async moveToWorktree(lane: string): Promise<string[]> {
     const { tracker } = this.deps
     await tracker.refresh()
-    const repos = tracker.repos.filter((repo) => repo.checkouts.some((checkout) => checkout.main && checkout.branch === lane))
-    if (repos.length === 0) throw new SwitchError(`${lane} holds no main checkout.`)
+    const repos = tracker.repos.filter((repo) => repo.checkouts.some((checkout) => checkout.primary && checkout.branch === lane))
+    if (repos.length === 0) throw new SwitchError(`${lane} holds no primary checkout.`)
     this.assertIdle([lane])
     const lines: string[] = []
     for (const repo of repos) {
@@ -118,8 +118,8 @@ export class LaneCoordinator {
   private async warm(repo: RepoState, lane: string, path: string): Promise<void> {
     const { tracker, memory, manager } = this.deps
     const config = readConfig(tracker.root)
-    const main = repo.checkouts.find((checkout) => checkout.main)?.path ?? repo.path
-    const result = await warmUp(main, path, config.envFiles, config.setup[repo.name], await this.deps.env())
+    const primary = repo.checkouts.find((checkout) => checkout.primary)?.path ?? repo.path
+    const result = await warmUp(primary, path, config.envFiles, config.setup[repo.name], await this.deps.env())
     memory.appendHistory(lane, { event: 'warmed', repo: repo.name, copied: result.copied, ok: result.setup?.ok ?? true })
     if (result.setup && !result.setup.ok) {
       for (const record of this.chatsOn([lane])) {

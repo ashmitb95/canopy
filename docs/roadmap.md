@@ -104,11 +104,11 @@ Proved in `poc/swap.ts` with real repos: the preflight states, multi-repo all-or
 
 The target is in [ui-spec.md](ui-spec.md).
 
-- A collapsible **Lanes** section above **Sessions** in the primary sidebar, and a full view in an editor tab. Main is the most prominent element; warm lanes are one click from moving into main; cold lanes stay folded away.
+- A collapsible **Lanes** section above **Sessions** in the primary sidebar, and a full view in an editor tab. The primary checkout is the most prominent element; warm lanes are one click from moving into it; cold lanes stay folded away.
 - Session rows show state, active provider, current activity, lane, and time: needs input (with the request and inline actions), working, waiting, finished, failed, idle.
 - Both become webviews, because a native tree cannot show this. Keyboard navigation and context menus must carry over.
 - New status data: a current-activity line summarized from each provider's tool events.
-- Show what changed in main to chats on other lanes, on their next turn.
+- Show what changed in the primary checkout to chats on other lanes, on their next turn.
 - Park a warm lane as cold, after checking for uncommitted work.
 
 ## 4. New Worktree

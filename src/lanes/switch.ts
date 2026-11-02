@@ -59,29 +59,29 @@ async function unstash(path: string, message: string | undefined): Promise<void>
 
 export type MoveResult = { movedOut?: string; worktree?: string }
 
-/** Brings `lane` into the repo's main checkout. The lane holding main moves to a worktree; uncommitted work travels with each lane. */
-export async function moveIntoMain(repo: RepoState, lane: string): Promise<MoveResult> {
-  const main = repo.checkouts.find((checkout) => checkout.main)
-  if (!main) throw new SwitchError(`${repo.name} has no main checkout.`)
-  if (main.branch === lane) return {}
+/** Brings `lane` into the repo's primary checkout. The lane holding it moves to a worktree; uncommitted work travels with each lane. */
+export async function moveIntoPrimary(repo: RepoState, lane: string): Promise<MoveResult> {
+  const primary = repo.checkouts.find((checkout) => checkout.primary)
+  if (!primary) throw new SwitchError(`${repo.name} has no primary checkout.`)
+  if (primary.branch === lane) return {}
   await excludeWorktrees(repo.path)
-  const holder = main.branch && main.branch !== repo.base ? main.branch : undefined
-  if (!holder && (await isDirty(main.path))) {
+  const holder = primary.branch && primary.branch !== repo.base ? primary.branch : undefined
+  if (!holder && (await isDirty(primary.path))) {
     throw new SwitchError(
-      `${repo.name} has uncommitted changes on ${main.branch ?? 'a detached HEAD'}. Commit or stash them, then move ${lane} in.`
+      `${repo.name} has uncommitted changes on ${primary.branch ?? 'a detached HEAD'}. Commit or stash them, then move ${lane} in.`
     )
   }
-  const heldWork = holder ? await stash(main.path, holder) : undefined
-  const own = repo.checkouts.find((checkout) => !checkout.main && checkout.branch === lane)
+  const heldWork = holder ? await stash(primary.path, holder) : undefined
+  const own = repo.checkouts.find((checkout) => !checkout.primary && checkout.branch === lane)
   let laneWork: string | undefined
   if (own) {
     laneWork = await stash(own.path, lane)
     // A branch cannot be checked out twice; its worktree goes, its work came along in the stash.
     await git(repo.path, ['worktree', 'remove', own.path])
   }
-  if (await branchExists(repo.path, lane)) await git(main.path, ['checkout', lane])
-  else await git(main.path, ['checkout', '-b', lane, repo.base ?? 'HEAD'])
-  await unstash(main.path, laneWork)
+  if (await branchExists(repo.path, lane)) await git(primary.path, ['checkout', lane])
+  else await git(primary.path, ['checkout', '-b', lane, repo.base ?? 'HEAD'])
+  await unstash(primary.path, laneWork)
   if (!holder) return {}
   const worktree = worktreePath(repo.path, holder)
   await git(repo.path, ['worktree', 'add', worktree, holder])
@@ -89,10 +89,10 @@ export async function moveIntoMain(repo: RepoState, lane: string): Promise<MoveR
   return { movedOut: holder, worktree }
 }
 
-/** Moves `lane` out of the main checkout into its worktree (main goes back to base); for a parked lane, makes the worktree. */
+/** Moves `lane` out of the primary checkout into its worktree (the base branch goes back in); for a parked lane, makes the worktree. */
 export async function moveToWorktree(repo: RepoState, lane: string): Promise<string> {
-  const main = repo.checkouts.find((checkout) => checkout.main)
-  if (main?.branch !== lane) {
+  const primary = repo.checkouts.find((checkout) => checkout.primary)
+  if (primary?.branch !== lane) {
     const existing = repo.checkouts.find((checkout) => checkout.branch === lane)
     if (existing) return existing.path
     if (!(await branchExists(repo.path, lane))) throw new SwitchError(`${repo.name} has no branch ${lane}.`)
@@ -101,17 +101,17 @@ export async function moveToWorktree(repo: RepoState, lane: string): Promise<str
     await git(repo.path, ['worktree', 'add', worktree, lane])
     return worktree
   }
-  if (!repo.base) throw new SwitchError(`${repo.name} has no base branch to put back in main.`)
+  if (!repo.base) throw new SwitchError(`${repo.name} has no base branch to put back in the primary checkout.`)
   await excludeWorktrees(repo.path)
-  const work = await stash(main.path, lane)
-  await git(main.path, ['checkout', repo.base])
+  const work = await stash(primary.path, lane)
+  await git(primary.path, ['checkout', repo.base])
   const worktree = worktreePath(repo.path, lane)
   await git(repo.path, ['worktree', 'add', worktree, lane])
   await unstash(worktree, work)
   return worktree
 }
 
-/** Starts `lane` in a repo: in a worktree, or (worktrees off) in the main checkout when that is clean and on base. */
+/** Starts `lane` in a repo: in a worktree, or (worktrees off) in the primary checkout when that is clean and on base. */
 export async function joinRepo(repo: RepoState, lane: string, worktrees: boolean): Promise<string> {
   const existing = repo.checkouts.find((checkout) => checkout.branch === lane)
   if (existing) return existing.path
@@ -122,13 +122,13 @@ export async function joinRepo(repo: RepoState, lane: string, worktrees: boolean
     await git(repo.path, exists ? ['worktree', 'add', worktree, lane] : ['worktree', 'add', '-b', lane, worktree, repo.base ?? 'HEAD'])
     return worktree
   }
-  const main = repo.checkouts.find((checkout) => checkout.main)
-  if (!main) throw new SwitchError(`${repo.name} has no main checkout.`)
-  if (main.branch !== repo.base || (await isDirty(main.path))) {
+  const primary = repo.checkouts.find((checkout) => checkout.primary)
+  if (!primary) throw new SwitchError(`${repo.name} has no primary checkout.`)
+  if (primary.branch !== repo.base || (await isDirty(primary.path))) {
     throw new SwitchError(
-      `${repo.name}'s main checkout is busy (${main.branch ?? 'detached HEAD'}). Move ${lane} into main from AgentDeck, or turn worktrees on for this lane.`
+      `${repo.name}'s primary checkout is busy (${primary.branch ?? 'detached HEAD'}). Move ${lane} to the primary checkout from AgentDeck, or turn worktrees on for this lane.`
     )
   }
-  await git(main.path, exists ? ['checkout', lane] : ['checkout', '-b', lane])
-  return main.path
+  await git(primary.path, exists ? ['checkout', lane] : ['checkout', '-b', lane])
+  return primary.path
 }

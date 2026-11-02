@@ -60,7 +60,7 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
     expect(memory.worktrees('x')).toBe(true)
   })
 
-  it('swaps a lane into main, tells its chats, and refuses while a chat on it runs', async () => {
+  it('swaps a lane into the primary checkout, tells its chats, and refuses while a chat on it runs', async () => {
     const { api, manager, sessions, coordinator } = await setup()
     await coordinator.newLane('a', ['api'], { worktrees: false })
     await coordinator.newLane('b', ['api'], { worktrees: true })
@@ -69,13 +69,13 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
     const seen = notices(manager, chat.id)
 
     await manager.prompt(chat.id, text('work'))
-    await expect(coordinator.moveIntoMain('b')).rejects.toThrow(/to finish its turn/)
+    await expect(coordinator.moveIntoPrimary('b')).rejects.toThrow(/to finish its turn/)
     sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended' })
 
-    const lines = await coordinator.moveIntoMain('b')
-    expect(lines).toEqual(['b took api/ main', 'a moved to api/.worktrees/a'])
+    const lines = await coordinator.moveIntoPrimary('b')
+    expect(lines).toEqual(['b moved to the primary checkout of api/', 'a moved to api/.worktrees/a'])
     expect(run(api, 'branch', '--show-current').trim()).toBe('b')
-    expect(seen).toContain('↪ b took api/ main · a moved to api/.worktrees/a')
+    expect(seen).toContain('↪ b moved to the primary checkout of api/ · a moved to api/.worktrees/a')
 
     expect(await coordinator.moveToWorktree('b')).toEqual(['b moved to api/.worktrees/b'])
     expect(run(api, 'branch', '--show-current').trim()).toBe('main')

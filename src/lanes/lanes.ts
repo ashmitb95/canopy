@@ -1,7 +1,7 @@
 import { sep } from 'node:path'
 import type { RepoState } from './state'
 
-export type LaneRepo = { repo: string; location: 'main' | 'worktree'; path: string; dirty: number; head?: string }
+export type LaneRepo = { repo: string; location: 'primary' | 'worktree'; path: string; dirty: number; head?: string }
 
 /** A lane is a branch: where it is checked out in each repo is read from Git, never stored. */
 export type Lane = { name: string; repos: LaneRepo[] }
@@ -25,7 +25,7 @@ export function deriveLanes(repos: RepoState[], linked: Iterable<string> = []): 
       if (!onLane(repo, checkout.branch)) continue
       lane(checkout.branch).repos.push({
         repo: repo.name,
-        location: checkout.main ? 'main' : 'worktree',
+        location: checkout.primary ? 'primary' : 'worktree',
         path: checkout.path,
         dirty: checkout.dirty,
         ...(checkout.head ? { head: checkout.head } : {})
@@ -75,7 +75,7 @@ export function laneMoves(before: Lane[], after: Lane[]): LaneMove[] {
   return moves
 }
 
-/** "api main ●2 · ui worktree": where the lane's code lives in each repo, with uncommitted files. */
+/** "api primary ●2 · ui worktree": where the lane's code lives in each repo, with uncommitted files. */
 export function laneDescription(lane: Lane): string {
   if (lane.repos.length === 0) return 'no checkout'
   return lane.repos.map((repo) => `${repo.repo} ${repo.location}${repo.dirty > 0 ? ` ●${repo.dirty}` : ''}`).join(' · ')

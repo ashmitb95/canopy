@@ -11,7 +11,7 @@ AgentDeck runs each provider through its official CLI: your installed `claude`, 
 - **The agent's work, readable.** Streaming replies, reasoning, tool cards, nested subagent steps, diffs, plans, LaTeX, and Mermaid.
 - **Questions and approvals.** Answer questions, review plans, and allow or deny actions from the chat.
 - **Controls.** Model, permission mode, and reasoning effort; steer a running turn; queue and edit messages; see context use and compact.
-- **Lanes.** Chats on a branch share its goal, plan, and notes. Move a lane into your main checkout or out to a warm worktree, with its uncommitted work. Only one chat writes per lane, and writes stay inside the lane.
+- **Lanes.** Chats on a branch share its goal, plan, and notes. Move a lane into your primary checkout or out to a warm worktree, with its uncommitted work. Only one chat writes per lane, and writes stay inside the lane.
 - **Hand-offs.** Pass work to a Research, Plan, Build, or Review chat, with any provider.
 - **Notifications.** Native sound and popups when a chat finishes, fails, or needs you.
 - **MCP.** See every server's state and tools, and sign in from the chat.

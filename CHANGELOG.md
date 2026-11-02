@@ -12,5 +12,5 @@ First usable release.
 - Follows the active VS Code theme, including high-contrast themes.
 - Questions, plan review, and Auto mode; reasoning effort, steering, drafts, and prompt history.
 - Fork, rewind, unread markers, and native notifications.
-- Lanes: Git-derived tracking, lane memory and briefs, moving lanes between main and worktrees, one writer per lane, write boundaries, and hand-offs.
+- Lanes: Git-derived tracking, lane memory and briefs, moving lanes between the primary checkout and worktrees, one writer per lane, write boundaries, and hand-offs.
 - ACP agents: Grok, Cursor, OpenCode, Gemini, and custom agents.

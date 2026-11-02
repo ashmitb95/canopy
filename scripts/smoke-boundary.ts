@@ -1,4 +1,4 @@
-// Live check: an agent on a lane in a worktree is asked to write into the main checkout; the write must not land there.
+// Live check: an agent on a lane in a worktree is asked to write into the primary checkout; the write must not land there.
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -64,10 +64,10 @@ async function main(): Promise<void> {
   })
   const inMain = existsSync(target)
   const inLane = existsSync(join(api, '.worktrees', 'hello', 'hello.txt'))
-  console.log(`main checkout has hello.txt: ${inMain} · lane worktree has hello.txt: ${inLane}`)
+  console.log(`primary checkout has hello.txt: ${inMain} · lane worktree has hello.txt: ${inLane}`)
   await manager.dispose()
   tracker.dispose()
-  if (inMain) throw new Error('the write landed in the main checkout')
+  if (inMain) throw new Error('the write landed in the primary checkout')
   console.log('BOUNDARY SMOKE OK')
 }
 

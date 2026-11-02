@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { captureEnv } from '../src/env'
 import { findClaude } from '../src/providers/claude/locate'
-import { claudeEnv } from '../src/providers/claude/provider'
 
 const OUT = 'test/fixtures/claude/edit-turn.jsonl'
 
@@ -22,7 +21,7 @@ async function main(): Promise<void> {
     options: {
       pathToClaudeCodeExecutable: cli,
       cwd,
-      env: claudeEnv(env),
+      env,
       includePartialMessages: true,
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       settingSources: [],

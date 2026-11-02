@@ -5,7 +5,7 @@ import type { Lane, LaneRepo } from './lanes'
 const MAX_EARLIER = 5
 
 const RULES =
-  'Rules: edit only inside the code paths above. Do not switch branches in main checkouts. Keep plan.md current as steps finish; add decisions and findings to notes.md as "- " bullets.'
+  'Rules: edit only inside the code paths above. Do not switch branches in primary checkouts. Keep plan.md current as steps finish; add decisions and findings to notes.md as "- " bullets.'
 
 export type BriefInput = {
   root: string
@@ -19,7 +19,7 @@ export type BriefInput = {
 function where(root: string, repo: LaneRepo): string {
   const path = relative(root, repo.path) || '.'
   const state = repo.dirty > 0 ? `${repo.dirty} uncommitted` : 'clean'
-  return repo.location === 'main' ? `${path}/ (main checkout, ${state})` : `${path} (worktree, ${state})`
+  return repo.location === 'primary' ? `${path}/ (primary checkout, ${state})` : `${path} (worktree, ${state})`
 }
 
 /** The first-turn brief: pointers, not content; the agent reads what it needs. */

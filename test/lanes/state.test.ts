@@ -7,7 +7,7 @@ import { repo, run, workspace } from './repos'
 
 // Real git under full-suite load exceeds the default 5s.
 describe('parseWorktrees', { timeout: 20_000 }, () => {
-  it('reads the main checkout first, branches, detached heads, and skips bare entries', () => {
+  it('reads the primary checkout first, branches, detached heads, and skips bare entries', () => {
     const text = [
       'worktree /w/api\nHEAD aaa\nbranch refs/heads/retry-fix\n',
       'worktree /w/api/.worktrees/auth\nHEAD bbb\nbranch refs/heads/feat/auth\n',
@@ -15,9 +15,9 @@ describe('parseWorktrees', { timeout: 20_000 }, () => {
       'worktree /w/bare\nbare\n'
     ].join('\n')
     expect(parseWorktrees(text)).toEqual([
-      { path: '/w/api', main: true, head: 'aaa', branch: 'retry-fix' },
-      { path: '/w/api/.worktrees/auth', main: false, head: 'bbb', branch: 'feat/auth' },
-      { path: '/w/api/.worktrees/old', main: false, head: 'ccc' }
+      { path: '/w/api', primary: true, head: 'aaa', branch: 'retry-fix' },
+      { path: '/w/api/.worktrees/auth', primary: false, head: 'bbb', branch: 'feat/auth' },
+      { path: '/w/api/.worktrees/old', primary: false, head: 'ccc' }
     ])
   })
 })
@@ -53,8 +53,8 @@ describe('readRepo', { timeout: 20_000 }, () => {
       name: 'api',
       base: 'main',
       checkouts: [
-        { path: api, main: true, head: expect.stringMatching(/^[0-9a-f]{40}$/), branch: 'retry-fix', dirty: 2 },
-        { path: join(api, '.worktrees', 'auth'), main: false, head: expect.stringMatching(/^[0-9a-f]{40}$/), branch: 'auth', dirty: 0 }
+        { path: api, primary: true, head: expect.stringMatching(/^[0-9a-f]{40}$/), branch: 'retry-fix', dirty: 2 },
+        { path: join(api, '.worktrees', 'auth'), primary: false, head: expect.stringMatching(/^[0-9a-f]{40}$/), branch: 'auth', dirty: 0 }
       ]
     })
   })

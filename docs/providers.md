@@ -8,7 +8,7 @@ Adapters translate CLI output to `SessionItem`s and encode `PromptPart[]` back. 
 
 Agent SDK pointed at the newest official CLI: `claude` on PATH or the one in the Claude Code extension, whichever reports the higher version.
 
-- `ANTHROPIC_API_KEY` is removed from the child environment, which keeps the CLI on the user's own sign-in.
+- The CLI's environment passes through untouched, so the CLI decides how it signs in. The session reports the method as a `signIn` fact, and posts a notice when usage is billed to an API key.
 - A permission `allow` must include `updatedInput`, although the SDK types mark it optional.
 - Boundary: a PreToolUse hook, which runs in every mode and also blocks `git checkout` and `git switch`.
 - Effort: `applyFlagSettings({ effortLevel })`. Steering: push into the streaming input.

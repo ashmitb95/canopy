@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { ProviderSession, SessionItem, WriteBoundary } from '../src/core/types'
 import { captureEnv, type Env } from '../src/env'
 import { providers } from '../src/providers/registry'
-import { startToolServer, type ToolServer } from './tool-server'
+import { startToolServer, type Tool, type ToolServer } from './tool-server'
 
 const TURN_MS = 240_000
 const git = (cwd: string, args: string[], env?: NodeJS.ProcessEnv) => execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, ...env } }).trim()
@@ -41,7 +41,7 @@ type Delegation = { provider: string; task: string; doneWhen: string }
 
 const READ_ONLY: WriteBoundary = { roots: [], except: [], outside: async () => 'Your role is read-only here. Do not edit files: delegate the edit, or report what should change.' }
 
-class Group {
+export class Group {
   readonly ledger: Entry[] = []
   private readonly sessions = new Map<string, ProviderSession>()
   private readonly cursors = new Map<string, number>()
@@ -57,7 +57,8 @@ class Group {
     readonly repo: string,
     private readonly env: Env,
     readonly roster: Record<string, string>,
-    readonly writer: string
+    readonly writer: string,
+    extraTools: Tool[] = []
   ) {
     this.server = startToolServer([
       {
@@ -86,7 +87,8 @@ class Group {
           this.escalations.push(String(args.question))
           return 'Sent to the user. End your turn now.'
         }
-      }
+      },
+      ...extraTools
     ])
   }
 
@@ -100,6 +102,11 @@ class Group {
     this.sessions.set(provider, session)
     this.nativeIds.set(provider, session.nativeId)
     return session
+  }
+
+  /** Starts an agent's CLI ahead of its first turn, so it and its helpers are not counted as that turn's work. */
+  async ready(provider: string): Promise<ProviderSession> {
+    return this.session(provider)
   }
 
   async drop(provider: string): Promise<void> {
@@ -178,7 +185,7 @@ class Group {
   }
 }
 
-function tempRepo(): string {
+export function tempRepo(): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-group-')))
   git(dir, ['init', '-q', '-b', 'main'])
   git(dir, ['config', 'user.email', 'poc@example.com'])
@@ -487,4 +494,4 @@ async function main(): Promise<void> {
   process.exit(0)
 }
 
-void main()
+if (process.argv[1]?.endsWith('poc-group.js')) void main()

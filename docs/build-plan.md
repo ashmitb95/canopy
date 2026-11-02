@@ -1,116 +1,98 @@
 # Build plan
 
-How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built. Each phase delivers its foundation and its UI together, so it can be used and judged when it lands, with one finishing pass at the end. Each phase gets its own detailed plan before work starts, and proof-of-concept code in `poc/` is rewritten into `src/` with tests, not copied.
+How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing first, then the UI on top of it. Each phase gets its own detailed plan before work starts, and proof-of-concept code in `poc/` is rewritten into `src/` with tests, not copied.
 
-Every phase ends with `pnpm check` passing, the webview checked by screenshot in light and dark, and a manual pass in VS Code for what screenshots cannot show.
+## Principles
+
+- **A headless core.** Orchestration lives in modules that do not import `vscode`, as `src/lanes/` and `src/sessions/` already do. Everything the UI will do is a call on the core, and everything it will show is an event or state from the core.
+- **No UI work until phase 7.** The current UI stays as it is and is not extended. It may lag behind or lose features while the core changes; use the last packaged build for day-to-day work until then.
+- **Provable without a window.** Every phase ends with `pnpm check` passing and live scripts against real CLIs. Phase 2 adds a terminal driver, so real features can run through the core long before there is a UI for it.
 
 ## Phase 0: Ground work
 
 - Private GitHub repository; merge `poc/group-chat` and `mvp` into `main`.
-- Say "primary checkout" everywhere, in code and UI.
-- Claude terms: stop removing `ANTHROPIC_API_KEY`, label the provider "Claude Agent" outside menus titled "Agents", show the sign-in method, add third-party notices.
-- Clearer sign-in state: a repeated rate limit suggests signing in again.
+- Say "primary checkout" in code and docs.
+- Claude terms in the provider: stop removing `ANTHROPIC_API_KEY`, and report the sign-in method as a fact.
 
-**UI:** small label changes only.
-**Done when:** existing features still work, renamed, and the repository has a remote.
+**Done when:** tests pass on `main`, and the repository has a remote.
 
-## Phase 1: Sidebar and session states
+## Phase 1: Lanes engine
 
-Replace the native Sessions tree with a webview, because the design needs what a tree cannot show.
+- Switching as a transaction, from `poc/swap.ts`: preflight, snapshot, swap, verify, rollback, recovery journal.
+- Generic worktree slots with occupancy derived from Git; migrate lane-named worktrees already in use.
+- New worktree: reuse a free slot, warm it, rerun setup only when a lockfile changes.
+- Warm, cold, and parked lanes. Multi-repo lanes whose primary checkouts hold different lanes are designed and handled here.
 
-- Session rows with state, provider, current activity, lane, and time.
-- Attention events drive the rows; needs-input rows get inline actions.
-- Keyboard navigation and context menus carried over from the tree.
-- Palette support, since this surface now follows `agentdeck.palette`.
+**Done when:** every preflight state works, including in a real project with a running dev server, driven from scripts.
 
-**UI:** the Sessions half of the sidebar (`Side.dc.html`).
-**Done when:** the webview does everything the tree did, and a session's state is readable at a glance. It comes first because every later phase draws on this sidebar.
+## Phase 2: Chat core
 
-## Phase 2: Reliable switching and the lane view
-
-- Move switching to the transaction proved in `poc/swap.ts`: preflight, snapshot, swap, verify, rollback, recovery journal.
-- Generic worktree slots, with occupancy derived from Git; migrate lane-named worktrees already in use.
-- Warm, cold, and parked lanes; rerun setup only when a lockfile changes.
-
-**UI:** the Lanes section, the lane view (`Lanes.dc.html`), the switch action, questions for each state preflight asks about, and an offer to finish or undo after a crash.
-**Done when:** every preflight state works in a real project with a running dev server, which the proof of concept did not cover.
-
-## Phase 3: New Worktree and setup
-
-- One-action New Worktree, reusing a free slot.
-- First-run setup: connect agents, workspace settings.
-
-**UI:** `NewLane.dc.html`, `Main.dc.html`, and `Workspace.dc.html`. The roster step waits for phase 5.
-**Done when:** a new user reaches a working chat on a new lane from setup alone.
-
-## Phase 4: Group chat core
-
-No delegation yet: the user directs every agent with `@mentions`.
-
-- One chat over one session per provider; the journal records who produced each item.
+- One chat over one session per provider; the journal records who produced each item. Existing chats migrate.
 - The ledger, read cursors, and catch-up.
-- `@mention` routing and delivery: steer where the provider can, otherwise deliver at the end of the turn, with Stop and send now.
-- Turn-taking and the Now and Next queue.
-- Session migration, so existing single-provider chats keep working.
+- `@mention` routing and delivery by agent state: steer, end of turn, stop and send, paused, queued, finished.
+- Turn-taking and the queue.
+- The core's event and state API, designed for the screens in the UI spec.
+- A terminal driver: chat, mention, answer, and watch the stream from a terminal.
 
-**UI:** provider avatars on replies, takeover markers, the `@` menu, the queue, and a composer that says who gets the message and when.
-**Done when:** a feature can be built by mentioning agents by hand. This is the largest change to existing code, and the first point where real feature work runs through it.
+**Done when:** a small real feature is built by mentioning agents by hand through the driver. This is the largest change to existing code.
 
-## Phase 5: Delegation and the roster
+## Phase 3: Delegation
 
-- The local tool server for all providers, and the `delegate` tool.
-- Roster settings, and the lead's brief.
+- One local tool server for all providers, and the `delegate` tool.
+- Roster configuration, and the lead's brief.
 - The end-turn-and-wake flow. Detect a lead that says it will delegate but does not, and nudge it once.
-- Role enforcement with the write block, the `git status` backstop, and undo.
-- Handoffs: ledger views, recorded facts, reports with a status line, and saved transcripts.
-- Narration instruction for delegates.
+- Enforced roles: write block, `git status` backstop, undo.
+- Handoffs as ledger views: recorded facts, reports with a status line, saved transcripts.
+- Narration instruction, and the compact stream from `poc/rolling.ts` as data for the UI.
 
-**UI:** the roster screen (`Roster.dc.html`), the delegate card, its rolling window (`Rolling.dc.html`), and the handoff panel (`Chat.dc.html`).
-**Done when:** a lead delegates by roster on a real feature, on all three providers, and the user can follow it live.
+**Done when:** a lead delegates by roster on a real feature, on all three providers, through the driver. This is the first real test of handoff quality on larger work, and it may change later phases.
 
-## Phase 6: The lead in charge
+## Phase 4: The lead in charge
 
-- Settling: open tool calls, process tree, working directories, and a helper ignore list per provider.
+- Settling: open tool calls, process tree, working directories, a helper ignore list per provider.
 - A verification turn for delegates that started background work.
 - Lead events and tools: finished, overdue, server left running; message, stop.
-- Permissions always to the user. Questions to the lead first, with a limit on rounds, and a setting to send them all to the user.
-- Requests pending across a restart. Structured questions, and mentions to paused or queued delegates, which the proof of concept did not cover.
-- Quota: usage beside each role, warnings before delegating, Grok's source if one exists, and a clear state at a limit with no automatic switch.
+- Permissions always to the user. Questions to the lead first, with a limit on rounds and a setting to send them all to the user. Structured questions and requests pending across a restart.
+- Quota as a fact on each provider, warnings before delegating, Grok's source if one exists, and a clear state at a limit, with no automatic switch.
 
-**UI:** every delegate state in the spec, Change answer, and overdue and left-running actions.
-**Done when:** a long feature runs with failures, questions, and limits, and the user stays in control.
+**Done when:** a long feature runs with failures, questions, and limits, and the user stays in control from the driver.
 
-## Phase 7: Review and integrations
+## Phase 5: Review data and integrations
 
 - Per-delegate snapshots, diffs, and undo.
-- Review before moving to the primary checkout or creating a pull request.
-- GitHub through `gh`; Linear with an API key in SecretStorage. The credentials rule in `AGENTS.md` changes here.
+- Who-did-what data for review; create a pull request.
+- GitHub through `gh`; Linear with an API key in SecretStorage. The credentials rule in `AGENTS.md` changes here. Issues seed the lane.
 
-**UI:** `Review.dc.html`, the issue picker in New Worktree, and the integrations in Workspace.
-**Done when:** an issue goes to a reviewed change without leaving AgentDeck.
+**Done when:** an issue goes to a reviewed change through the driver.
 
-## Phase 8: UI finishing pass
+## Phase 6: Hardening the core
 
-Only consistency work; each screen exists by now.
+- Failure and restart tests across phases: crash at each step, CLI death, rate limits, bad sign-in.
+- Long sessions, large repos, and event bursts.
+- Windows and remote: support them or state the lack of it.
+- Freeze the core's API for the UI.
 
-- One review of every screen and state against the spec, in Paper and Paper Dark, every palette, popular themes, and high contrast.
-- Narrow sidebars, long names, empty and error states, many lanes, and very long transcripts.
-- Keyboard and screen reader pass, including a rolling window that announces only state changes.
-- Performance of the rolling window under bursts of events, and of long chats.
-- Lanes across repos whose primary checkouts hold different lanes, which is not designed yet: design it first.
+**Done when:** a real feature of your choosing runs end to end on the driver without manual repair.
 
-**Done when:** a walkthrough of every screen finds nothing out of spec.
+## Phase 7: UI
 
-## Phase 9: Release
+The whole UI at once, on the frozen API, from the [UI spec](ui-spec.md), in this order:
 
-Name and logo, code and security review, Windows and remote support or a stated lack of it, tests inside VS Code, Marketplace and Open VSX listings, CI for provider version bumps, and a fresh history for the public repository.
+1. **Shell:** webview sidebar replacing the Sessions tree, with keyboard navigation, context menus, and palettes.
+2. **Chat:** avatars, takeover markers, the `@` menu, queue, composer, delegate cards, rolling window, handoff panel, every delegate state.
+3. **Lanes:** the Lanes section, lane view, switching, preflight questions, crash recovery.
+4. **Setup:** connect agents, roster, workspace, New Worktree.
+5. **Review:** who did what, diffs, undo, the issue picker.
+6. **Finishing:** every screen in every palette and in high contrast, narrow sidebars, empty and error states, screen readers, and performance.
+
+Revisit the mockups before starting: the plumbing will have taught us things they got wrong. Webview checks use screenshots, with a manual pass in VS Code.
+
+**Done when:** a walkthrough of every screen finds nothing out of spec, and the driver is no longer needed for day-to-day work.
+
+## Phase 8: Release
+
+Name and logo, provider labels and notices for Claude's terms, code and security review, tests inside VS Code, Marketplace and Open VSX listings, CI for provider version bumps, and a fresh history for the public repository.
 
 ## After release
 
 Claude connection settings (API key, Bedrock), and parallel agents through separate lanes.
-
-## What this depends on
-
-- The name is needed by phase 9, and sooner for the repository if a working name will not do.
-- Anthropic's answer on subscription use can change phase 9 only; the Claude provider stays separate from the rest.
-- Handoff quality on large features is the main unknown. Phase 4 and phase 5 are the first real tests of it, and may change later phases.

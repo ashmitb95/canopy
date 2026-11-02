@@ -166,7 +166,7 @@ export type ProviderState = {
   account?: string
 }
 
-export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?: string; effort?: string; resumeId?: string; resumeAt?: string }
+export type OpenOptions = { env: Env; cwd: string; mode: PermissionMode; model?: string; effort?: string; resumeId?: string; resumeAt?: string; toolServer?: { name: string; url: string } }
 
 /** Where a user signs in to an MCP server: a web page, or a CLI flow in a terminal. */
 export type McpSignIn = { kind: 'url'; url: string } | { kind: 'terminal'; command: string; hint: string }

@@ -256,7 +256,8 @@ class AcpSession implements ProviderSession {
     this.imagesAccepted = init.agentCapabilities?.promptCapabilities?.image === true
     const method = this.spec.authMethod((init.authMethods ?? []).map((auth) => auth.id), this.options.env)
     if (method) await this.rpc.request('authenticate', { methodId: method })
-    const params = { cwd: this.options.cwd, mcpServers: [] }
+    const tool = this.options.toolServer
+    const params = { cwd: this.options.cwd, mcpServers: tool ? [{ type: 'http', name: tool.name, url: tool.url, headers: [] }] : [] }
     let result: SessionResult
     if (this.options.resumeId && init.agentCapabilities?.loadSession) {
       this.replaying = true

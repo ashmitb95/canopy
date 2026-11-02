@@ -320,7 +320,8 @@ class CodexSession implements ProviderSession {
       capabilities: { experimentalApi: true, requestAttestation: false }
     })
     this.rpc.notify('initialized')
-    const params = { cwd: this.options.cwd, ...policy(this.mode), model: this.options.model ?? null }
+    const tool = this.options.toolServer
+    const params = { cwd: this.options.cwd, ...policy(this.mode), model: this.options.model ?? null, ...(tool ? { config: { mcp_servers: { [tool.name]: { url: tool.url } } } } : {}) }
     const result = this.options.resumeId
       ? await this.rpc.request<{ thread: { id: string }; model: string }>('thread/resume', { ...params, threadId: this.options.resumeId })
       : await this.rpc.request<{ thread: { id: string }; model: string }>('thread/start', params)

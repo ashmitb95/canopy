@@ -174,6 +174,7 @@ class ClaudeSession implements ProviderSession {
         env: claudeEnv(options.env),
         model: options.model,
         ...(options.effort ? { effort: options.effort as EffortLevel } : {}),
+        ...(options.toolServer ? { mcpServers: { [options.toolServer.name]: { type: 'http' as const, url: options.toolServer.url } } } : {}),
         includePartialMessages: true,
         enableFileCheckpointing: true,
         systemPrompt: { type: 'preset', preset: 'claude_code' },

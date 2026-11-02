@@ -25,9 +25,9 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 **Done when:** every preflight state works, including in a real project with a running dev server, driven from scripts.
 
-## Phase 2: Chat core
+## Phase 2: Chat core (done)
 
-- One chat over one session per provider; the journal records who produced each item. Existing chats migrate.
+- One chat over one ordinary session per provider, layered on the session manager, so existing chats need no migration.
 - The ledger, read cursors, and catch-up.
 - `@mention` routing and delivery by agent state: steer, end of turn, stop and send, paused, queued, finished.
 - Turn-taking and the queue.
@@ -43,6 +43,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 - The end-turn-and-wake flow. Detect a lead that says it will delegate but does not, and nudge it once.
 - Enforced roles: write block, `git status` backstop, undo.
 - Handoffs as ledger views: recorded facts, reports with a status line, saved transcripts.
+- Reports show what each agent really ran, and AgentDeck runs a configured verify command itself: in live runs, a reviewer told to run the tests did not always do so.
 - Narration instruction, and the compact stream from `poc/rolling.ts` as data for the UI.
 
 **Done when:** a lead delegates by roster on a real feature, on all three providers, through the driver. This is the first real test of handoff quality on larger work, and it may change later phases.

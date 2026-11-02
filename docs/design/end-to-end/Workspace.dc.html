@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workspace setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#16140F}a:hover{color:#5A5549}
+button{font-family:inherit;cursor:pointer}
+input{font-family:'Geist Mono',monospace}
+</style>
+</helmet>
+<div style="width: 1320px; height: 880px; display: flex; overflow: hidden; background: #F6F3EA; color: #16140F; font-family: Geist, system-ui, sans-serif; font-size: 14px">
+<aside style="flex: none; width: 380px; box-sizing: border-box; padding: 40px; background: #16140F; color: #FFFFFF; display: flex; flex-direction: column">
+<div style="font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">Your code runs in one place.</div>
+<div style="margin-top: 14px; line-height: 1.5; color: #D6D2C6">That's your primary checkout: the repo folder you cloned, with your env files and dev server. Other lanes wait in ready worktrees. Move any lane there to run it, on its own branch and with its uncommitted work.</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+<a href="Main.dc.html" style="height: 40px; display: flex; align-items: center; padding: 0 12px; color: #D6D2C6; text-decoration: none">1 · Connect agents</a>
+<a href="Roster.dc.html" style="height: 40px; display: flex; align-items: center; padding: 0 12px; color: #D6D2C6; text-decoration: none">2 · Who does what</a>
+<div style="height: 40px; display: flex; align-items: center; padding: 0 12px; border-radius: 8px; background: #FFFFFF; color: #16140F; font-weight: 700">3 · Workspace</div>
+</div>
+</aside>
+<main style="flex: 1; min-width: 0; box-sizing: border-box; padding: 40px 48px; display: flex; flex-direction: column; gap: 14px">
+<div><h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em">Set up new worktrees</h1><div style="margin-top: 6px; color: #5A5549">We found these repos in my-workspace, and filled in what we could detect.</div></div>
+<div style="border-radius: 12px; background: #FFFFFF; padding: 4px 16px">
+<div style="min-height: 74px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #EAE5D8"><strong style="width: 60px; font-family: 'Geist Mono', monospace">api</strong><label style="flex: 1; font-size: 12px; color: #5A5549">Setup command<input value="pnpm install" style="display: block; width: 100%; height: 38px; box-sizing: border-box; margin-top: 4px; padding: 0 10px; border-radius: 7px; border: 0; background: #F6F3EA; color: #16140F; font-size: 13px"></label><label style="flex: 1; font-size: 12px; color: #5A5549">Env files to copy<input value=".env*" style="display: block; width: 100%; height: 38px; box-sizing: border-box; margin-top: 4px; padding: 0 10px; border-radius: 7px; border: 0; background: #F6F3EA; color: #16140F; font-size: 13px"></label></div>
+<div style="min-height: 74px; display: flex; align-items: center; gap: 14px"><strong style="width: 60px; font-family: 'Geist Mono', monospace">ui</strong><label style="flex: 1; font-size: 12px; color: #5A5549">Setup command<input value="pnpm install" style="display: block; width: 100%; height: 38px; box-sizing: border-box; margin-top: 4px; padding: 0 10px; border-radius: 7px; border: 0; background: #F6F3EA; color: #16140F; font-size: 13px"></label><label style="flex: 1; font-size: 12px; color: #5A5549">Env files to copy<input value=".env*" style="display: block; width: 100%; height: 38px; box-sizing: border-box; margin-top: 4px; padding: 0 10px; border-radius: 7px; border: 0; background: #F6F3EA; color: #16140F; font-size: 13px"></label></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="padding: 14px; border-radius: 12px; background: #FFFFFF"><div style="font-weight: 700">Issues</div><div style="margin-top: 2px; font-size: 13px; color: #5A5549">Start a lane from an issue. Optional.</div>
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; margin-top: 6px"><span>GitHub <span style="color: #0A5235; font-weight: 600">· via your gh login</span></span><button style="height: 38px; padding: 0 12px; border-radius: 7px; border: 0; background: #EAE5D8; color: #16140F; font-weight: 600">Manage</button></div>
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px"><span>Linear</span><button style="height: 38px; padding: 0 12px; border-radius: 7px; border: 0; background: #16140F; color: #FFFFFF; font-weight: 600">Add API key</button></div></div>
+<div style="padding: 14px; border-radius: 12px; background: #FFFFFF"><div style="font-weight: 700">Colours</div><div style="margin-top: 2px; font-size: 13px; color: #5A5549">Backgrounds and borders follow your VS Code theme.</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px"><sc-for list="{{palettes}}" as="p" hint-placeholder-count="6"><button onClick="{{p.pick}}" aria-pressed="{{p.on}}" style="height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 7px; border: {{p.border}}; background: #F6F3EA; color: #16140F; font-weight: 600"><span style="width: 14px; height: 14px; border-radius: 4px; background: {{p.main}}; flex: none"></span>{{p.name}}</button></sc-for></div></div>
+</div>
+<div style="flex: 1"></div>
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5A5549">Saved to .agentdeck/config.toml</span><a href="NewLane.dc.html" style="height: 48px; display: inline-flex; align-items: center; padding: 0 24px; border-radius: 10px; background: #16140F; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">Finish setup</a></div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
+const P = [['Paper', '#16140F'], ['Peach', '#FFB98A'], ['Lilac', '#C9B4F5'], ['Sage', '#B5D6A0'], ['Sky', '#A6D2F5'], ['Theme', '#8A8778']];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { palette: 'Paper' };
+  }
+
+  renderVals() {
+    const { palette } = this.state;
+    return { palettes: P.map(([name, main]) => ({ name, main, on: name === palette ? 'true' : 'false', border: name === palette ? '2px solid #16140F' : '2px solid #F6F3EA', pick: () => this.setState({ palette: name }) })) };
+  }
+}
+</script>
+</body>
+</html>

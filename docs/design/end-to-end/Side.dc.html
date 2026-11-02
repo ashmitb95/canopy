@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sidebar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 290px; height: {{h}}px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; background: {{t.band}}; color: {{t.text}}; font-family: Geist, system-ui, sans-serif; font-size: 13px">
+<div style="flex: none; height: 38px; display: flex; align-items: center">
+<button aria-expanded="{{open}}" onClick="{{toggle}}" style="flex: 1; height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; background: transparent; color: {{t.text}}; font-family: inherit; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-align: left; cursor: pointer"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="transform: rotate({{angle}}deg)"><path d="M4 2l4 4-4 4"></path></svg>LANES</button>
+<a href="Lanes.dc.html" style="height: 38px; display: inline-flex; align-items: center; padding: 0 8px; color: {{t.text}}; font-size: 12px; font-weight: 600">Lane view</a>
+<a href="NewLane.dc.html" aria-label="New worktree" style="width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; color: {{t.text}}; font-size: 18px; text-decoration: none">+</a>
+</div>
+<sc-if value="{{open}}" hint-placeholder-val="{{ true }}">
+<div style="flex: none; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 4px">
+<div style="padding: 9px 11px; border-radius: 8px; background: {{t.main}}; color: {{t.mainInk}}"><div style="font-size: 10px; font-weight: 800; letter-spacing: 0.08em">PRIMARY CHECKOUT · RUNS HERE</div><div style="font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 600; margin-top: 2px">auth-flow</div></div>
+<sc-for list="{{warm}}" as="l" hint-placeholder-count="2"><div style="height: 38px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 10px; border-radius: 7px; background: {{l.fill}}; border: {{l.border}}"><span style="flex: 1; min-width: 0; font-family: 'Geist Mono', monospace; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{l.name}}</span><span style="font-size: 11px; font-weight: 700">Switch</span></div></sc-for>
+<div style="height: 30px; display: flex; align-items: center; padding: 0 10px; color: {{t.muted}}">2 cold lanes</div>
+</div>
+</sc-if>
+<div style="flex: none; height: 38px; display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em">SESSIONS</div>
+<div style="flex: 1; min-height: 0; overflow: hidden; padding: 0 6px">
+<div style="padding: 10px; border-radius: 8px; background: {{activeBg}}">
+<div style="display: flex; align-items: center; gap: 7px"><span style="width: 14px; height: 14px; border-radius: 4px; background: {{dot}}; flex: none"></span><strong style="flex: 1; font-weight: 600">Export timeouts</strong><span style="color: {{t.muted}}; font-size: 11.5px">now</span></div>
+<div style="margin-top: 6px; display: flex; align-items: center; gap: 6px; font-weight: 600"><span style="width: 18px; height: 18px; border-radius: 5px; background: {{whoBg}}; color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">{{whoLetter}}</span>{{who}}</div>
+<div style="margin-top: 4px; font-size: 12px; color: {{t.muted}}">{{detail}}</div>
+<div style="margin-top: 5px; font-family: 'Geist Mono', monospace; font-size: 11px; color: {{t.muted}}">export-timeouts</div>
+</div>
+<div style="padding: 10px"><div>Sign-in screens</div><div style="margin-top: 3px; font-size: 12px; color: {{t.muted}}">Claude, Codex · idle · 3h ago</div><div style="margin-top: 3px; font-family: 'Geist Mono', monospace; font-size: 11px; color: {{t.muted}}">auth-flow</div></div>
+<div style="padding: 10px"><div>CSV export</div><div style="margin-top: 3px; font-size: 12px; color: {{t.muted}}">Grok · finished · 9m ago</div><div style="margin-top: 3px; font-family: 'Geist Mono', monospace; font-size: 11px; color: {{t.muted}}">billing-export</div></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"h":{"editor":null},"who":{"editor":null},"detail":{"editor":null},"attention":{"editor":null},"$preview":{"width":290,"height":880}}'>
+const T = {
+  light: { band: '#EAE5D8', surface: '#FFFFFF', text: '#16140F', muted: '#5A5549', main: '#16140F', mainInk: '#FFFFFF', needs: '#D6175E', needsBg: '#FBE1EA', working: '#0B6FC2' },
+  dark: { band: '#1E1C18', surface: '#26241F', text: '#F3EFE4', muted: '#B0AA9B', main: '#F3EFE4', mainInk: '#161512', needs: '#FF5C93', needsBg: '#33171F', working: '#6BB8F5' }
+};
+const AVATARS = { Claude: ['C', '#B8603F'], Grok: ['G', '#5B6670'], Codex: ['X', '#4F63C9'] };
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { open: true };
+  }
+
+  renderVals() {
+    const t = T[this.props.dark ? 'dark' : 'light'];
+    const who = this.props.who ?? 'Grok';
+    const attention = Boolean(this.props.attention);
+    const open = this.state.open;
+    return {
+      t, open, h: this.props.h ?? 880, who, detail: this.props.detail ?? 'Editing export.ts',
+      angle: open ? 90 : 0,
+      toggle: () => this.setState({ open: !open }),
+      whoLetter: AVATARS[who][0], whoBg: AVATARS[who][1],
+      activeBg: attention ? t.needsBg : t.surface,
+      dot: attention ? t.needs : t.working,
+      warm: [
+        { name: 'export-timeouts', fill: t.surface, border: `2px solid ${t.main}` },
+        { name: 'billing-export', fill: t.surface, border: `2px solid ${t.surface}` }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

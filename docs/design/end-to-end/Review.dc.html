@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review the work</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#16140F}a:hover{color:#5A5549}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1320px; height: 880px; display: flex; overflow: hidden; background: #F6F3EA; color: #16140F; font-family: Geist, system-ui, sans-serif; font-size: 13px">
+<dc-import name="Side" h="880" who="Claude" detail="Finished · waiting for you" hint-size="290px,880px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+<div style="flex: none; padding: 18px 24px; display: flex; align-items: center; gap: 10px"><div style="flex: 1"><h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.02em">Review: Export timeouts</h1><div style="margin-top: 3px; color: #5A5549"><span style="font-family: 'Geist Mono', monospace">export-timeouts</span> · 5 files · 215 tests passed · nothing merged</div></div><a href="Lanes.dc.html" style="height: 44px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 9px; background: #16140F; color: #FFFFFF; font-weight: 700; text-decoration: none">Run in primary checkout</a><button style="height: 44px; padding: 0 14px; border-radius: 9px; border: 0; background: #DED8C8; color: #16140F; font-weight: 600">Create pull request</button></div>
+<div style="flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 24px 24px">
+<section aria-label="Who did what" style="flex: none; width: 280px; border-radius: 12px; background: #FFFFFF; padding: 14px; overflow: auto">
+<div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #5A5549">WHO DID WHAT</div>
+<sc-for list="{{runs}}" as="r" hint-placeholder-count="3">
+<button onClick="{{r.pick}}" aria-pressed="{{r.on}}" style="width: 100%; margin-top: 8px; padding: 10px; display: flex; gap: 10px; border-radius: 9px; border: {{r.border}}; background: #F6F3EA; color: #16140F; text-align: left"><span style="width: 24px; height: 24px; border-radius: 7px; background: {{r.bg}}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{{r.letter}}</span><span style="flex: 1; min-width: 0"><span style="display: block; font-weight: 700">{{r.name}} · {{r.role}}</span><span style="display: block; margin-top: 2px; color: #5A5549; line-height: 1.35">{{r.summary}}</span></span></button>
+</sc-for>
+</section>
+<section aria-label="Changes" style="flex: 1; min-width: 0; border-radius: 12px; background: #FFFFFF; display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 12px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #EAE5D8"><strong style="flex: 1; font-size: 14px">{{run.title}}</strong><button style="height: 36px; padding: 0 10px; border-radius: 7px; border: 0; background: #EAE5D8; color: #16140F; font-weight: 600">View handoff</button><button style="height: 36px; padding: 0 10px; border-radius: 7px; border: 0; background: #EAE5D8; color: #16140F; font-weight: 600">Undo these changes</button></div>
+<div style="padding: 10px 14px; line-height: 1.45; background: #F6F3EA">{{run.report}}</div>
+<div style="flex: 1; min-height: 0; overflow: auto; padding: 12px 14px; font-family: 'Geist Mono', monospace; font-size: 12px; line-height: 1.7">
+<sc-for list="{{run.files}}" as="f" hint-placeholder-count="2"><div style="padding: 6px 8px; margin-bottom: 4px; display: flex; justify-content: space-between; border-radius: 6px; background: #EAE5D8; font-weight: 600"><span>{{f.path}}</span><span>{{f.diff}}</span></div></sc-for>
+<sc-for list="{{run.diff}}" as="d" hint-placeholder-count="4"><div style="padding: 0 8px; white-space: pre; background: {{d.bg}}; color: {{d.ink}}">{{d.text}}</div></sc-for>
+</div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
+const line = (text) => ({ text, bg: text.startsWith('+') ? '#DDF3E6' : text.startsWith('−') ? '#FBE1E1' : 'transparent', ink: '#16140F' });
+const RUNS = [
+  { name: 'Claude', role: 'Plan', letter: 'C', bg: '#B8603F', summary: 'Found the cause and wrote a 3-step plan.', title: 'Claude · Plan', report: 'export.ts loads every row into memory. Streaming fixes it without changing the response.', files: [{ path: '.agentdeck/lanes/export-timeouts/plan.md', diff: 'plan' }], diff: [] },
+  { name: 'Grok', role: 'Implement', letter: 'G', bg: '#5B6670', summary: 'Streamed rows and fixed retries. 215 tests pass.', title: 'Grok · Implement', report: 'Done. Old endpoint kept. Exports over 1M rows warn first, as you chose.', files: [{ path: 'api/export.ts', diff: '+88 −31' }, { path: 'api/queue.ts', diff: '+12 −4' }], diff: [line('− const rows = await loadAll(invoice)'), line('− return toCsv(rows)'), line('+ const cursor = openCursor(invoice)'), line('+ if (await cursor.count() > 1_000_000) warnLarge(res)'), line('+ return streamCsv(cursor, res)')] },
+  { name: 'Codex', role: 'Review', letter: 'X', bg: '#4F63C9', summary: 'Passes, with 1 note. 1 write blocked.', title: 'Codex · Review', report: 'Passes. One note: exports have no progress indicator.', files: [], diff: [] }
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { run: 1 };
+  }
+
+  renderVals() {
+    return {
+      run: RUNS[this.state.run],
+      runs: RUNS.map((run, index) => ({ ...run, on: index === this.state.run ? 'true' : 'false', border: index === this.state.run ? '2px solid #16140F' : '2px solid #F6F3EA', pick: () => this.setState({ run: index }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

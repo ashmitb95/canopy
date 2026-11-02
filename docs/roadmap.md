@@ -4,71 +4,71 @@ AgentDeck is a multi-agent, multi-provider orchestrator for large features: diff
 
 Planned work, in priority order. [lanes.md](lanes.md) and [architecture.md](architecture.md) describe what exists today.
 
-## 1. Orchestrated chats
+## 1. Group chat across providers
 
-One chat for a feature. Each stage runs on the provider set for it, for example Claude plans and Grok builds, and the harness handles every switch.
+One chat for a feature, where anyone can lead. Providers cannot share a live session, so a chat is a timeline over one provider session per agent, and AgentDeck owns the shared record. [ui-spec.md](ui-spec.md) shows the experience.
 
-Providers cannot share a live session: each keeps its own context in its own format. A chat is therefore a timeline over several provider sessions.
+- **Roster:** the lead and a provider per role (research, plan, implement, review), set per workspace and changeable per chat.
+- **`@mentions`:** AgentDeck routes them directly, with no model involved.
+- **Delegation:** the lead calls a `delegate` tool, served to every provider by one local tool server. Delegates cannot delegate further at first.
+- **Turns:** one agent runs at a time in a lane, so writes need no locks. Others wait in a visible queue. Work that must truly run at once uses separate lanes.
+- **Enforcement:** roles are enforced. Implement is the only writing role by default. Edit tools and sandboxes block the rest; `git status` after each turn catches writes through shell commands, with a notice and an offer to undo. `.agentdeck/` stays writable.
 
-- `SessionRecord` holds one provider session per provider, with the active one marked. The journal records which provider produced each item.
-- The transcript is one conversation, with a marker at each takeover.
-- A provider returning to the chat resumes its own session and receives only the handoffs since it last ran.
-- Chats that use one provider work as they do today. Routing is opt-in per lane.
+### Ledger and handoffs
 
-### Routing
+AgentDeck keeps a ledger of each chat and how far each agent has read. Handoffs are views of it, written without user involvement.
 
-Each stage has a default provider, model, and mode from `[task.<id>]` in `.agentdeck/config.toml`. The composer can override the next stage.
-
-| Event | Default next step |
+| Moment | The agent receives |
 |---|---|
-| Research finished | Plan |
-| Plan approved | Build |
-| Build turn finished, with its plan steps done | Review |
-| Review reports changes needed | Build, up to a set number of rounds |
-| Review passes | Done: notify the user |
+| Lead to delegate | The lead's task and "done when", the user's messages verbatim, roster, lane plan, and everything since it last ran |
+| Delegate to lead | Facts recorded by AgentDeck (diff, commands, test results) and the delegate's report: status, done, not done, decisions, risks, questions |
+| `@mention` | As a delegate; the lead catches up on its next turn |
+| Lead switch | A catch-up, work in progress, and that it now leads |
 
-Stages advance only on these explicit events, never by inference from a message's content. A failed turn, a rate limit, or a pending approval or question stops the chain and tells the user. The user can stop or redirect at any point.
+- `delegate` returns at once and the lead's turn ends. AgentDeck starts the lead's next turn with the report, so no long tool call stays open.
+- A snapshot before each delegate (`git stash create`) gives an exact diff and an undo.
+- The complete transcript is saved as a file the lead can read.
 
-To verify: how to tell "changes needed" from "passes" reliably. Candidates are a required verdict line in the review, or a structured output format.
+### Permissions and questions
 
-### Handoff documents
+- **Permissions and plan approvals:** always the user. A model never grants permission.
+- **Clarifying questions:** the lead first, if the chat covers them, with the answer shown and changeable; otherwise the user. A setting sends them all to the user.
+- **Questions in plain text:** detected through a required status line in the delegate's report (`done`, `blocked`, or `question`).
+- **Loops and limits:** a set number of rounds between two agents stops and asks the user. A lead at its limit passes questions straight to the user. A failed delegate reports to the lead, with no automatic switch to another provider.
 
-The harness writes a document at every switch, without user involvement, to `.agentdeck/lanes/<lane>/handoffs/<n>-<from>-to-<to>.md`. Starting routing on a chat with no lane creates one.
+### Proof of concept
 
-| Layer | Source | Contents |
-|---|---|---|
-| **Facts** | The harness, no model call | The user's messages verbatim, question answers, approvals and denials, commits, diff summary, uncommitted files, commands run and their results, plan progress |
-| **Reasoning** | The outgoing agent, in a hidden turn with a fixed template | Goal, what was done, decisions and why, approaches rejected, what remains, risks, where to look |
-| **Record** | The journal, rendered to a readable file | The stage's complete transcript, for anything the first two layers left out |
+Before building, prove with real CLIs in temporary repos: `delegate` through the tool server from all three providers, the end-turn-and-wake flow, catch-up quality, enforcement and its backstop, snapshots, permissions and each kind of question, requests pending across a restart, and whether a lead invents answers.
 
-- The incoming agent receives the document, stamped with each repo's commit. It can read the record when it needs more, so nothing is out of reach.
-- The hidden turn does not appear in the transcript, and it costs the outgoing provider's usage.
-- If the hidden turn fails or the provider has hit a limit, the document goes out with facts and the record only, and says so.
-- Handoffs replace the current chat summary as the source for handoffs. That summary holds only a file list and the end of the last reply.
+## 2. Reliable lane switching
 
-### Visibility
+A branch can be checked out in only one place, so switching is the main source of friction. The harness treats a switch as a transaction: nothing changes until it can finish, and it can always be undone.
 
-At a glance, the user always knows which provider is doing what:
+1. **Preflight, changing nothing, in every repo:** classify each state below. All repos must pass, or none move.
+2. **Wait:** no affected chat is mid-turn. Queue the switch for the end of the turn, and hold new turns.
+3. **Snapshot:** save both sides' uncommitted work to `refs/agentdeck/` and write a recovery journal.
+4. **Swap:** detach the worktree to free the branch, switch the primary checkout, then give the worktree the outgoing lane and rename it with `git worktree move`. Folders trade branches, keeping installed dependencies. Restore each side's work.
+5. **Verify and settle:** check both sides, rerun setup only where a lockfile changed, tell affected chats, and offer to restart the dev server.
 
-- **Chat header:** a stage rail, such as `Plan · Claude ✓ → Build · Grok (working) → Review · Claude`, with the active stage marked. Its stages can be clicked to jump to that point.
-- **Transcript:** provider avatar on each reply, and a takeover marker with a link to the handoff document.
-- **During a switch:** a visible "Preparing handoff" state.
-- **Sessions and Lanes:** each row shows the active provider, stage, and current activity.
-- **Notifications:** name the stage and provider, and fire when the chain stops or finishes.
+Any failure restores both sides from the snapshot. On startup, an unfinished journal offers to finish or undo.
 
-### Constraints
+| State | Handling |
+|---|---|
+| Both clean, or uncommitted work that applies cleanly | Automatic |
+| Primary checkout on the base branch, clean | Automatic; the base branch needs no worktree |
+| Lockfile or env files differ | Automatic, with setup rerun or a notice |
+| Primary checkout on the base branch with uncommitted work | Ask: make it a lane, or stash it |
+| Untracked file collides with one on the other branch | Ask, naming the files |
+| Branch held by a worktree AgentDeck did not create | Ask |
+| Agent mid-turn | Wait, or offer Stop |
+| Merge, rebase, or cherry-pick in progress, or detached HEAD | Stop and explain |
+| Locked worktree, submodule changes | Stop and explain |
 
-- Controls follow the active provider: model, modes, effort, fork, and rewind differ by provider.
-- Rewind and fork stay within the current provider's stretch at first.
-- This replaces the rule that handoffs never advance on their own. The rule that remains: only explicit events advance them.
-
-## 2. Parallel work
-
-Large features need more than one writer at a time, and a lane allows one. An approved plan splits into tasks, each with a provider, its own branch and worktree under the lane, and a dependency order. Tasks without dependencies run at once, and each gets a handoff document.
-
-To design: how tasks are declared in the plan, who integrates finished branches into the lane and resolves conflicts, how failures affect dependents, and limits on concurrency and usage.
+To prove first, with no agents or quota: every row above in real repos, multi-repo all-or-nothing, and a failure injected at each step. `src/lanes/switch.ts` today removes the worktree, has no preflight or rollback, and can stop partway.
 
 ## 3. Lanes and Sessions redesign
+
+The target is in [ui-spec.md](ui-spec.md).
 
 - A collapsible **Lanes** section above **Sessions** in the primary sidebar, and a full view in an editor tab. Main is the most prominent element; warm lanes are one click from moving into main; cold lanes stay folded away.
 - Session rows show state, active provider, current activity, lane, and time: needs input (with the request and inline actions), working, waiting, finished, failed, idle.
@@ -76,8 +76,6 @@ To design: how tasks are declared in the plan, who integrates finished branches 
 - New status data: a current-activity line summarized from each provider's tool events.
 - Show what changed in main to chats on other lanes, on their next turn.
 - Park a warm lane as cold, after checking for uncommitted work.
-
-Open: the lane layout (spine, stack, rail, or swap board).
 
 ## 4. New Worktree
 

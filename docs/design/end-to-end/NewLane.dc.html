@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New worktree</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#FFFFFF}a:hover{color:#EAE5D8}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1320px; height: 880px; display: flex; overflow: hidden; background: #F6F3EA; color: #16140F; font-family: Geist, system-ui, sans-serif; font-size: 14px">
+<dc-import name="Side" h="880" who="Grok" detail="Finished · waiting" hint-size="290px,880px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 24px">
+<div role="dialog" aria-label="New worktree" style="width: 620px; box-sizing: border-box; padding: 28px; border-radius: 16px; background: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 28px; font-weight: 800; letter-spacing: -0.02em">New worktree</div>
+<div>
+<div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #5A5549">START FROM AN ISSUE (OPTIONAL)</div>
+<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px"><sc-for list="{{issues}}" as="i" hint-placeholder-count="3"><button onClick="{{i.pick}}" aria-pressed="{{i.on}}" style="min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 9px; border: {{i.border}}; background: #F6F3EA; color: #16140F; text-align: left"><span style="font-family: 'Geist Mono', monospace; font-size: 12px; font-weight: 600; flex: none">{{i.id}}</span><span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{i.title}}</span><span style="color: #5A5549; font-size: 12px; flex: none">{{i.source}}</span></button></sc-for></div>
+</div>
+<div style="padding: 12px; border-radius: 9px; background: #F6F3EA"><div style="font-size: 12px; color: #5A5549">Lane and branch</div><div style="margin-top: 3px; font-family: 'Geist Mono', monospace; font-size: 15px; font-weight: 600">{{name}}</div><div style="margin-top: 6px; font-size: 13px; color: #5A5549">{{where}}</div></div>
+<div>
+<div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #5A5549">LEAD</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px"><sc-for list="{{agents}}" as="a" hint-placeholder-count="3"><button onClick="{{a.pick}}" aria-pressed="{{a.on}}" style="height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9px; border: {{a.border}}; background: #F6F3EA; color: #16140F; font-size: 14px; font-weight: 700"><span style="width: 22px; height: 22px; border-radius: 6px; background: {{a.bg}}; color: #fff; font-size: 11px; display: inline-flex; align-items: center; justify-content: center">{{a.letter}}</span>{{a.name}}</button></sc-for></div>
+<div style="margin-top: 8px; font-size: 13px; color: #5A5549">Roster: Research Grok · Plan Claude · Implement Grok · Review Codex. <a href="Roster.dc.html" style="color: #16140F; font-weight: 600">Change</a></div>
+</div>
+<a href="Chat.dc.html" style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: #16140F; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">Create and open chat</a>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
+const ISSUES = [
+  { id: 'ENG-214', title: 'Exports time out on large invoices', source: 'Linear', lane: 'eng-214-export-timeouts' },
+  { id: '#482', title: 'Dark mode loses contrast in tables', source: 'GitHub', lane: '482-table-contrast' },
+  { id: 'ENG-198', title: 'Add audit log for admin actions', source: 'Linear', lane: 'eng-198-audit-log' }
+];
+const P = { Claude: ['C', '#B8603F'], Codex: ['X', '#4F63C9'], Grok: ['G', '#5B6670'] };
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { issue: 'ENG-214', lead: 'Claude' };
+  }
+
+  renderVals() {
+    const { issue, lead } = this.state;
+    const found = ISSUES.find((item) => item.id === issue);
+    return {
+      issues: ISSUES.map((item) => ({ ...item, on: item.id === issue ? 'true' : 'false', border: item.id === issue ? '2px solid #16140F' : '2px solid #F6F3EA', pick: () => this.setState({ issue: item.id === issue ? null : item.id }) })),
+      name: found ? found.lane : 'Named from your first message',
+      where: found ? `New worktree in api and ui, warmed up automatically. ${found.id} seeds the lane's goal and notes.` : 'New worktree in api and ui, warmed up automatically.',
+      agents: Object.keys(P).map((name) => ({ name, letter: P[name][0], bg: P[name][1], on: name === lead ? 'true' : 'false', border: name === lead ? '2px solid #16140F' : '2px solid #F6F3EA', pick: () => this.setState({ lead: name }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

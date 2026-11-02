@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Who does what</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#16140F}a:hover{color:#5A5549}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1320px; height: 880px; display: flex; overflow: hidden; background: #F6F3EA; color: #16140F; font-family: Geist, system-ui, sans-serif; font-size: 14px">
+<aside style="flex: none; width: 380px; box-sizing: border-box; padding: 40px; background: #16140F; color: #FFFFFF; display: flex; flex-direction: column">
+<div style="font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">Who does what.</div>
+<div style="margin-top: 14px; line-height: 1.5; color: #D6D2C6">The lead talks with you and hands out work by this roster, without being asked. These are defaults, and any chat can change them.</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+<a href="Main.dc.html" style="height: 40px; display: flex; align-items: center; padding: 0 12px; color: #D6D2C6; text-decoration: none">1 · Connect agents</a>
+<div style="height: 40px; display: flex; align-items: center; padding: 0 12px; border-radius: 8px; background: #FFFFFF; color: #16140F; font-weight: 700">2 · Who does what</div>
+<div style="height: 40px; display: flex; align-items: center; padding: 0 12px; color: #D6D2C6">3 · Workspace</div>
+</div>
+</aside>
+<main style="flex: 1; min-width: 0; box-sizing: border-box; padding: 32px 48px; display: flex; flex-direction: column; gap: 12px">
+<div style="padding: 16px; border-radius: 12px; background: #16140F; color: #FFFFFF; display: flex; align-items: center; gap: 12px">
+<div style="flex: 1"><div style="font-size: 18px; font-weight: 800">Lead</div><div style="margin-top: 2px; color: #D6D2C6">Starts each chat. Switch it whenever you like.</div></div>
+<div style="display: flex; gap: 4px; padding: 4px; border-radius: 9px; background: #35322B"><sc-for list="{{leads}}" as="c" hint-placeholder-count="3"><button onClick="{{c.pick}}" aria-pressed="{{c.on}}" style="height: 40px; padding: 0 14px; border-radius: 6px; border: 0; background: {{c.fill}}; color: {{c.ink}}; font-weight: 700">{{c.name}}</button></sc-for></div>
+</div>
+<div style="border-radius: 12px; background: #FFFFFF; padding: 4px 16px">
+<sc-for list="{{roles}}" as="r" hint-placeholder-count="4">
+<div style="min-height: 68px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #EAE5D8">
+<div style="flex: 1"><div style="font-weight: 700; font-size: 15px">{{r.name}}</div><div style="margin-top: 2px; font-size: 13px; color: #5A5549">{{r.use}}</div></div>
+<div style="display: flex; gap: 4px; padding: 4px; border-radius: 9px; background: #EAE5D8"><sc-for list="{{r.choices}}" as="c" hint-placeholder-count="3"><button onClick="{{c.pick}}" aria-pressed="{{c.on}}" style="height: 38px; padding: 0 12px; border-radius: 6px; border: 0; background: {{c.fill}}; color: {{c.ink}}; font-weight: 600">{{c.name}}</button></sc-for></div>
+</div>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div style="padding: 14px; border-radius: 12px; background: #FFFFFF"><div style="font-weight: 700">Delegate questions</div><div style="display: flex; gap: 4px; margin-top: 10px; padding: 3px; border-radius: 8px; background: #EAE5D8"><sc-for list="{{questions}}" as="q" hint-placeholder-count="2"><button onClick="{{q.pick}}" style="flex: 1; height: 36px; border-radius: 6px; border: 0; background: {{q.fill}}; color: {{q.ink}}; font-weight: 600">{{q.label}}</button></sc-for></div><div style="margin-top: 8px; font-size: 13px; color: #5A5549; line-height: 1.4">{{hint}}</div></div>
+<div style="padding: 14px; border-radius: 12px; background: #FFFFFF"><div style="font-weight: 700">Permissions</div><div style="margin-top: 10px; height: 42px; display: flex; align-items: center; padding: 0 10px; border-radius: 8px; background: #EAE5D8; font-weight: 600; box-sizing: border-box">Always you</div><div style="margin-top: 8px; font-size: 13px; color: #5A5549; line-height: 1.4">A model never grants permission for you.</div></div>
+<div style="padding: 14px; border-radius: 12px; background: #FFFFFF"><div style="font-weight: 700">Enforce roles</div><button onClick="{{toggle}}" aria-pressed="{{enforced}}" style="margin-top: 10px; width: 100%; height: 42px; border-radius: 8px; border: 0; background: {{toggleFill}}; color: {{toggleInk}}; font-weight: 700">{{toggleLabel}}</button><div style="margin-top: 8px; font-size: 13px; color: #5A5549; line-height: 1.4">Only Implement can write. Others are blocked and told to delegate.</div></div>
+</div>
+<div style="flex: 1"></div>
+<div style="display: flex; justify-content: flex-end"><a href="Workspace.dc.html" style="height: 48px; display: inline-flex; align-items: center; padding: 0 24px; border-radius: 10px; background: #16140F; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">Continue</a></div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
+const NAMES = ['Claude', 'Codex', 'Grok'];
+const ROLES = [['research', 'Research', 'Reads and reports. Never writes.'], ['plan', 'Plan', 'Works out the plan with you.'], ['implement', 'Implement', 'The only role that edits code.'], ['review', 'Review', 'Checks the work and reports. Never writes.']];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { lead: 'Claude', research: 'Grok', plan: 'Claude', implement: 'Grok', review: 'Codex', toLead: true, enforce: true };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const pick = (key, dark) => NAMES.map((name) => ({ name, on: s[key] === name ? 'true' : 'false', fill: s[key] === name ? (dark ? '#FFFFFF' : '#16140F') : 'transparent', ink: s[key] === name ? (dark ? '#16140F' : '#FFFFFF') : (dark ? '#FFFFFF' : '#16140F'), pick: () => this.setState({ [key]: name }) }));
+    return {
+      leads: pick('lead', true),
+      roles: ROLES.map(([id, name, use]) => ({ name, use, choices: pick(id, false) })),
+      questions: [['Lead first', true], ['Always me', false]].map(([label, value]) => ({ label, fill: s.toLead === value ? '#16140F' : 'transparent', ink: s.toLead === value ? '#FFFFFF' : '#16140F', pick: () => this.setState({ toLead: value }) })),
+      hint: s.toLead ? 'The lead answers from the chat. You can change any answer.' : 'Every question comes straight to you.',
+      enforced: s.enforce ? 'true' : 'false',
+      toggle: () => this.setState({ enforce: !s.enforce }),
+      toggleLabel: s.enforce ? 'On' : 'Off',
+      toggleFill: s.enforce ? '#16140F' : '#EAE5D8',
+      toggleInk: s.enforce ? '#FFFFFF' : '#16140F'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chat and delegation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#888888}a:hover{color:#AAAAAA}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #4D86FF;outline-offset:2px}
+.st{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;font-size:11px;font-weight:800;line-height:1;box-sizing:border-box;flex:none}
+.spin{animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="width: 1320px; height: 880px; display: flex; flex-direction: column; overflow: hidden; background: {{t.ground}}; color: {{t.text}}; font-family: Geist, system-ui, sans-serif; font-size: 13px">
+<div style="flex: none; height: 44px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #2A2C2E; color: #F4F2EA">
+<button onClick="{{next}}" style="height: 32px; padding: 0 14px; border-radius: 6px; border: 0; background: #F4F2EA; color: #16140F; font-weight: 700">{{nextLabel}}</button>
+<button onClick="{{reset}}" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 0; background: #1A1C1E; color: #F4F2EA">Restart</button>
+<span style="color: #D6D9DA; margin-left: 6px">{{note}}</span><div style="flex: 1"></div>
+<button onClick="{{toggleTheme}}" style="height: 32px; padding: 0 12px; border-radius: 6px; border: 0; background: #1A1C1E; color: #F4F2EA">{{themeLabel}}</button>
+</div>
+<div style="flex: 1; min-height: 0; display: flex">
+<dc-import name="Side" h="836" dark="{{dark}}" who="{{who}}" detail="{{detail}}" attention="{{attention}}" hint-size="290px,836px"></dc-import>
+<main style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+<div style="flex: none; padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid {{t.control}}">
+<strong style="font-size: 15px; font-weight: 700; margin-right: auto">Export timeouts</strong>
+<sc-for list="{{roster}}" as="r" hint-placeholder-count="3"><span style="height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; border-radius: 8px; background: {{r.fill}}; color: {{r.ink}}"><span style="width: 20px; height: 20px; border-radius: 6px; background: {{r.bg}}; color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">{{r.letter}}</span><span><span style="display: block; font-weight: 700; line-height: 1.1">{{r.name}}</span><span style="display: block; font-size: 11px; line-height: 1.2">{{r.role}}</span></span></span></sc-for>
+</div>
+<div style="flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px">
+<sc-for list="{{items}}" as="i" hint-placeholder-count="3">
+<div>
+<sc-if value="{{i.isUser}}" hint-placeholder-val="{{ false }}"><div style="margin-left: 100px; padding: 10px 12px; border-radius: 10px; background: {{i.t.control}}">{{i.text}}</div></sc-if>
+<sc-if value="{{i.isAgent}}" hint-placeholder-val="{{ true }}"><div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 6px; background: {{i.bg}}; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{{i.letter}}</span><div style="line-height: 1.5"><strong style="font-weight: 600">{{i.name}}</strong> <span style="color: {{i.t.muted}}; font-size: 12px">{{i.role}}</span><br>{{i.text}}</div></div></sc-if>
+<sc-if value="{{i.isNotice}}" hint-placeholder-val="{{ false }}"><div style="margin-left: 32px; padding: 8px 12px; min-height: 28px; border-radius: 8px; background: {{i.fill}}; color: {{i.ink}}; display: flex; align-items: center; gap: 10px"><span style="flex: 1; line-height: 1.4">{{i.text}}</span><sc-if value="{{i.action}}" hint-placeholder-val="{{ false }}"><button style="height: 32px; padding: 0 10px; border-radius: 6px; border: 0; background: {{i.t.control}}; color: {{i.t.text}}; font-weight: 600">{{i.action}}</button></sc-if></div></sc-if>
+<sc-if value="{{i.isCard}}" hint-placeholder-val="{{ false }}"><div style="margin-left: 32px; border-radius: 10px; overflow: hidden; background: {{i.t.surface}}; border: {{i.border}}">
+<button onClick="{{i.inspect}}" style="width: 100%; min-height: 58px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 0; background: {{i.t.surface}}; color: {{i.t.text}}; text-align: left"><span style="width: 26px; height: 26px; border-radius: 7px; background: {{i.bg}}; color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{{i.letter}}</span><span style="flex: 1; min-width: 0"><span style="display: block; font-weight: 600">{{i.name}} · {{i.role}}: {{i.task}}</span><span style="display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: {{i.st.color}}">{{i.activity}}</span></span><span class="st {{i.st.cls}}" style="background: {{i.st.bg}}; color: {{i.st.ink}}; border: {{i.st.ring}}; border-top-color: {{i.st.top}}; border-radius: {{i.st.radius}}">{{i.st.glyph}}</span></button>
+<sc-if value="{{i.ask}}" hint-placeholder-val="{{ false }}"><div style="padding: 12px; background: {{i.t.needsBg}}"><div style="font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: {{i.t.needsText}}">{{i.askLabel}}</div><div style="margin-top: 5px; line-height: 1.45; font-weight: 500">{{i.ask}}</div><div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px"><sc-for list="{{i.options}}" as="o" hint-placeholder-count="2"><button onClick="{{o.go}}" style="height: 38px; padding: 0 14px; border-radius: 7px; border: 0; background: {{o.fill}}; color: {{o.ink}}; font-weight: 600">{{o.label}}</button></sc-for></div></div></sc-if>
+</div></sc-if>
+<sc-if value="{{i.isReview}}" hint-placeholder-val="{{ false }}"><a href="Review.dc.html" style="margin-left: 32px; min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: {{i.t.main}}; color: {{i.t.mainInk}}; font-weight: 700; text-decoration: none">Review the work</a></sc-if>
+</div>
+</sc-for>
+</div>
+<div style="flex: none; padding: 10px 20px 12px; border-top: 1px solid {{t.control}}">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 8px"><strong>Now</strong><span style="padding: 3px 8px; border-radius: 5px; background: {{t.main}}; color: {{t.mainInk}}; font-weight: 600">{{queueNow}}</span><strong style="margin-left: 8px">Next</strong><span style="padding: 3px 8px; border-radius: 5px; background: {{t.control}}">{{queueNext}}</span><button style="margin-left: auto; height: 28px; padding: 0 10px; border-radius: 6px; border: 0; background: {{t.control}}; color: {{t.text}}">Stop</button></div>
+<div style="min-height: 44px; display: flex; align-items: center; padding: 0 12px; border-radius: 10px; background: {{t.surface}}; color: {{t.muted}}">{{composer}}</div>
+<div style="margin-top: 8px; display: flex; gap: 8px"><button style="height: 32px; padding: 0 10px; border-radius: 7px; border: 0; background: {{t.control}}; color: {{t.text}}; font-weight: 600">@ Mention</button><button style="height: 32px; padding: 0 10px; border-radius: 7px; border: 0; background: {{t.control}}; color: {{t.text}}">Lead: Claude</button></div>
+</div>
+</main>
+<aside style="flex: none; width: 320px; box-sizing: border-box; padding: 14px; background: {{t.band}}; overflow: auto; display: flex; flex-direction: column; gap: 10px">
+<div><div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: {{t.muted}}">HANDOFF</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">{{doc.title}}</div></div>
+<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Task</div><div style="font-size: 11.5px; color: {{t.muted}}">Written by the lead</div><div style="margin-top: 6px; line-height: 1.45">{{doc.task}}</div></div>
+<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Added by AgentDeck</div><div style="margin-top: 6px; line-height: 1.45; white-space: pre-line">{{doc.added}}</div></div>
+<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Facts</div><div style="font-size: 11.5px; color: {{t.muted}}">Recorded by AgentDeck</div><div style="margin-top: 6px; line-height: 1.45; white-space: pre-line; font-family: 'Geist Mono', monospace; font-size: 12px">{{doc.facts}}</div></div>
+<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Report</div><div style="font-size: 11.5px; color: {{t.muted}}">Written by the delegate</div><div style="margin-top: 6px; line-height: 1.45">{{doc.report}}</div></div>
+<button style="min-height: 40px; border-radius: 8px; border: 0; background: {{t.control}}; color: {{t.text}}; font-weight: 500">Open full transcript</button>
+</aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
+const THEMES = {
+  light: { ground: '#F6F3EA', band: '#EAE5D8', surface: '#FFFFFF', control: '#DED8C8', text: '#16140F', muted: '#5A5549', main: '#16140F', mainInk: '#FFFFFF', needs: '#D6175E', needsInk: '#FFFFFF', needsText: '#AD0F4A', needsBg: '#FBE1EA', working: '#0B6FC2', workingText: '#085C9F', done: '#0D7A4F', doneInk: '#FFFFFF', doneText: '#0A6641', warnBg: '#F7E7C9', warnText: '#5F4300' },
+  dark: { ground: '#161512', band: '#1E1C18', surface: '#26241F', control: '#35322B', text: '#F3EFE4', muted: '#B0AA9B', main: '#F3EFE4', mainInk: '#161512', needs: '#FF5C93', needsInk: '#23040F', needsText: '#FF85AE', needsBg: '#33171F', working: '#6BB8F5', workingText: '#8CC8F8', done: '#46C98D', doneInk: '#04231A', doneText: '#62D6A2', warnBg: '#3A2E14', warnText: '#F2D58F' }
+};
+const P = { Claude: { letter: 'C', bg: '#B8603F' }, Grok: { letter: 'G', bg: '#5B6670' }, Codex: { letter: 'X', bg: '#4F63C9' } };
+const STEPS = [
+  { note: 'Claude leads and plans with you', active: 'Claude', kind: 'working', detail: 'Reading export.ts', next: 'You', composer: 'Message Claude, or type @ to mention an agent' },
+  { note: 'Implement belongs to Grok, so Claude delegates without being asked', active: 'Grok', kind: 'working', detail: 'Editing export.ts', next: 'Claude', composer: 'Message Claude, or @grok' },
+  { note: 'Permission always comes to you', active: 'Grok', kind: 'needs', detail: 'Allow: pnpm db:migrate', next: 'Claude', composer: 'Answer on the card, or message Claude' },
+  { note: 'A question goes to the lead first, and the chat already answers it', active: 'Claude', kind: 'working', detail: 'Answering Grok', next: 'Grok', composer: 'You can answer on the card first' },
+  { note: 'The lead cannot make a product decision, so it comes to you', active: 'Grok', kind: 'needs', detail: 'Question for you', next: 'Claude', composer: 'Answer on the card, or message Claude' },
+  { note: 'Grok reports, AgentDeck adds the facts, and Claude sends it to Review', active: 'Codex', kind: 'working', detail: 'Reviewing 5 files', next: 'Claude', composer: 'Message Claude, or @codex' },
+  { note: 'Review is read-only, and AgentDeck caught a write', active: 'Codex', kind: 'working', detail: 'Reviewing · 1 write blocked', next: 'Claude', composer: 'Message Claude, or @codex' },
+  { note: 'Back with the lead, and nothing was merged', active: 'Claude', kind: 'done', detail: 'Finished · waiting for you', next: 'You', composer: 'Message Claude, or type @ to mention an agent' }
+];
+const DOCS = {
+  grok: { title: 'Claude to Grok · Implement', task: 'Stream invoice rows and fix retries, per the plan. Done when the 50,000-row test passes.', added: 'Your messages, word for word\nENG-214 and the lane plan\nRoster and changes since Grok last ran', facts: 'export.ts +88 −31\nqueue.ts +12 −4\npnpm test: 215 passed\nsnapshot 3f2c1a7', report: 'Done. Old endpoint kept. Exports over 1M rows warn first, as you chose.' },
+  codex: { title: 'Claude to Codex · Review', task: 'Review the change against the plan. Report problems; do not edit.', added: 'Your messages, word for word\nGrok\'s handoff and the lane plan', facts: 'Read 5 files\npnpm test: 215 passed\nWrite blocked: export.ts', report: 'Passes. One note: exports have no progress indicator.' }
+};
+const status = (kind, t) => {
+  const flat = { ring: '0 solid transparent', top: 'transparent', radius: '5px', cls: '' };
+  if (kind === 'working') return { ...flat, bg: 'transparent', ink: t.text, glyph: '', ring: `3px solid ${t.control}`, top: t.working, radius: '8px', cls: 'spin', color: t.workingText };
+  if (kind === 'needs') return { ...flat, bg: t.needs, ink: t.needsInk, glyph: '!', color: t.needsText };
+  return { ...flat, bg: t.done, ink: t.doneInk, glyph: '✓', color: t.doneText };
+};
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: 0, dark: false, doc: 'grok' };
+  }
+
+  renderVals() {
+    const { step, dark, doc } = this.state;
+    const t = THEMES[dark ? 'dark' : 'light'];
+    const current = STEPS[step];
+    const next = () => this.setState({ step: Math.min(step + 1, STEPS.length - 1), doc: step >= 4 ? 'codex' : 'grok' });
+    const f = { isUser: false, isAgent: false, isNotice: false, isCard: false, isReview: false };
+    const opt = (label, primary) => ({ label, go: next, fill: primary ? t.needs : t.control, ink: primary ? t.needsInk : t.text });
+    const user = (text) => ({ ...f, t, isUser: true, text });
+    const agent = (name, role, text) => ({ ...f, t, isAgent: true, ...P[name], name, role, text });
+    const notice = (text, action, warn) => ({ ...f, t, isNotice: true, text, action: action ?? '', fill: warn ? t.warnBg : t.band, ink: warn ? t.warnText : t.text });
+    const card = (name, role, task, kind, activity, extra, id) => ({ ...f, t, isCard: true, ...P[name], name, role, task, st: status(kind, t), activity, ask: '', askLabel: '', options: [], border: kind === 'needs' ? `2px solid ${t.needs}` : `2px solid ${t.surface}`, inspect: () => this.setState({ doc: id }), ...extra });
+    const items = [user('Exports time out on large invoices (ENG-214). Keep the CSV format and the old endpoint.'), agent('Claude', 'Lead · Plan', 'export.ts loads every row into memory. I\'d stream rows and restart retries from an empty file. Plan saved to the lane.')];
+    if (step >= 1) {
+      items.push(notice('Roster: Implement belongs to Grok. Claude delegated it.'));
+      const kind = step === 2 || step === 4 ? 'needs' : step >= 5 ? 'done' : 'working';
+      const text = { 1: 'Editing export.ts', 2: 'Needs your permission', 3: 'Waiting for Claude to answer', 4: 'Needs your answer' }[step] ?? 'Report ready · 5 files · tests pass';
+      const extra = step === 2 ? { ask: 'pnpm db:migrate', askLabel: 'PERMISSION FOR YOU', options: [opt('Allow', true), opt('Always allow'), opt('Deny')] } : step === 4 ? { ask: 'Exports over 1M rows could take minutes. Block them, or warn and continue?', askLabel: 'CLAUDE COULD NOT DECIDE THIS. QUESTION FOR YOU', options: [opt('Warn and continue', true), opt('Block'), opt('Reply…')] } : {};
+      items.push(card('Grok', 'Implement', 'Stream rows and fix retries', kind, text, extra, 'grok'));
+    }
+    if (step >= 3) items.push(notice('Grok asked: keep the old /export endpoint? Claude answered: yes, from your first message.', 'Change answer'));
+    if (step >= 5) { items.push(agent('Claude', 'Lead', 'Grok is done and the tests pass. Sending it to Codex for review.')); items.push(card('Codex', 'Review', 'Check the change against the plan', step >= 7 ? 'done' : 'working', step >= 7 ? 'Report ready · passes, 1 note' : step === 6 ? 'Reviewing · 1 write blocked' : 'Reading export.ts', {}, 'codex')); }
+    if (step >= 6) items.push(notice('Codex tried to edit export.ts, but Review is read-only. AgentDeck blocked it and told Codex to report it instead.', 'Allow this time', true));
+    if (step >= 7) { items.push(agent('Claude', 'Lead', 'Review passes: the CSV format and old endpoint are unchanged, and all 215 tests pass. Codex notes there\'s no progress indicator. Want that added?')); items.push({ ...f, t, isReview: true }); }
+    const roleOf = { Claude: 'Lead · Plan', Grok: 'Implement', Codex: 'Review' };
+    return {
+      t, items, dark,
+      who: current.active, detail: current.detail, attention: current.kind === 'needs',
+      roster: Object.keys(P).map((name) => ({ name, ...P[name], role: roleOf[name], fill: current.active === name ? t.main : t.surface, ink: current.active === name ? t.mainInk : t.text })),
+      queueNow: current.kind === 'done' ? 'Waiting for you' : current.active,
+      queueNext: current.next,
+      composer: current.composer,
+      doc: DOCS[doc],
+      note: `${step + 1} of ${STEPS.length}: ${current.note}`,
+      next,
+      nextLabel: step === STEPS.length - 1 ? 'Finished' : 'Next event',
+      reset: () => this.setState({ step: 0, doc: 'grok' }),
+      toggleTheme: () => this.setState({ dark: !dark }),
+      themeLabel: dark ? 'Paper' : 'Paper Dark'
+    };
+  }
+}
+</script>
+</body>
+</html>

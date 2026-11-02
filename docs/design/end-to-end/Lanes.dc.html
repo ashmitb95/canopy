@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lane view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#16140F}a:hover{color:#5A5549}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1320px; height: 880px; display: flex; overflow: hidden; background: #F6F3EA; color: #16140F; font-family: Geist, system-ui, sans-serif; font-size: 13px">
+<dc-import name="Side" h="880" who="Claude" detail="Finished · waiting for you" hint-size="290px,880px"></dc-import>
+<main style="flex: 1; min-width: 0; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; gap: 12px"><h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; flex: 1">Lanes</h1><a href="NewLane.dc.html" style="height: 44px; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 9px; background: #16140F; color: #FFFFFF; font-weight: 700; text-decoration: none">New worktree</a></div>
+
+<section aria-label="Primary checkout" style="padding: 20px; border-radius: 16px; background: #16140F; color: #FFFFFF; display: flex; gap: 24px">
+<div style="flex: 1; min-width: 0"><div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #D6D2C6">PRIMARY CHECKOUT · CODE RUNS HERE</div><div style="margin-top: 8px; font-family: 'Geist Mono', monospace; font-size: 30px; font-weight: 600">{{main.name}}</div><div style="margin-top: 4px; color: #E8E4D8; font-size: 15px">{{main.goal}}</div><div style="margin-top: 12px; display: flex; gap: 8px; align-items: center"><a href="Chat.dc.html" style="height: 40px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 8px; background: #FFFFFF; color: #16140F; font-weight: 700; text-decoration: none">Open chat</a><a href="Review.dc.html" style="height: 40px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 8px; background: #35322B; color: #FFFFFF; font-weight: 600; text-decoration: none">Review changes</a><span style="margin-left: 6px; color: #E8E4D8">{{main.meta}}</span></div></div>
+<div style="flex: none; width: 320px; padding: 12px 14px; border-radius: 10px; background: #2B2822"><div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #D6D2C6">SHARED WITH OTHER LANES</div><sc-for list="{{main.changes}}" as="c" hint-placeholder-count="2"><div style="display: flex; justify-content: space-between; gap: 10px; margin-top: 7px; font-family: 'Geist Mono', monospace; font-size: 12px"><span>{{c.path}}</span><span>{{c.diff}}</span></div></sc-for><div style="margin-top: 8px; font-size: 12px; color: #D6D2C6">Chats on other lanes get this on their next turn.</div></div>
+</section>
+
+<section aria-label="Warm lanes">
+<div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #5A5549">WARM · WORKTREE READY</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 8px">
+<sc-for list="{{warm}}" as="l" hint-placeholder-count="3">
+<div style="padding: 14px; border-radius: 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px">
+<div style="font-family: 'Geist Mono', monospace; font-size: 15px; font-weight: 600">{{l.name}}</div>
+<div style="color: #5A5549; min-height: 34px; line-height: 1.35">{{l.goal}}</div>
+<div style="display: flex; align-items: center; gap: 6px; font-weight: 500; color: {{l.color}}"><span style="width: 20px; height: 20px; border-radius: 6px; background: {{l.bg}}; color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center">{{l.letter}}</span>{{l.status}}</div>
+<div style="color: #5A5549; font-family: 'Geist Mono', monospace; font-size: 12px">{{l.where}}</div>
+<div style="display: flex; gap: 6px; margin-top: 2px"><button onClick="{{l.swap}}" style="flex: 1; height: 44px; border-radius: 8px; border: 0; background: #16140F; color: #FFFFFF; font-weight: 700">Run in primary</button><button onClick="{{l.park}}" style="height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: #EAE5D8; color: #16140F; font-weight: 500">Park</button></div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section aria-label="Cold lanes">
+<div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #5A5549">COLD · BRANCH ONLY</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px"><sc-for list="{{cold}}" as="l" hint-placeholder-count="2"><div style="min-height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 4px 6px 4px 14px; border-radius: 10px; background: #EAE5D8"><span style="font-family: 'Geist Mono', monospace; font-weight: 500">{{l.name}}</span><button onClick="{{l.warmUp}}" style="height: 44px; padding: 0 12px; border-radius: 7px; border: 0; background: #FFFFFF; color: #16140F; font-weight: 600">Warm up</button></div></sc-for></div>
+</section>
+<div role="status" style="margin-top: auto; min-height: 20px; font-weight: 500">{{toast}}</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
+const L = {
+  'auth-flow': { goal: 'Move sign-in to the new session API', status: 'Idle · 3h ago', color: '#5A5549', letter: 'C', bg: '#B8603F', meta: '2 chats · 3 uncommitted', changes: [{ path: 'api/session.ts', diff: '+120 −4' }, { path: 'ui/SignIn.tsx', diff: '+77 −58' }] },
+  'export-timeouts': { goal: 'Stream invoice exports and fix retries', status: 'Finished · 9m ago', color: '#0A6641', letter: 'C', bg: '#B8603F', meta: '1 chat · 5 uncommitted', changes: [{ path: 'api/export.ts', diff: '+88 −31' }, { path: 'api/queue.ts', diff: '+12 −4' }] },
+  'billing-export': { goal: 'CSV export for invoices', status: 'Needs your approval', color: '#AD0F4A', letter: 'X', bg: '#4F63C9', meta: '1 chat · clean', changes: [{ path: 'ui/Invoices.tsx', diff: '+14 −2' }] },
+  'search-ranking': { goal: 'Rank recent documents higher', status: 'Working · reading search.ts', color: '#085C9F', letter: 'G', bg: '#5B6670', meta: '1 chat · 1 uncommitted', changes: [{ path: 'api/search.ts', diff: '+19 −7' }] },
+  'pdf-preview': { goal: 'Inline PDF preview', status: 'Idle · 6d ago', color: '#5A5549', letter: 'C', bg: '#B8603F', meta: '1 chat', changes: [{ path: 'ui/Preview.tsx', diff: '+51 −0' }] },
+  'old-theme': { goal: 'Retire the legacy theme', status: 'No chats', color: '#5A5549', letter: 'G', bg: '#5B6670', meta: 'No chats', changes: [{ path: 'ui/tokens.css', diff: '+0 −212' }] }
+};
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { main: 'auth-flow', warm: ['export-timeouts', 'billing-export', 'search-ranking'], cold: ['pdf-preview', 'old-theme'], toast: '' };
+  }
+
+  renderVals() {
+    const { main, warm, cold, toast } = this.state;
+    return {
+      toast,
+      main: { name: main, ...L[main] },
+      warm: warm.map((name) => ({
+        name, ...L[name], where: `.worktrees/${name}`,
+        swap: () => this.setState({ main: name, warm: warm.map((item) => (item === name ? main : item)), toast: `${name} is now in your primary checkout. ${main} moved to a worktree with its uncommitted work, and its chats were told.` }),
+        park: () => this.setState({ warm: warm.filter((item) => item !== name), cold: [...cold, name], toast: `${name} parked: worktree removed after checking for uncommitted work. Branch and chats kept.` })
+      })),
+      cold: cold.map((name) => ({ name, warmUp: () => this.setState({ cold: cold.filter((item) => item !== name), warm: [...warm, name].slice(0, 6), toast: `${name} warmed up: worktree created, env files copied, setup run.` }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

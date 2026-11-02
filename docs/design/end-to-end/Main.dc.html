@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Connect your agents</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#16140F}a:hover{color:#5A5549}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1320px; height: 880px; display: flex; overflow: hidden; background: #F6F3EA; color: #16140F; font-family: Geist, system-ui, sans-serif; font-size: 14px">
+<aside style="flex: none; width: 380px; box-sizing: border-box; padding: 40px; background: #16140F; color: #FFFFFF; display: flex; flex-direction: column">
+<svg width="56" height="56" viewBox="0 0 24 24" role="img" aria-label="AgentDeck logo mark"><rect x="9" y="1" width="6" height="22" rx="2" fill="#FFFFFF"></rect><rect x="15" y="5" width="8" height="4" rx="2" fill="#FFFFFF"></rect><rect x="1" y="9" width="8" height="4" rx="2" fill="#FFFFFF"></rect><rect x="15" y="16" width="8" height="4" rx="2" fill="#FFFFFF"></rect></svg>
+<div style="margin-top: 28px; font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">One chat.<br>Every agent.</div>
+<div style="margin-top: 14px; line-height: 1.5; color: #D6D2C6">Give each agent the work it does best, on your own accounts. AgentDeck moves the work between them.</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+<div style="height: 40px; display: flex; align-items: center; padding: 0 12px; border-radius: 8px; background: #FFFFFF; color: #16140F; font-weight: 700">1 · Connect agents</div>
+<div style="height: 40px; display: flex; align-items: center; padding: 0 12px; color: #D6D2C6">2 · Who does what</div>
+<div style="height: 40px; display: flex; align-items: center; padding: 0 12px; color: #D6D2C6">3 · Workspace</div>
+</div>
+</aside>
+<main style="flex: 1; min-width: 0; box-sizing: border-box; padding: 40px 48px; display: flex; flex-direction: column">
+<h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em">Connect your agents</h1>
+<div style="margin-top: 6px; color: #5A5549">AgentDeck runs the CLIs you already have, and they keep their own sign-ins.</div>
+<div style="margin-top: 24px; display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{agents}}" as="a" hint-placeholder-count="6">
+<div style="min-height: 72px; box-sizing: border-box; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 12px; background: #FFFFFF">
+<span style="width: 36px; height: 36px; border-radius: 9px; background: {{a.bg}}; color: #fff; font-size: 16px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none">{{a.letter}}</span>
+<div style="flex: 1; min-width: 0"><div style="font-size: 15px; font-weight: 700">{{a.name}}</div><div style="margin-top: 2px; font-size: 13px; color: #5A5549">{{a.detail}}</div></div>
+<span style="padding: 4px 9px; border-radius: 6px; font-size: 12px; font-weight: 700; background: {{a.pill}}; color: {{a.pillInk}}">{{a.status}}</span>
+<button onClick="{{a.act}}" style="height: 44px; min-width: 96px; border-radius: 8px; border: 0; background: {{a.fill}}; color: {{a.ink}}; font-weight: 600">{{a.action}}</button>
+</div>
+</sc-for>
+</div>
+<button style="margin-top: 10px; align-self: flex-start; height: 40px; padding: 0 12px; border-radius: 8px; border: 0; background: transparent; color: #16140F; font-weight: 600; text-decoration: underline">Add another ACP agent</button>
+<div style="flex: 1"></div>
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="color: #5A5549">{{count}} connected</span><a href="Roster.dc.html" style="height: 48px; display: inline-flex; align-items: center; padding: 0 24px; border-radius: 10px; background: #16140F; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">Continue</a></div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
+const LIST = [
+  ['Claude', 'C', '#B8603F', 'Claude account · CLI 2.1'],
+  ['Codex', 'X', '#4F63C9', 'ChatGPT account · CLI 0.160'],
+  ['Grok', 'G', '#5B6670', 'SuperGrok account · CLI 0.2'],
+  ['Cursor', 'R', '#3D5A52', 'Install the Cursor CLI to connect'],
+  ['OpenCode', 'O', '#6C5A3D', 'Install OpenCode to connect'],
+  ['Gemini', 'M', '#2F6B8F', 'Install the Gemini CLI to connect']
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { on: { Claude: true, Codex: true, Grok: true } };
+  }
+
+  renderVals() {
+    const { on } = this.state;
+    return {
+      count: Object.keys(on).length,
+      agents: LIST.map(([name, letter, bg, detail]) => {
+        const connected = Boolean(on[name]);
+        return {
+          name, letter, bg,
+          detail: connected && !detail.includes(' · ') ? 'Connected' : detail,
+          status: connected ? 'Connected' : 'Not installed',
+          pill: connected ? '#D5EFE3' : '#EAE5D8', pillInk: connected ? '#0A5235' : '#5A5549',
+          action: connected ? 'Manage' : 'Install',
+          fill: connected ? '#EAE5D8' : '#16140F', ink: connected ? '#16140F' : '#FFFFFF',
+          act: () => this.setState({ on: { ...on, [name]: true } })
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

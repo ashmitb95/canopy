@@ -1,5 +1,6 @@
 import { Emitter } from '../src/core/emitter'
 import type {
+  Capability,
   McpSignIn,
   OpenOptions,
   PermissionMode,
@@ -107,14 +108,14 @@ export class FakeSession implements ProviderSession {
   }
 }
 
-export function fakeProvider(): { provider: ProviderDefinition; sessions: FakeSession[] } {
+export function fakeProvider(id = 'fake', extra: Capability[] = []): { provider: ProviderDefinition; sessions: FakeSession[] } {
   const sessions: FakeSession[] = []
   const provider: ProviderDefinition = {
-    id: 'fake',
-    label: 'Fake',
+    id,
+    label: id,
     cli: { command: 'fake', installUrl: 'https://example.invalid' },
     signInCommand: () => 'fake login',
-    capabilities: new Set(['resume', 'interrupt', 'modes', 'setMode']),
+    capabilities: new Set<Capability>(['resume', 'interrupt', 'modes', 'setMode', ...extra]),
     modes: ['ask', 'accept-edits'],
     probe: async () => ({ status: 'signed-in' }),
     open: async (options) => {

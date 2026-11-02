@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionItem } from '../src/core/types'
-import { frameAt, plain, rollingLines, toolLine } from './rolling'
+import type { SessionItem } from '../../src/core/types'
+import { frameAt, plain, rollingLines, toolLine } from '../../src/group/rolling'
 
 const message = (text: string, streaming = false): SessionItem => ({ kind: 'message', id: 'm', role: 'assistant', text, streaming })
 

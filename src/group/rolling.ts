@@ -1,5 +1,5 @@
-// Proof of concept: the raw session stream as compact lines for a delegate card's rolling window.
-import type { SessionItem } from '../src/core/types'
+// The raw session stream as compact lines, for a live view of what an agent is doing.
+import type { SessionItem } from '../core/types'
 
 export type RollingLine = { id: string; kind: 'text' | 'thought' | 'tool' | 'output' | 'plan' | 'notice'; text: string; live: boolean; failed?: boolean; stat?: string }
 

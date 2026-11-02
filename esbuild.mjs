@@ -6,7 +6,7 @@ const watch = process.argv.includes('--watch')
 const preview = process.argv.includes('--preview')
 
 const extension = {
-  entryPoints: { 'smoke-switch': 'scripts/smoke-switch.ts', 'poc-stream': 'poc/capture-stream.ts', 'poc-frames': 'poc/frames.ts', 'poc-settle': 'poc/settle-live.ts', 'poc-tools': 'poc/probe-tools.ts', 'poc-group': 'poc/group.ts', extension: 'src/extension.ts', smoke: 'scripts/smoke.ts', 'smoke-prompts': 'scripts/smoke-prompts.ts', 'smoke-lanes': 'scripts/smoke-lanes.ts', 'smoke-boundary': 'scripts/smoke-boundary.ts', 'smoke-steer': 'scripts/smoke-steer.ts', 'smoke-rewind': 'scripts/smoke-rewind.ts', 'record-claude': 'scripts/record-claude.ts', 'record-codex': 'scripts/record-codex.ts', 'record-grok': 'scripts/record-grok.ts' },
+  entryPoints: { 'smoke-switch': 'scripts/smoke-switch.ts', driver: 'scripts/driver.ts', 'smoke-group': 'scripts/smoke-group.ts', 'poc-stream': 'poc/capture-stream.ts', 'poc-frames': 'poc/frames.ts', 'poc-settle': 'poc/settle-live.ts', 'poc-tools': 'poc/probe-tools.ts', 'poc-group': 'poc/group.ts', extension: 'src/extension.ts', smoke: 'scripts/smoke.ts', 'smoke-prompts': 'scripts/smoke-prompts.ts', 'smoke-lanes': 'scripts/smoke-lanes.ts', 'smoke-boundary': 'scripts/smoke-boundary.ts', 'smoke-steer': 'scripts/smoke-steer.ts', 'smoke-rewind': 'scripts/smoke-rewind.ts', 'record-claude': 'scripts/record-claude.ts', 'record-codex': 'scripts/record-codex.ts', 'record-grok': 'scripts/record-grok.ts' },
   outdir: 'dist',
   bundle: true,
   platform: 'node',

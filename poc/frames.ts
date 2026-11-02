@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { SessionItem } from '../src/core/types'
-import { frameAt, type RollingLine } from './rolling'
+import { frameAt, type RollingLine } from '../src/group/rolling'
 
 const STEP_MS = 200
 const [, , dir, ...names] = process.argv

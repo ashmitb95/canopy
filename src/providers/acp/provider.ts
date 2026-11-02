@@ -296,11 +296,19 @@ class AcpSession implements ProviderSession {
     return Promise.reject(new Error(`AgentDeck does not handle ${method}.`))
   }
 
+  private refuseEdit(options: PermissionRequest['options']): unknown {
+    const reject = options.find((option) => option.kind === 'reject_once') ?? options.find((option) => option.kind === 'reject_always')
+    return reject ? selected(reject.optionId) : { outcome: { outcome: 'cancelled' } }
+  }
+
   private permission({ toolCall, options }: PermissionRequest): Promise<unknown> {
     const outside = this.outsideBoundary(toolCall)
     if (outside) return outside
+    // A read-only role runs reads and checks without a person present. Edits are refused; a shell write is caught after the turn.
+    const readOnly = this.boundary?.roots.length === 0
+    if (readOnly && toolCall.kind === 'edit') return Promise.resolve(this.refuseEdit(options))
     const allow = options.find((option) => option.kind === 'allow_once') ?? options.find((option) => option.kind === 'allow_always')
-    const autoAllow = this.mode === 'full-access' || (this.mode === 'accept-edits' && toolCall.kind === 'edit')
+    const autoAllow = readOnly || this.mode === 'full-access' || (this.mode === 'accept-edits' && toolCall.kind === 'edit')
     if (autoAllow && allow) return Promise.resolve(selected(allow.optionId))
     const optionIds = new Map<string, string>()
     const choices: ApprovalOption[] = []

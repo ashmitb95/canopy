@@ -67,11 +67,23 @@ async function run(env: Env, lead: string, implement: string, review: string): P
   }
 }
 
+const ARRANGEMENTS: Record<string, [string, string, string]> = {
+  claude: ['claude', 'codex', 'grok'],
+  grok: ['grok', 'claude', 'codex'],
+  codex: ['codex', 'grok', 'claude']
+}
+
 async function main(): Promise<void> {
+  const lead = process.argv[2]
+  const picked = lead ? ARRANGEMENTS[lead] : undefined
+  if (lead && !picked) {
+    console.error(`Unknown lead "${lead}". Use one of: ${Object.keys(ARRANGEMENTS).join(', ')}`)
+    process.exit(1)
+  }
   const env = await captureEnv()
-  await run(env, 'claude', 'codex', 'grok')
-  await run(env, 'grok', 'claude', 'codex')
-  await run(env, 'codex', 'grok', 'claude')
+  for (const [nextLead, implement, review] of picked ? [picked] : Object.values(ARRANGEMENTS)) {
+    await run(env, nextLead, implement, review)
+  }
   process.exit(process.exitCode ?? 0)
 }
 

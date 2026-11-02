@@ -127,6 +127,7 @@ class Group {
     const ended = new Promise<void>((resolve) => (finish = resolve))
     const offItem = session.onItem((item) => {
       if (item.kind === 'message' && item.role === 'assistant') run.reply = item.text
+      if (item.kind === 'notice' && item.level === 'error') console.log(`NOTE  ${provider}: ${item.text.slice(0, 160)}`)
       if (item.kind === 'turn' && item.state === 'ended') finish()
       if (item.kind === 'approval' && !item.resolved) {
         run.approvals.push(item.title ?? item.id)
@@ -308,6 +309,7 @@ async function permissions(env: Env, agent: string): Promise<void> {
     const asked = new Promise<void>((resolve) => (gotApproval = resolve))
     const ended = new Promise<void>((resolve) => (finish = resolve))
     session.onItem((item) => {
+      if (item.kind === 'notice' && item.level === 'error') console.log(`NOTE  ${agent}: ${item.text.slice(0, 160)}`)
       if (item.kind === 'approval' && !item.resolved) {
         seen.push(item.id)
         gotApproval()
@@ -363,6 +365,7 @@ async function midTurn(env: Env, agent: string): Promise<void> {
     const running = new Promise<void>((resolve) => (started = resolve))
     session.onItem((item) => {
       if (item.kind === 'message' && item.role === 'assistant') reply = item.text
+      if (item.kind === 'notice' && item.level === 'error') console.log(`NOTE  ${agent}: ${item.text.slice(0, 160)}`)
       if (item.kind === 'tool') started()
       if (item.kind === 'turn' && item.state === 'ended') finish()
     })
@@ -416,6 +419,7 @@ async function narration(env: Env, agent: string, narrate: boolean): Promise<voi
     const ended = new Promise<void>((resolve) => (finish = resolve))
     const started = Date.now()
     session.onItem((item) => {
+      if (item.kind === 'notice' && item.level === 'error') console.log(`NOTE  ${agent}: ${item.text.slice(0, 160)}`)
       if (item.kind === 'message' && item.role === 'assistant') messages.set(item.id, item.text)
       if (item.kind === 'tool') {
         tools.add(item.id)
@@ -460,6 +464,17 @@ async function main(): Promise<void> {
   const env = await captureEnv()
   const only = process.argv[2]
   const want = (name: string) => !only || only === name
+  if (only === 'grok') {
+    await delegation(env, 'grok', 'claude')
+    await delegation(env, 'grok', 'codex')
+    await questions(env, 'grok', 'codex')
+    await midTurn(env, 'grok')
+    await narration(env, 'grok', false)
+    await narration(env, 'grok', true)
+    await permissions(env, 'grok')
+    console.log('DONE')
+    process.exit(0)
+  }
   if (want('snapshots')) snapshots()
   if (want('delegation')) for (const [lead, worker] of [['claude', 'grok'], ['grok', 'codex'], ['codex', 'claude'], ['codex', 'grok'], ['grok', 'claude'], ['claude', 'codex']]) await delegation(env, lead, worker)
   if (want('mentions')) await mentions(env, ['codex', 'grok', 'claude'])

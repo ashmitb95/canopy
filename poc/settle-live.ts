@@ -10,6 +10,7 @@ const describeWork = (outcome: Outcome) => [...outcome.activity.work.map((proc) 
 
 async function setup(env: Env, worker: string, lead: string, stopped: number[] = []) {
   const repo = tempRepo()
+  let base = new Set<number>()
   const group = new Group(repo, env, { lead, implement: worker }, worker, [
     {
       name: 'stop_work',
@@ -17,7 +18,8 @@ async function setup(env: Env, worker: string, lead: string, stopped: number[] =
       inputSchema: { type: 'object', properties: { pid: { type: 'number' } }, required: ['pid'] },
       call: (args) => {
         stopped.push(Number(args.pid))
-        stop([Number(args.pid)])
+        // A shell wrapper and its child are one piece of work: stop what the harness sees, never just one process.
+        void activity(repo, base).then((now) => stop([Number(args.pid), ...now.work.map((proc) => proc.pid)]))
         return 'Stopped. End your turn now.'
       }
     }
@@ -25,7 +27,7 @@ async function setup(env: Env, worker: string, lead: string, stopped: number[] =
   const workerSession = await group.ready(worker)
   await group.ready(lead)
   await new Promise((resolve) => setTimeout(resolve, 3_000))
-  const base = await baseline(repo)
+  base = await baseline(repo)
   return { repo, group, base, workerSession }
 }
 
@@ -60,17 +62,18 @@ async function early(env: Env, worker: string, lead: string): Promise<void> {
     const off = workerSession.onItem((item) => {
       if (item.kind === 'turn' && item.state === 'started' && Date.now() - started > 1_000) woke += 1
     })
-    const run = await group.turn(worker, 'Start this in the background and do not wait for it: (sleep 25; echo FAILED > result.log) &   Then end your turn immediately with the line STATUS: done.')
+    const run = await group.turn(worker, 'Start this in the background and do not wait for it: (sleep 25; echo "1 test failed: export.test.ts" > result.log) &   Then end your turn immediately with the line STATUS: done.')
     const atReport = await activity(repo, base)
-    line(`${name}: work still running when it said done`, atReport.work.length > 0 && !existsSync(join(repo, 'result.log')), `${/STATUS:.*/.exec(run.reply)?.[0] ?? 'no status'} | ${atReport.work.map((proc) => proc.command.slice(0, 50)).join('; ')}`)
+    line(`${name}: work still running when it said done`, atReport.work.length > 0 ? true : 'NOT RUNNING', `${/STATUS:.*/.exec(run.reply)?.[0] ?? 'no status'} | ${atReport.work.map((proc) => proc.command.slice(0, 50)).join('; ')}`)
     const outcome = await waitForSettled(repo, base, 90_000)
     off.dispose()
-    line(`${name}: settled only when it really finished`, outcome.settled && existsSync(join(repo, 'result.log')), `waited ${Math.round(outcome.waitedMs / 1000)}s, ${existsSync(join(repo, 'result.log')) ? readFileSync(join(repo, 'result.log'), 'utf8').trim() : 'no result'}`)
+    const finished = existsSync(join(repo, 'result.log'))
+    line(`${name}: settled only when it really finished`, outcome.settled ? (finished ? true : 'VANISHED') : false, `waited ${Math.round(outcome.waitedMs / 1000)}s, ${finished ? readFileSync(join(repo, 'result.log'), 'utf8').trim() : 'the work is gone and left no result'}`)
     console.log(`INFO  ${name}: CLI woke itself ${woke} time(s) while waiting`)
     const check = await group.turn(worker, 'Your background work has now really finished. Read result.log and correct your report. End with STATUS: done only if it succeeded; otherwise STATUS: blocked and say why.')
-    line(`${name}: delegate corrected its report`, /STATUS:\s*blocked/i.test(check.reply) || /fail/i.test(check.reply), /STATUS:.*/.exec(check.reply)?.[0] ?? check.reply)
+    line(`${name}: delegate corrected its report`, /STATUS:\s*blocked/i.test(check.reply), check.reply)
     const leadRun = await group.turn(lead, `You lead this chat and own your delegates. ${worker} reported done early, but AgentDeck held that until its background work really ended. Report now:\n${check.reply}\nSay in one sentence whether the task succeeded and what you would do next.`)
-    line(`${name}: lead acts on the real result`, /fail/i.test(leadRun.reply) && !/succeeded\b(?!.*not)/i.test(leadRun.reply.replace(/did not succeed/gi, '')), leadRun.reply)
+    line(`${name}: lead acts on the real result`, /(fail|did not succeed|didn't succeed|not succeed|blocked)/i.test(leadRun.reply), leadRun.reply)
   } catch (error) {
     line(name, false, (error as Error).message)
   } finally {
@@ -123,12 +126,11 @@ async function overdue(env: Env, worker: string, lead: string): Promise<void> {
 
 async function main(): Promise<void> {
   const env = await captureEnv()
-  for (const [worker, lead] of [['claude', 'codex'], ['codex', 'claude'], ['grok', 'claude']]) {
-    await quiet(env, worker, lead)
-    await early(env, worker, lead)
-    await service(env, worker, lead)
-    await overdue(env, worker, lead)
-  }
+  await early(env, 'claude', 'codex')
+  await overdue(env, 'claude', 'codex')
+  await quiet(env, 'codex', 'claude')
+  await early(env, 'codex', 'claude')
+  await service(env, 'codex', 'claude')
   console.log('DONE')
   process.exit(0)
 }

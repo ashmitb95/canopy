@@ -66,7 +66,8 @@ export async function baseline(folder: string, root = process.pid): Promise<Set<
   return new Set([...descendants(all, root), ...(await workingIn(folder)), process.pid])
 }
 
-const OURS = /^(ps|lsof|git)\b|\/(ps|lsof)\b/
+// The CLIs' own helpers can start mid-turn, so a baseline alone misses them.
+const OURS = /^(ps|lsof|git)\b|\/(ps|lsof)\b|\/codex-[\w-]+(\s|$)/
 
 /** What is still running for this turn. Shells only waiting on children count through those children. */
 export async function activity(folder: string, base: Set<number>, root = process.pid): Promise<Activity> {

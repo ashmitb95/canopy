@@ -1,10 +1,11 @@
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PromptPart, SessionItem } from '../../src/core/types'
 import { LaneCoordinator } from '../../src/lanes/coordinator'
 import { LaneMemory } from '../../src/lanes/memory'
+import { swap } from '../../src/lanes/switch'
 import { LaneTracker } from '../../src/lanes/tracker'
 import { SessionManager } from '../../src/sessions/manager'
 import { SessionStore } from '../../src/sessions/store'
@@ -54,8 +55,8 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
   it('creates a lane in worktrees, warmed up, with its goal', async () => {
     const { api, memory, coordinator } = await setup()
     await coordinator.newLane('x', ['api'], { worktrees: true, goal: 'Do x' })
-    expect(run(join(api, '.worktrees', 'x'), 'branch', '--show-current').trim()).toBe('x')
-    expect(existsSync(join(api, '.worktrees', 'x', '.env'))).toBe(true)
+    expect(run(join(api, '.worktrees', 'wt-1'), 'branch', '--show-current').trim()).toBe('x')
+    expect(existsSync(join(api, '.worktrees', 'wt-1', '.env'))).toBe(true)
     expect(memory.goal('x')).toBe('Do x')
     expect(memory.worktrees('x')).toBe(true)
   })
@@ -73,12 +74,34 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
     sessions[0].emit({ kind: 'turn', id: 't1', state: 'ended' })
 
     const lines = await coordinator.moveIntoPrimary('b')
-    expect(lines).toEqual(['b moved to the primary checkout of api/', 'a moved to api/.worktrees/a'])
+    expect(lines).toEqual(['b moved to the primary checkout of api/', 'a moved to api/.worktrees/wt-1'])
     expect(run(api, 'branch', '--show-current').trim()).toBe('b')
-    expect(seen).toContain('↪ b moved to the primary checkout of api/ · a moved to api/.worktrees/a')
+    expect(seen).toContain('↪ b moved to the primary checkout of api/ · a moved to api/.worktrees/wt-1')
 
-    expect(await coordinator.moveToWorktree('b')).toEqual(['b moved to api/.worktrees/b'])
+    expect(await coordinator.moveToWorktree('b')).toEqual(['b moved to api/.worktrees/wt-2'])
     expect(run(api, 'branch', '--show-current').trim()).toBe('main')
+  })
+
+  it('finds and undoes a move a crash left unfinished', async () => {
+    const { api, coordinator } = await setup()
+    await coordinator.newLane('a', ['api'], { worktrees: false })
+    await coordinator.newLane('b', ['api'], { worktrees: true })
+    await expect(swap(api, 'b', { failBefore: 'fill-slot', crash: true })).rejects.toThrow()
+    expect(await coordinator.unfinishedMoves()).toEqual([{ repo: 'api', lane: 'b' }])
+    expect(await coordinator.undoUnfinishedMoves()).toEqual(['api'])
+    expect(run(api, 'branch', '--show-current').trim()).toBe('a')
+    expect(await coordinator.unfinishedMoves()).toEqual([])
+  })
+
+  it('migrates lane-named worktrees before moving lanes', async () => {
+    const { api, coordinator } = await setup()
+    await coordinator.newLane('a', ['api'], { worktrees: false })
+    run(api, 'branch', 'b')
+    mkdirSync(join(api, '.worktrees'))
+    run(api, 'worktree', 'add', '-q', join(api, '.worktrees', 'b'), 'b')
+    await coordinator.moveIntoPrimary('b')
+    expect(existsSync(join(api, '.worktrees', 'b'))).toBe(false)
+    expect(run(join(api, '.worktrees', 'wt-1'), 'branch', '--show-current').trim()).toBe('a')
   })
 
   it('builds a boundary that redirects edits to the lane’s own checkout and joins new repos', async () => {
@@ -88,13 +111,13 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
     await manager.setLane(chat.id, 'x')
     const record = manager.list()[0].record
     const boundary = await coordinator.boundary(record)
-    expect(boundary?.roots).toEqual([join(api, '.worktrees', 'x'), join(root, '.agentdeck', 'lanes', 'x')])
+    expect(boundary?.roots).toEqual([join(api, '.worktrees', 'wt-1'), join(root, '.agentdeck', 'lanes', 'x')])
 
     expect(await boundary?.outside(join(api, 'src', 'a.ts'))).toBe(
-      `api/src/a.ts is outside lane x. Make this edit at api/.worktrees/x/src/a.ts instead.`
+      `api/src/a.ts is outside lane x. Make this edit at api/.worktrees/wt-1/src/a.ts instead.`
     )
-    expect(await boundary?.outside(join(ui, 'b.ts'))).toBe('ui joined lane x at ui/.worktrees/x. Make this edit at ui/.worktrees/x/b.ts instead.')
-    expect(run(join(ui, '.worktrees', 'x'), 'branch', '--show-current').trim()).toBe('x')
+    expect(await boundary?.outside(join(ui, 'b.ts'))).toBe('ui joined lane x at ui/.worktrees/wt-1. Make this edit at ui/.worktrees/wt-1/b.ts instead.')
+    expect(run(join(ui, '.worktrees', 'wt-1'), 'branch', '--show-current').trim()).toBe('x')
     expect(await coordinator.boundary({ ...record, laneId: undefined })).toBeUndefined()
   })
 })

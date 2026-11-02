@@ -9,6 +9,8 @@ export type WorkspaceConfig = {
   setup: Record<string, string>
   /** Whether new lanes start in worktrees; each lane can override it. */
   worktrees: boolean
+  /** How many worktree slots a repo may hold. */
+  maxSlots: number
 }
 
 /** `.agentdeck/config.toml`, with defaults for anything missing. */
@@ -20,6 +22,7 @@ export function readConfig(root: string): WorkspaceConfig {
   return {
     envFiles: strings(data.env_files) ?? ['.env*'],
     setup: Object.fromEntries(Object.entries(setup).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
-    worktrees: data.worktrees !== false
+    worktrees: data.worktrees !== false,
+    maxSlots: typeof data.max_slots === 'number' && data.max_slots > 0 ? data.max_slots : 4
   }
 }

@@ -6,7 +6,7 @@ import { readConfig } from './config'
 import { deriveLanes } from './lanes'
 import type { LaneMemory } from './memory'
 import type { RepoState } from './state'
-import { joinRepo, moveIntoPrimary, moveToWorktree, SwitchError } from './switch'
+import { joinRepo, migrateToSlots, moveToWorktree, rollback, swapAll, SwitchError, type SwapOptions, unfinishedMove } from './switch'
 import type { LaneTracker } from './tracker'
 import { warmUp } from './warmup'
 
@@ -20,6 +20,12 @@ export type CoordinatorDeps = {
 
 const inside = (root: string, path: string) => path === root || path.startsWith(root + sep)
 
+function groupBy<T>(items: T[], key: (item: T) => string): T[][] {
+  const groups = new Map<string, T[]>()
+  for (const item of items) groups.set(key(item), [...(groups.get(key(item)) ?? []), item])
+  return [...groups.values()]
+}
+
 /** Moves lanes on request and draws each chat's write boundary. Agents never call it; the app does. */
 export class LaneCoordinator {
   constructor(private readonly deps: CoordinatorDeps) {}
@@ -32,14 +38,15 @@ export class LaneCoordinator {
     if (options.goal) memory.setGoal(name, options.goal)
     await tracker.refresh()
     for (const repo of tracker.repos.filter((candidate) => repoNames.includes(candidate.name))) {
-      const path = await joinRepo(repo, name, options.worktrees)
-      if (path !== repo.path) await this.warm(repo, name, path)
+      await migrateToSlots(repo.path)
+      const joined = await joinRepo(repo.path, name, { ...this.limits(repo), worktrees: options.worktrees })
+      if (joined.path !== repo.path) await this.warm(repo, name, joined.path, joined.setupNeeded)
     }
     await tracker.refresh()
   }
 
   /** Brings the lane into the primary checkout of every repo it is in; lanes there move to worktrees and are warmed up. */
-  async moveIntoPrimary(lane: string): Promise<string[]> {
+  async moveIntoPrimary(lane: string, answers: Pick<SwapOptions, 'makeLane' | 'takeForeign'> = {}): Promise<string[]> {
     const { tracker } = this.deps
     await tracker.refresh()
     const repos = this.reposOf(lane)
@@ -49,13 +56,21 @@ export class LaneCoordinator {
       return branch && branch !== repo.base && branch !== lane ? [branch] : []
     })
     this.assertIdle([lane, ...holders])
+    for (const repo of repos) await migrateToSlots(repo.path)
+    await tracker.refresh()
+    const moves = this.reposOf(lane)
+    // One base and limit per repo: swapAll takes them per call, so repos with different bases move one group at a time.
     const lines: string[] = []
-    for (const repo of repos) {
-      const result = await moveIntoPrimary(repo, lane)
-      lines.push(`${lane} moved to the primary checkout of ${repo.name}/`)
-      if (result.movedOut && result.worktree) {
-        lines.push(`${result.movedOut} moved to ${this.rel(result.worktree)}`)
-        void this.warm(repo, result.movedOut, result.worktree)
+    for (const group of groupBy(moves, (repo) => JSON.stringify(this.limits(repo)))) {
+      const results = await swapAll(group.map((repo) => repo.path), lane, { ...this.limits(group[0]), ...answers })
+      for (const [index, result] of results.entries()) {
+        const repo = group[index]
+        lines.push(`${lane} moved to the primary checkout of ${repo.name}/`)
+        if (result.movedOut && result.slotPath) {
+          lines.push(`${result.movedOut} moved to ${this.rel(result.slotPath)}`)
+          void this.warm(repo, result.movedOut, result.slotPath, result.setupNeeded.includes(result.slotPath))
+        }
+        if (result.setupNeeded.includes(repo.path)) lines.push(`Dependencies changed in ${repo.name}/: rerun its setup in the primary checkout`)
       }
     }
     await this.settle([lane, ...holders], lines)
@@ -71,9 +86,10 @@ export class LaneCoordinator {
     this.assertIdle([lane])
     const lines: string[] = []
     for (const repo of repos) {
-      const path = await moveToWorktree(repo, lane)
-      lines.push(`${lane} moved to ${this.rel(path)}`)
-      void this.warm(repo, lane, path)
+      const { slotPath, setupNeeded } = await moveToWorktree(repo.path, lane, this.limits(repo))
+      if (!slotPath) continue
+      lines.push(`${lane} moved to ${this.rel(slotPath)}`)
+      void this.warm(repo, lane, slotPath, setupNeeded.includes(slotPath))
     }
     await this.settle([lane], lines)
     return lines
@@ -106,8 +122,8 @@ export class LaneCoordinator {
     if (own) return `${this.rel(path)} is outside lane ${lane}. Make this edit at ${this.rel(join(own.path, within))} instead.`
     const worktrees = memory.worktrees(lane) ?? readConfig(tracker.root).worktrees
     try {
-      const joined = await joinRepo(repo, lane, worktrees)
-      if (joined !== repo.path) void this.warm(repo, lane, joined)
+      const { path: joined, setupNeeded } = await joinRepo(repo.path, lane, { ...this.limits(repo), worktrees })
+      if (joined !== repo.path) void this.warm(repo, lane, joined, setupNeeded)
       await this.settle([lane], [`${lane} joined ${repo.name}`])
       return `${repo.name} joined lane ${lane} at ${this.rel(joined)}. Make this edit at ${this.rel(join(joined, within))} instead.`
     } catch (error) {
@@ -115,11 +131,34 @@ export class LaneCoordinator {
     }
   }
 
-  private async warm(repo: RepoState, lane: string, path: string): Promise<void> {
+  /** Moves that a crash left unfinished, across the workspace. */
+  async unfinishedMoves(): Promise<{ repo: string; lane: string }[]> {
+    await this.deps.tracker.refresh()
+    const found: { repo: string; lane: string }[] = []
+    for (const repo of this.deps.tracker.repos) {
+      const journal = await unfinishedMove(repo.path)
+      if (journal) found.push({ repo: repo.name, lane: journal.lane })
+    }
+    return found
+  }
+
+  /** Undoes unfinished moves, restoring both sides from their snapshots. */
+  async undoUnfinishedMoves(): Promise<string[]> {
+    const undone: string[] = []
+    for (const repo of this.deps.tracker.repos) if (await rollback(repo.path)) undone.push(repo.name)
+    await this.deps.tracker.refresh()
+    return undone
+  }
+
+  private limits(repo: RepoState): { base?: string; maxSlots: number } {
+    return { ...(repo.base ? { base: repo.base } : {}), maxSlots: readConfig(this.deps.tracker.root).maxSlots }
+  }
+
+  private async warm(repo: RepoState, lane: string, path: string, runSetup = true): Promise<void> {
     const { tracker, memory, manager } = this.deps
     const config = readConfig(tracker.root)
     const primary = repo.checkouts.find((checkout) => checkout.primary)?.path ?? repo.path
-    const result = await warmUp(primary, path, config.envFiles, config.setup[repo.name], await this.deps.env())
+    const result = await warmUp(primary, path, config.envFiles, runSetup ? config.setup[repo.name] : undefined, await this.deps.env())
     memory.appendHistory(lane, { event: 'warmed', repo: repo.name, copied: result.copied, ok: result.setup?.ok ?? true })
     if (result.setup && !result.setup.ok) {
       for (const record of this.chatsOn([lane])) {

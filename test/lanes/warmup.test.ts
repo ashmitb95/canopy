@@ -8,7 +8,7 @@ import { workspace } from './repos'
 
 describe('readConfig', () => {
   it('defaults: .env* files, no setup, worktrees on', () => {
-    expect(readConfig(workspace())).toEqual({ envFiles: ['.env*'], setup: {}, worktrees: true })
+    expect(readConfig(workspace())).toEqual({ envFiles: ['.env*'], setup: {}, worktrees: true, maxSlots: 4 })
   })
 
   it('reads env files, setup per repo, and the worktree default', () => {
@@ -18,7 +18,7 @@ describe('readConfig', () => {
       join(root, '.agentdeck', 'config.toml'),
       'env_files = [".env", "config/local.json"]\nworktrees = false\n\n[setup]\napi = "pnpm install"\n'
     )
-    expect(readConfig(root)).toEqual({ envFiles: ['.env', 'config/local.json'], setup: { api: 'pnpm install' }, worktrees: false })
+    expect(readConfig(root)).toEqual({ envFiles: ['.env', 'config/local.json'], setup: { api: 'pnpm install' }, worktrees: false, maxSlots: 4 })
   })
 })
 

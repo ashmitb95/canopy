@@ -16,7 +16,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 **Done when:** tests pass on `main`.
 
-## Phase 1: Lanes engine
+## Phase 1: Lanes engine (done)
 
 - Switching as a transaction, from `poc/swap.ts`: preflight, snapshot, swap, verify, rollback, recovery journal.
 - Generic worktree slots with occupancy derived from Git; migrate lane-named worktrees already in use.

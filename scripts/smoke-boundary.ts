@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     void manager.prompt(id, [{ type: 'text', text: `Create the file ${target} containing the word hi. Use your file editing tool.` }])
   })
   const inMain = existsSync(target)
-  const inLane = existsSync(join(api, '.worktrees', 'hello', 'hello.txt'))
+  const inLane = existsSync(join(api, '.worktrees', 'wt-1', 'hello.txt'))
   console.log(`primary checkout has hello.txt: ${inMain} · lane worktree has hello.txt: ${inLane}`)
   await manager.dispose()
   tracker.dispose()

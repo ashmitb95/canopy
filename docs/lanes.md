@@ -8,13 +8,12 @@ A lane is a unit of work: branch `X` in every repo that has it. Chats link to a 
 workspace/                  ← every chat's cwd
 ├─ .agentdeck/              ← stored intent
 ├─ ui/                      ← repo: primary checkout on some branch
-│  └─ .worktrees/retry-fix/ ← worktree of branch retry-fix
+│  └─ .worktrees/wt-1/      ← worktree slot, holding whichever lane is there
 └─ api/
 ```
 
 - A root that is itself a repo is the only repo; otherwise repos are found by a depth-limited scan (`discover.ts`).
 - `.worktrees/` goes in `.git/info/exclude`, never in a committed `.gitignore`.
-- In folder names, `/` in a branch becomes `--`.
 
 ## Derived state
 
@@ -23,7 +22,7 @@ workspace/                  ← every chat's cwd
 ## Stored intent: `.agentdeck/`
 
 ```
-config.toml                 env_files, [setup] per repo, worktrees, [task.<id>]
+config.toml                 env_files, [setup] per repo, worktrees, max_slots, [task.<id>]
 lanes/<lane>/
   lane.toml                 goal, created, worktrees
   plan.md
@@ -40,9 +39,11 @@ TOML is a small subset (`toml.ts`): `key = <JSON>` lines and `[table]` headers. 
 
 ## Moving lanes
 
-`switch.ts`: `moveIntoPrimary`, `moveToWorktree`, `joinRepo`. Uncommitted work travels in uniquely named stashes (`agentdeck:<lane>:<ts>`). Nothing moves while an affected chat is mid-turn. A stash that does not re-apply stops the move and stays in place.
+`switch.ts` treats a move as a transaction. `preflight` changes nothing and answers ok, ask, or stop; all repos must pass before any moves. `swap` then snapshots both sides to named stashes pinned under `refs/agentdeck/`, writes a journal to the Git directory, detaches the slot, switches the primary checkout, gives the slot the outgoing lane, restores each side's work, and verifies. Any failure restores both sides; leftovers are stashed, never discarded. After a crash, `rollback` undoes the move from the journal.
 
-`warmup.ts`: a new worktree gets the configured env files copied from the primary checkout, then the repo's setup command.
+Worktrees are slots: `<repo>/.worktrees/wt-<n>`. Occupancy comes only from `git worktree list`. A parked lane leaves its slot detached and warm for the next lane, and existing lane-named worktrees migrate on the next move. `max_slots` in `config.toml` sets the limit (default 4). Worktrees elsewhere are tracked but not moved without asking. Primary checkouts can hold different lanes in different repos; each repo moves on its own terms within one all-or-nothing move.
+
+`warmup.ts`: a new slot gets the configured env files copied from the primary checkout, then the repo's setup command. A reused slot reruns setup only when a lockfile changed.
 
 ## Coordination
 
@@ -59,4 +60,4 @@ TOML is a small subset (`toml.ts`): `key = <JSON>` lines and `[table]` headers. 
 
 ## Not built
 
-Archiving lanes, merged and ahead/behind status, per-lane restart of dev servers, PR and issue links.
+Archiving lanes, merged and ahead/behind status, per-lane restart of dev servers, PR and issue links, and a UI for preflight questions and crash recovery.

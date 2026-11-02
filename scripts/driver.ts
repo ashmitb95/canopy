@@ -1,5 +1,5 @@
 // A terminal host for the core: chat, @mention, answer, and watch the stream, with no UI.
-// Usage: node dist/driver.js [workspace] [--lead claude] [--lane name] [--mode full-access]
+// Usage: node dist/driver.js [workspace] [--lead grok] [--implement codex] [--review claude] [--verify 'pnpm check'] [--lane name] [--mode full-access] [--new]
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { PermissionMode, SessionItem } from '../src/core/types'
@@ -14,7 +14,7 @@ const flag = (name: string) => {
   const index = args.indexOf(`--${name}`)
   return index >= 0 ? args[index + 1] : undefined
 }
-const root = resolve(args.find((arg, index) => !arg.startsWith('--') && !args[index - 1]?.startsWith('--')) ?? '.')
+const root = resolve(args.find((arg, index) => !arg.startsWith('--') && (!args[index - 1]?.startsWith('--') || args[index - 1] === '--new')) ?? '.')
 
 const HELP = `Type a message, or @agent to address one.
 /state  who is doing what       /queue   what is waiting
@@ -29,8 +29,10 @@ async function main(): Promise<void> {
   const core = await createCore({ root, storage: join(root, '.agentdeck', 'driver'), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
   const unfinished = await core.lanes.unfinishedMoves()
   if (unfinished.length > 0) console.log(`A move was left unfinished: ${unfinished.map((move) => `${move.lane} in ${move.repo}`).join(', ')}. Use /undo.`)
-  const chatOptions = { lead: flag('lead') ?? 'claude', mode: (flag('mode') ?? 'ask') as PermissionMode, ...(flag('lane') ? { laneId: flag('lane') } : {}) }
-  let chat: GroupChat = core.chats.list().at(-1) ?? core.chats.create(chatOptions)
+  const lead = flag('lead') ?? 'claude'
+  const roster = { plan: lead, ...(flag('implement') ? { implement: flag('implement') } : {}), ...(flag('review') ? { review: flag('review') } : {}), ...(flag('research') ? { research: flag('research') } : {}) }
+  const chatOptions = { lead, roster, mode: (flag('mode') ?? 'ask') as PermissionMode, ...(flag('lane') ? { laneId: flag('lane') } : {}), ...(flag('verify') ? { verify: flag('verify') } : {}) }
+  let chat: GroupChat = (args.includes('--new') ? undefined : core.chats.list().at(-1)) ?? core.chats.create(chatOptions)
   const pending: { agent: string; item: Extract<SessionItem, { kind: 'approval' | 'question' }> }[] = []
   const printed = new Map<string, string>()
   const stream = new Map<string, SessionItem[]>()

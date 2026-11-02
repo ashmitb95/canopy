@@ -13,10 +13,12 @@ export const plain = (text: string) => text.trim().replace(/^[-*]\s+/, '').repla
 
 /** One line for a tool: the command or the file, without provider-specific wording. */
 export function toolLine(title: string): string {
-  const command = /^(?:Bash|Run|Shell)\s+(.+)$/s.exec(title)
+  const command = /^(?:Bash|Run|Shell|Command Execute)\s+(.+)$/s.exec(title)
   if (command) return `$ ${command[1].split('\n')[0]}`
   const file = /^(Read|Write|Edit|Grep|Glob|Search|Fetch)\s+(.+)$/s.exec(title)
   if (file) return `${file[1].toLowerCase()} ${file[2].replace(/^\.\//, '').replace(/, \.\//g, ', ')}`
+  const listing = /^list files list\s+(.+)$/i.exec(title)
+  if (listing) return `list ${listing[1]}`
   return title.toLowerCase()
 }
 

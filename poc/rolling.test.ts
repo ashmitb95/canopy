@@ -8,6 +8,8 @@ describe('rolling view', () => {
   it('shortens tools across providers', () => {
     expect(toolLine('Bash ls -la')).toBe('$ ls -la')
     expect(toolLine('Run node check.test.mjs')).toBe('$ node check.test.mjs')
+    expect(toolLine('Command Execute node a.mjs')).toBe('$ node a.mjs')
+    expect(toolLine('list files list .')).toBe('list .')
     expect(toolLine('Read ./c.ts')).toBe('read c.ts')
     expect(toolLine('Edit c.ts, ./check.test.mjs')).toBe('edit c.ts, check.test.mjs')
   })

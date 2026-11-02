@@ -4,26 +4,30 @@ Planned work, in rough order. [lanes.md](lanes.md) and [architecture.md](archite
 
 ## 1. Claude connection profiles
 
-Choose how the Claude provider connects, and switch from inside the extension.
+Named profiles for how the Claude provider connects, such as `personal` and `work`, with a switcher inside the extension. A user can have several of each type.
 
-| Profile | What the CLI gets | Where credentials live |
+| Type | What the CLI gets | Where credentials live |
 |---|---|---|
-| **Claude account** | Its own sign-in | The CLI, through Anthropic's flow |
-| **API key** | `ANTHROPIC_API_KEY` | VS Code SecretStorage, or the user's environment |
+| **Claude account** | Its own sign-in; `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` unset | The CLI, through Anthropic's flow |
+| **API key** | `ANTHROPIC_API_KEY`, optional `ANTHROPIC_BASE_URL` for a proxy | VS Code SecretStorage, or the user's environment |
 | **Amazon Bedrock** | `CLAUDE_CODE_USE_BEDROCK=1`, `AWS_PROFILE`, optional `AWS_REGION` and model pins | The AWS credential chain, or `AWS_BEARER_TOKEN_BEDROCK` in SecretStorage |
+
+Any profile can set `CLAUDE_CONFIG_DIR`, which keeps its history, settings, and MCP servers apart.
 
 Behaviour:
 
-- Only configured profiles appear in the switcher (status bar and chat header). The active profile is always visible.
+- The switcher (status bar and chat header) lists configured profiles and always shows the active one. The active profile applies to new chats.
+- **A chat stays on the profile it started with**, shown on its row and header. Separate config directories hold separate sessions, and work conversations must not move to a personal account or the reverse. Changing a chat's profile means forking it, with a warning, from a handoff summary.
 - A profile sets environment variables on the spawned CLI only. It never edits the user's shell or CLI settings.
-- With no profile chosen, the CLI's environment passes through untouched, so stop removing `ANTHROPIC_API_KEY` by default. Clearing it applies only when the user picks **Claude account**.
-- A switch restarts the chat's CLI and resumes the session.
+- AgentDeck runs the `claude` binary directly, so shell functions and aliases around it do not apply. Profiles replace them inside the extension.
+- With no profile configured, the CLI's environment passes through untouched, so stop removing `ANTHROPIC_API_KEY` by default.
 - Hide what a backend lacks: quota on API key and Bedrock, WebSearch on Bedrock.
 
 To verify before building:
 
-- Whether `env` in `~/.claude/settings.json` (which `/setup-bedrock` writes) overrides the variables a profile sets. If it does, profiles must detect and report the conflict.
-- Whether a session resumes across backends, and what happens when its model does not exist on the new one.
+- Whether `env` in the profile's `settings.json` (which `/setup-bedrock` writes) overrides the variables a profile sets. A separate `CLAUDE_CONFIG_DIR` per profile avoids the conflict.
+- How custom base URLs report models, context, and cost.
+- How existing chats, which have no profile, map to one. Default: the default config directory.
 
 The hard rule on credentials in [AGENTS.md](../AGENTS.md) changes with this work: never read or store Claude account credentials; API keys the user adds go only in SecretStorage and only to the CLI's environment.
 

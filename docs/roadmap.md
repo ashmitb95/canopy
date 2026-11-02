@@ -26,7 +26,7 @@ AgentDeck keeps a ledger of each chat and how far each agent has read. Handoffs 
 | Lead switch | A catch-up, work in progress, and that it now leads |
 
 - `delegate` returns at once and the lead's turn ends. AgentDeck starts the lead's next turn with the report, so no long tool call stays open.
-- A snapshot before each delegate (`git stash create`) gives an exact diff and an undo.
+- A snapshot before each delegate gives an exact diff and an undo. It must include untracked files, which `git stash create` leaves out, without disturbing the checkout; the proof of concept settles how.
 - The complete transcript is saved as a file the lead can read.
 
 ### Permissions and questions
@@ -46,8 +46,8 @@ A branch can be checked out in only one place, so switching is the main source o
 
 1. **Preflight, changing nothing, in every repo:** classify each state below. All repos must pass, or none move.
 2. **Wait:** no affected chat is mid-turn. Queue the switch for the end of the turn, and hold new turns.
-3. **Snapshot:** save both sides' uncommitted work to `refs/agentdeck/` and write a recovery journal.
-4. **Swap:** detach the worktree to free the branch, switch the primary checkout, then give the worktree the outgoing lane and rename it with `git worktree move`. Folders trade branches, keeping installed dependencies. Restore each side's work.
+3. **Snapshot:** stash both sides' uncommitted work, untracked files included, under named stashes (`agentdeck:<lane>:<ts>`), pin each with a ref in `refs/agentdeck/` so a user's `git stash clear` cannot lose it, and write a recovery journal.
+4. **Swap:** detach the slot's worktree to free the branch, switch the primary checkout, then check the outgoing lane out in that slot. Folders trade branches, keeping installed dependencies and their paths. Restore each side's work.
 5. **Verify and settle:** check both sides, rerun setup only where a lockfile changed, tell affected chats, and offer to restart the dev server.
 
 Any failure restores both sides from the snapshot. On startup, an unfinished journal offers to finish or undo.
@@ -63,6 +63,17 @@ Any failure restores both sides from the snapshot. On startup, an unfinished jou
 | Agent mid-turn | Wait, or offer Stop |
 | Merge, rebase, or cherry-pick in progress, or detached HEAD | Stop and explain |
 | Locked worktree, submodule changes | Stop and explain |
+
+### Worktree slots
+
+Worktrees live in generically named folders, `<repo>/.worktrees/wt-<n>`, and hold whichever lane is warm there.
+
+- Paths stay stable across switches, so terminals, editor windows, tool caches, and dev server configs keep working. Branch names with `/` need no mapping, and nothing is renamed.
+- **Occupancy is derived from `git worktree list`, never stored.** There is no slots file to drift or repair. A lane takes the lowest number free across its repos, so it keeps one number everywhere when it can.
+- A lane leaving a slot leaves the folder detached and warm. The next New Worktree reuses it, with setup rerun only if the lockfile differs.
+- The number of slots has a setting. At the limit, AgentDeck asks which slot to free and never evicts by itself. Removing a slot checks for uncommitted work first.
+- Slot numbers can map to dev server ports (`wt-1` to a port offset), so warm lanes can run side by side.
+- Worktrees that users or agents created keep their names and are tracked as they are. Agents get current paths in the brief, and the UI always shows the lane, not the folder.
 
 To prove first, with no agents or quota: every row above in real repos, multi-repo all-or-nothing, and a failure injected at each step. `src/lanes/switch.ts` today removes the worktree, has no preflight or rollback, and can stop partway.
 

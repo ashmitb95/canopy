@@ -6,6 +6,7 @@ The target UI. Screens are in [design/end-to-end/](design/end-to-end/) as design
 
 - **Primary checkout:** the repo's original folder, which Git calls the main working tree. It holds the user's env files and dev server. Never call it "main" in the UI, which reads as a Git branch.
 - **Lane:** a unit of work, branch `X` in each repo that has it.
+- **Slot:** a generically named worktree folder (`.worktrees/wt-1`). The UI shows the lane first and the slot second; the screens still show lane-named paths.
 - **Warm:** has a ready worktree. **Cold:** branch only.
 - **Lead:** the agent that talks with the user and hands out work. **Roster:** which provider holds each role.
 - **Delegate:** an agent doing work handed to it.

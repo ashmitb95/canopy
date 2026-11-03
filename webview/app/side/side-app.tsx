@@ -85,9 +85,14 @@ export function SideApp() {
           open={lanesOpen}
           onToggle={() => setLanesOpen(!lanesOpen)}
           action={
+            <>
+            <button type="button" aria-label="Open the lane view" className="flex size-8 items-center justify-center text-muted-foreground hover:text-foreground" onClick={() => send({ type: 'openLanes' })}>
+              <Codicon name="link-external" />
+            </button>
             <button type="button" aria-label="New worktree" className="flex size-8 items-center justify-center text-muted-foreground hover:text-foreground" onClick={() => send({ type: 'newLane' })}>
               <Codicon name="add" />
             </button>
+            </>
           }
         >
           <Lanes lanes={data.lanes} />

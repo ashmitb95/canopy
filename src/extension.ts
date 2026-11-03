@@ -48,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     : undefined
   const laneChanges = new LaneChanges()
   const surfaces = new ChatSurfaces(context, sessionManager, providers, getEnv, editor, diffs, unread, laneSource, core.chats)
-  side = new SideView((webview) => surfaces.html(webview, 'side'), () => surfaces.roots(), sessionManager, core.chats, unread, tracker, lanes)
+  side = new SideView((webview, kind) => surfaces.html(webview, kind), () => surfaces.roots(), sessionManager, core.chats, unread, tracker, lanes)
   void surfaces.markInstalled()
   const notifier = new Notifier(
     sessionManager,
@@ -92,6 +92,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     side,
     vscode.window.registerWebviewViewProvider(SIDE_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand('agentdeck.openGroup', (groupId: string) => surfaces.showGroupInSidebar(groupId)),
+    vscode.commands.registerCommand('agentdeck.openLanes', () => side.openLanes()),
     new SessionsStatusBar(sessionManager),
     vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),
     vscode.commands.registerCommand('agentdeck.openSessionInSidebar', (node: SessionNode) => surfaces.showInSidebar(node.id)),

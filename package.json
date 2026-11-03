@@ -446,6 +446,11 @@
         "command": "agentdeck.openGroup",
         "title": "Open Group Chat",
         "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.openLanes",
+        "title": "Open Lanes",
+        "category": "AgentDeck"
       }
     ],
     "menus": {

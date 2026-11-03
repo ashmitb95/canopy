@@ -1,3 +1,4 @@
+import { basename } from 'node:path'
 import * as vscode from 'vscode'
 import type { GroupChats } from '../group/chat'
 import type { LaneCoordinator } from '../lanes/coordinator'
@@ -5,20 +6,21 @@ import { deriveLanes, laneDescription } from '../lanes/lanes'
 import { SwitchQuestion } from '../lanes/switch'
 import type { LaneTracker } from '../lanes/tracker'
 import type { SessionManager } from '../sessions/manager'
-import type { HostMessage, SideData, WebviewMessage } from './protocol'
+import type { HostMessage, LaneCard, SideData, WebviewMessage } from './protocol'
 import type { Unread } from './unread'
 
 export const SIDE_VIEW = 'agentdeck.sessions'
 
-/** The primary sidebar: lanes above sessions and group chats, as a webview so rows can show live state. */
+/** The primary sidebar (lanes above sessions and group chats) and the full lane view in an editor tab, fed from one place. */
 export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   private view: vscode.WebviewView | undefined
+  private panel: vscode.WebviewPanel | undefined
   private readonly subscriptions: vscode.Disposable[] = []
   private chatListeners: { dispose(): void }[] = []
   private timer: ReturnType<typeof setTimeout> | undefined
 
   constructor(
-    private readonly html: (webview: vscode.Webview) => string,
+    private readonly html: (webview: vscode.Webview, kind: 'side' | 'lanes') => string,
     private readonly roots: () => vscode.Uri[],
     private readonly manager: SessionManager,
     private readonly chats: GroupChats,
@@ -36,13 +38,23 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view
     view.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
-    view.webview.html = this.html(view.webview)
-    view.webview.onDidReceiveMessage((message: WebviewMessage) =>
-      this.handle(message).catch((error: unknown) => vscode.window.showErrorMessage(`AgentDeck: ${error instanceof Error ? error.message : String(error)}`))
-    )
+    view.webview.html = this.html(view.webview, 'side')
+    view.webview.onDidReceiveMessage((message: WebviewMessage) => this.receive(message))
     view.onDidDispose(() => {
       if (this.view === view) this.view = undefined
     })
+  }
+
+  /** Opens the full lane view, or reveals it if it is open. */
+  openLanes(): void {
+    if (this.panel) return this.panel.reveal()
+    const panel = vscode.window.createWebviewPanel('agentdeck.lanes', 'Lanes', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() })
+    panel.webview.html = this.html(panel.webview, 'lanes')
+    panel.webview.onDidReceiveMessage((message: WebviewMessage) => this.receive(message))
+    panel.onDidDispose(() => {
+      this.panel = undefined
+    })
+    this.panel = panel
   }
 
   /** Lanes Git shows, plus lanes a chat is on. */
@@ -56,6 +68,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
     this.timer = setTimeout(() => {
       this.timer = undefined
       this.post({ type: 'side', side: this.data() })
+      if (this.panel) void this.panel.webview.postMessage({ type: 'laneCards', lanes: this.laneCards() } satisfies HostMessage)
     }, 100)
   }
 
@@ -93,10 +106,38 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
     }
   }
 
+  private laneCards(): LaneCard[] {
+    const side = this.data()
+    return this.allLanes().map((lane) => ({
+      name: lane.name,
+      repos: lane.repos.map((repo) => ({ repo: repo.repo, location: repo.location, dirty: repo.dirty, ...(repo.location === 'worktree' ? { slot: basename(repo.path) } : {}) })),
+      chats: [
+        ...side.groups
+          .filter((group) => group.laneId === lane.name)
+          .map((group) => ({ kind: 'group' as const, id: group.id, title: group.title, agents: group.agents, state: group.needsYou ? 'Needs you' : group.running ? `${group.running}: ${group.activity || 'working'}` : `Idle · lead ${group.lead}`, needsYou: group.needsYou })),
+        ...side.sessions
+          .filter((session) => session.laneId === lane.name)
+          .map((session) => ({ kind: 'session' as const, id: session.id, title: session.title, agents: [session.providerId], state: session.status === 'needs-input' ? 'Needs you' : session.status === 'running' ? 'Working' : 'Idle', needsYou: session.status === 'needs-input' }))
+      ]
+    }))
+  }
+
+  private receive(message: WebviewMessage): void {
+    this.handle(message).catch((error: unknown) => vscode.window.showErrorMessage(`AgentDeck: ${error instanceof Error ? error.message : String(error)}`))
+  }
+
   private async handle(message: WebviewMessage): Promise<void> {
     switch (message.type) {
       case 'ready':
         this.post({ type: 'side', side: this.data() })
+        if (this.panel) void this.panel.webview.postMessage({ type: 'laneCards', lanes: this.laneCards() } satisfies HostMessage)
+        return
+      case 'openLanes':
+        this.openLanes()
+        return
+      case 'parkLane':
+        if (!this.lanes) return
+        void vscode.window.showInformationMessage((await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Moving ${message.laneId} to worktrees…` }, () => this.lanes?.moveToWorktree(message.laneId) ?? Promise.resolve([]))).join(' · '))
         return
       case 'openSession':
         await vscode.commands.executeCommand('agentdeck.openSessionInSidebar', { id: message.sessionId })

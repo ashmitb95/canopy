@@ -253,6 +253,18 @@ const messages: HostMessage[] =
         { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
         { type: 'empty' }
       ]
+    : scenario === 'lanes'
+      ? [
+          {
+            type: 'laneCards',
+            lanes: [
+              { name: 'export-timeouts', repos: [{ repo: 'api', location: 'worktree', dirty: 1, slot: 'wt-1' }, { repo: 'ui', location: 'worktree', dirty: 0, slot: 'wt-1' }], chats: [{ kind: 'group', id: 'g1', title: 'Export timeouts', agents: ['claude', 'codex', 'grok'], state: 'codex: $ node --test', needsYou: false }] },
+              { name: 'auth-flow', repos: [{ repo: 'api', location: 'primary', dirty: 2 }], chats: [{ kind: 'session', id: 's9', title: 'Sign-in screens', agents: ['claude'], state: 'Idle', needsYou: false }] },
+              { name: 'billing-export', repos: [{ repo: 'api', location: 'worktree', dirty: 0, slot: 'wt-2' }], chats: [{ kind: 'group', id: 'g2', title: 'Billing CSV', agents: ['grok', 'claude'], state: 'Needs you', needsYou: true }] },
+              { name: 'retry-fix', repos: [], chats: [{ kind: 'session', id: 's3', title: 'Retry backoff', agents: ['codex'], state: 'Idle', needsYou: false }] }
+            ]
+          }
+        ]
     : scenario === 'side'
       ? [
           {

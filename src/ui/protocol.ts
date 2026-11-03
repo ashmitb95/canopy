@@ -28,6 +28,13 @@ export type SideData = {
   sessions: SessionSummary[]
 }
 
+/** The full lane view: every lane, where each repo has it, and the chats working on it. */
+export type LaneCard = {
+  name: string
+  repos: { repo: string; location: 'primary' | 'worktree'; dirty: number; slot?: string }[]
+  chats: { kind: 'group' | 'session'; id: string; title: string; agents: string[]; state: string; needsYou: boolean }[]
+}
+
 export type SessionSummary = {
   id: string
   title: string
@@ -77,6 +84,7 @@ export type HostMessage =
   | { type: 'groupState'; state: GroupState }
   | { type: 'groupItem'; agent: string; item: SessionItem }
   | { type: 'side'; side: SideData }
+  | { type: 'laneCards'; lanes: LaneCard[] }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -118,6 +126,8 @@ export type WebviewMessage =
   | { type: 'openGroup'; groupId: string }
   | { type: 'newGroupChat' }
   | { type: 'switchLane'; laneId: string }
+  | { type: 'parkLane'; laneId: string }
+  | { type: 'openLanes' }
   | { type: 'groupAnswer'; agent: string; itemId: string; response: PromptResponse }
   | { type: 'answerQuestion'; id: string; text: string }
   | { type: 'stopAndSend'; queuedId: string }

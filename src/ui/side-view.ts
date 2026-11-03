@@ -21,6 +21,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly subscriptions: vscode.Disposable[] = []
   private chatListeners: { dispose(): void }[] = []
   private timer: ReturnType<typeof setTimeout> | undefined
+  private readonly laneListeners = new Set<() => void>()
 
   constructor(
     private readonly html: (webview: vscode.Webview, kind: 'side' | 'lanes') => string,
@@ -73,6 +74,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
       this.timer = undefined
       this.post({ type: 'side', side: this.data() })
       this.postLanes()
+      for (const listener of this.laneListeners) listener()
     }, 100)
   }
 
@@ -110,7 +112,20 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
     }
   }
 
-  private async laneCards(): Promise<LaneCard[]> {
+  /** Called when lanes or the chats on them change, for other views that show lane cards. */
+  onLanesChanged(listener: () => void): { dispose(): void } {
+    this.laneListeners.add(listener)
+    return { dispose: () => this.laneListeners.delete(listener) }
+  }
+
+  /** Runs a lane action from another view that shows lane cards; false for anything else. */
+  async handleLane(message: WebviewMessage): Promise<boolean> {
+    if (!['switchLane', 'parkLane', 'warmUpLane', 'openLaneChat', 'reviewLane', 'newLane', 'openLanes'].includes(message.type)) return false
+    await this.handle(message)
+    return true
+  }
+
+  async laneCards(): Promise<LaneCard[]> {
     const side = this.data()
     const root = this.tracker?.root ?? ''
     const card = (name: string, place: LaneCard['place'], repos: Lane['repos']): LaneCard => {

@@ -10,7 +10,7 @@ import { attachFile, saveImage } from './attachments'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
 import { FileSearch } from './file-search'
-import type { Attachment, HostMessage, LaneInfo, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
+import type { Attachment, HostMessage, LaneCard, LaneInfo, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
 import { recentSessions } from './recent'
 import type { Unread } from './unread'
 
@@ -57,6 +57,23 @@ export class ChatSurfaces
   private readonly subscriptions: { dispose(): void }[] = []
   private readonly files = new FileSearch()
   private readonly attachmentsDir: string
+
+  /** Lane cards for the chat view when no chat is open in it; set by the extension. */
+  private laneView: { cards(): Promise<LaneCard[]>; handle(message: WebviewMessage): Promise<boolean> } | undefined
+
+  useLanes(lanes: { cards(): Promise<LaneCard[]>; handle(message: WebviewMessage): Promise<boolean>; onChange(listener: () => void): { dispose(): void } }): { dispose(): void } {
+    this.laneView = lanes
+    return lanes.onChange(() => {
+      if (this.sidebar) void this.postLaneCards(this.sidebar)
+    })
+  }
+
+  /** The chat view with no chat in it shows the lanes. */
+  private async postLaneCards(surface: Surface): Promise<void> {
+    if (surface.kind !== 'view' || surface.sessionId || surface.groupId || !this.laneView) return
+    if (this.sidebarView) this.sidebarView.title = 'Lanes'
+    this.post(surface, { type: 'laneCards', lanes: await this.laneView.cards() })
+  }
 
   /** Starts a group chat with the roster from settings, led by the given provider or the roster's lead; set by the extension. */
   startGroup: ((lead?: string, text?: string) => Promise<void>) | undefined
@@ -170,7 +187,9 @@ export class ChatSurfaces
     surface.subscription?.dispose()
     surface.subscription = undefined
     surface.sessionId = undefined
+    surface.groupId = undefined
     this.post(surface, { type: 'empty' })
+    void this.postLaneCards(surface)
   }
 
   /** A chat started from a surface's chooser opens in that surface. */
@@ -217,6 +236,7 @@ export class ChatSurfaces
     surface.subscription?.dispose()
     surface.sessionId = undefined
     surface.groupId = chatId
+    if (surface === this.sidebar && this.sidebarView) this.sidebarView.title = chat.record.title
     this.post(surface, { type: 'groupSnapshot', state: chat.state(), items: chat.items() })
     surface.subscription = chat.onEvent((event) => {
       this.post(surface, event.type === 'state' ? { type: 'groupState', state: event.state } : { type: 'groupItem', agent: event.agent, item: event.item })
@@ -427,6 +447,7 @@ export class ChatSurfaces
 
   private async handle(surface: Surface, message: WebviewMessage): Promise<void> {
     if (await this.handleGroup(surface, message)) return
+    if (surface.kind === 'view' && !surface.sessionId && !surface.groupId && this.laneView && (await this.laneView.handle(message))) return
     const sessionId = surface.sessionId
     switch (message.type) {
       case 'ready':
@@ -441,7 +462,10 @@ export class ChatSurfaces
         for (const [providerId, quota] of Object.entries(this.quotas)) this.post(surface, { type: 'quota', providerId, quota })
         for (const [providerId, { progress }] of this.signIns) this.post(surface, { type: 'signInProgress', providerId, progress })
         if (sessionId) this.show(surface, sessionId)
-        else this.post(surface, { type: 'empty' })
+        else {
+          this.post(surface, { type: 'empty' })
+          await this.postLaneCards(surface)
+        }
         return
       case 'prompt': {
         // A blank chat becomes a group chat led by the roster's lead, starting with what was typed.
@@ -589,6 +613,7 @@ export class ChatSurfaces
     surface.member = undefined
     surface.groupId = undefined
     surface.sessionId = sessionId
+    if (surface === this.sidebar && this.sidebarView) this.sidebarView.title = this.title(sessionId)
     surface.subscription = this.manager.subscribe(sessionId, (event) =>
       this.post(surface, { type: 'session', sessionId, event })
     )

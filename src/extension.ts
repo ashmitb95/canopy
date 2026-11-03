@@ -76,6 +76,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (choice === 'Undo it') await runLane('Undoing the interrupted switch…', async () => void vscode.window.showInformationMessage((await lanes.undoUnfinishedMoves()).join(' · ')))
   })
 
+  context.subscriptions.push(surfaces.useLanes({ cards: () => side.laneCards(), handle: (message) => side.handleLane(message), onChange: (listener) => side.onLanesChanged(listener) }))
+
   // Every chat started from a provider is a group chat it leads, so the roster and delegation always apply.
   surfaces.startGroup = async (lead, text) => {
     const chat = await newGroup(lead ? { lead } : {})

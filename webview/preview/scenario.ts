@@ -375,6 +375,8 @@ const messages: HostMessage[] =
         ]
     : scenario === 'lanes'
       ? [
+          // The chat view shows lanes when empty; the lane tab ignores this.
+          { type: 'empty' },
           {
             type: 'laneCards',
             lanes: [

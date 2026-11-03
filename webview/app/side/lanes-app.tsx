@@ -96,15 +96,18 @@ function Warm({ lane }: { lane: LaneCard }) {
   )
 }
 
-export function LanesApp() {
-  const [lanes, setLanes] = useState<LaneCard[]>()
+/** The lane view: in its own tab it listens for lane cards; inside the chat view it is handed them. */
+export function LanesApp({ cards }: { cards?: LaneCard[] }) {
+  const [own, setLanes] = useState<LaneCard[]>()
   useEffect(() => {
+    if (cards) return
     const off = onHostMessage((message) => {
       if (message.type === 'laneCards') setLanes(message.lanes)
     })
     send({ type: 'ready' })
     return off
-  }, [])
+  }, [cards])
+  const lanes = cards ?? own
   if (!lanes) return null
   const warm = lanes.filter((lane) => lane.place === 'warm')
   const cold = lanes.filter((lane) => lane.place === 'cold')

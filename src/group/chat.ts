@@ -14,17 +14,17 @@ import { activity, baseline, stop as stopProcesses, waitForSettled } from './set
 import type { Tool } from './tool-server'
 
 export type Delivery = 'now' | 'end-of-turn' | 'queued'
-export type QueuedMessage = { id: string; target: string; text: string; delegation?: string; internal?: boolean }
+export type QueuedMessage = { id: string; target: string; text: string; delegation?: string; internal?: boolean; reportOf?: string }
 
 export const ROLES = ['research', 'plan', 'implement', 'review'] as const
 export type Role = (typeof ROLES)[number]
 export type Roster = Partial<Record<Role, string>>
 
-export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted'
+export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted' | 'stopped'
 export type Facts = { files: string[]; commands: { command: string; failed: boolean }[]; verify?: { command: string; ok: boolean; output: string }; violations: string[]; stillRunning?: string[]; servicesLeft?: string[] }
-export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean; added?: string[]; answers?: { question: string; answer: string; by: string }[] }
+export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean; startedAt?: string; resuming?: boolean; added?: string[]; answers?: { question: string; answer: string; by: string }[] }
 export type UserQuestion = { id: string; from: string; delegation?: string; question: string; itemId?: string }
-export type Violation = { id: string; agent: string; files: string[]; before: { path: string; tree: string }[]; undone?: boolean }
+export type Violation = { id: string; agent: string; files: string[]; before: { path: string; tree: string }[]; undone?: boolean; allowed?: boolean }
 
 /** Saved per chat: everything else comes from each agent's own session and the ledger. */
 export type GroupRecord = {
@@ -180,7 +180,7 @@ export class GroupChat implements Disposable {
   private readonly seenItems = new Set<string>()
   private readonly timeline: { agent: string; id: string }[] = []
   private readonly latest = new Map<string, SessionItem[]>()
-  private current: { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string; outsideLane?: boolean }[]; processes: Set<number> } | undefined
+  private current: { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string; outsideLane?: boolean }[]; processes: Set<number>; stopped?: boolean } | undefined
   private limited: string | undefined
   private starting = false
   private pendingFacts: Pick<Facts, 'stillRunning' | 'servicesLeft'> = {}
@@ -333,7 +333,45 @@ export class GroupChat implements Disposable {
   }
 
   async stop(): Promise<void> {
-    if (this.current) await this.deps.manager.cancel(this.record.members[this.current.agent])
+    if (!this.current) return
+    this.current.stopped = true
+    await this.deps.manager.cancel(this.record.members[this.current.agent])
+  }
+
+  /** Sends a message, stopping the agent it is for if that agent is working, so it goes now. */
+  async sendNow(text: string): Promise<void> {
+    const results = await this.send(text)
+    const forRunning = results.find((result) => result.target === this.current?.agent && result.delivery !== 'now')
+    if (forRunning) await this.stopAndSend(forRunning.id)
+  }
+
+  /** Carries on a delegate the user stopped, in the same session. */
+  resumeDelegation(id: string): void {
+    const delegation = this.record.delegations.find((candidate) => candidate.id === id)
+    if (delegation?.status !== 'stopped') return
+    this.resumeDelegate(delegation, 'You were stopped by the user partway through. Check what got done, then carry on with the task. End with a STATUS line as before.')
+  }
+
+  /** Drops a delegate that has not started. */
+  cancelDelegation(id: string): void {
+    const delegation = this.record.delegations.find((candidate) => candidate.id === id)
+    if (delegation?.status !== 'queued') return
+    delegation.status = 'stopped'
+    this.record.queue = this.record.queue.filter((message) => message.delegation !== id)
+    this.ledger.append({ from: 'user', text: `Cancelled ${delegation.agent}'s task before it started: ${delegation.task}` })
+    this.save()
+    this.changed()
+  }
+
+  /** The user answers a delegate's question themselves; the lead's pending turn about it is dropped. */
+  answerDelegate(id: string, answer: string): void {
+    const delegation = this.record.delegations.find((candidate) => candidate.id === id)
+    if (!delegation || (delegation.status !== 'question' && delegation.status !== 'blocked')) return
+    this.record.queue = this.record.queue.filter((message) => message.reportOf !== id)
+    this.record.userQuestions = this.record.userQuestions.filter((question) => question.delegation !== id)
+    this.ledger.append({ from: 'user', to: delegation.agent, text: `Answer: ${answer}` })
+    this.recordAnswer(delegation, answer, 'user')
+    this.resumeDelegate(delegation, `The user answered your question: ${answer}\nCarry on. End with a STATUS line as before.`)
   }
 
   /** Clears a stop, such as a failed turn or a limit, and carries on with the queue. */
@@ -466,6 +504,7 @@ export class GroupChat implements Disposable {
   resumeAfterRestart(): void {
     for (const delegation of this.record.delegations) {
       if (delegation.status !== 'running' && delegation.status !== 'settling') continue
+      delegation.resuming = true
       this.resumeDelegate(delegation, 'AgentDeck restarted while you were working. Check what got done, then finish. If you were waiting for an approval or an answer, ask again. End with a STATUS line.')
     }
   }
@@ -528,6 +567,16 @@ export class GroupChat implements Disposable {
   }
 
   /** Puts files back after a write the role did not allow. */
+  /** Keeps a write the role did not allow, this once. */
+  allowViolation(id: string): void {
+    const violation = this.record.violations.find((candidate) => candidate.id === id)
+    if (!violation || violation.undone) return
+    violation.allowed = true
+    this.ledger.append({ from: 'user', text: `Allowed ${violation.agent}'s change to ${violation.files.join(', ')} this time.` })
+    this.save()
+    this.changed()
+  }
+
   undoViolation(id: string): void {
     const violation = this.record.violations.find((candidate) => candidate.id === id)
     if (!violation || violation.undone) return
@@ -594,7 +643,10 @@ export class GroupChat implements Disposable {
       processes = await baseline(this.deps.root ?? process.cwd()).catch(() => processes)
     }
     const entry = this.ledger.append(next.internal ? { from: 'agentdeck', to: next.target, text: next.text } : delegation ? { from: delegation.lead, to: next.target, text: `${delegation.task}` } : { from: 'user', to: next.target, text: next.text })
-    if (delegation) delegation.status = 'running'
+    if (delegation) {
+      delegation.status = 'running'
+      delegation.startedAt = new Date().toISOString()
+    }
     this.current = { agent: next.target, entry: entry.seq, started: false, ...(delegation ? { delegation: delegation.id } : {}), itemsAtStart: this.latest.get(next.target)?.length ?? 0, before: this.snapshot(), processes }
     await this.applyRole(next.target, sessionId)
     this.save()
@@ -758,6 +810,12 @@ export class GroupChat implements Disposable {
     if (delegation.status !== 'overdue') delegation.status = status === 'error' ? 'failed' : (stated ?? 'unknown')
     delegation.handoff = this.saveHandoff(delegation, items)
     if (status === 'error') return
+    delete delegation.resuming
+    // Stopped by the user: the work so far stays, and nothing happens until they say.
+    if (current.stopped) {
+      delegation.status = 'stopped'
+      return
+    }
     const asked = delegation.status === 'question' ? /STATUS:\s*question\W*(.*)/i.exec(reply)?.[1]?.trim() : undefined
     if (delegation.status === 'question') {
       delegation.rounds = (delegation.rounds ?? 0) + 1
@@ -766,7 +824,7 @@ export class GroupChat implements Disposable {
         return
       }
     }
-    this.record.queue.unshift({ id: randomUUID(), target: delegation.lead, internal: true, text: this.reportText(delegation) })
+    this.record.queue.unshift({ id: randomUUID(), target: delegation.lead, internal: true, text: this.reportText(delegation), reportOf: delegation.id })
   }
 
   private reportText(delegation: Delegation): string {

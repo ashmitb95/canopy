@@ -254,6 +254,21 @@ export class ChatSurfaces
       case 'groupSetLead':
         chat.setLead(message.agent)
         return true
+      case 'groupSendNow':
+        await chat.sendNow(message.text)
+        return true
+      case 'resumeDelegation':
+        chat.resumeDelegation(message.id)
+        return true
+      case 'cancelDelegation':
+        chat.cancelDelegation(message.id)
+        return true
+      case 'answerDelegate':
+        chat.answerDelegate(message.id, message.text)
+        return true
+      case 'allowViolation':
+        chat.allowViolation(message.id)
+        return true
       case 'viewHandoff': {
         const handoff = chat.record.delegations.find((delegation) => delegation.id === message.id)?.handoff
         if (handoff) await vscode.window.showTextDocument(vscode.Uri.file(handoff), { preview: true })

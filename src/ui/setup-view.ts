@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import * as vscode from 'vscode'
-import { readConfig, updateConfig } from '../lanes/config'
+import { envFilesFor, readConfig, updateConfig } from '../lanes/config'
 import type { LaneTracker } from '../lanes/tracker'
 import type { HostMessage, ProviderInfo, SetupData, WebviewMessage } from './protocol'
 
@@ -104,7 +104,7 @@ export class SetupView implements vscode.Disposable {
               maxSlots: config.maxSlots,
               worktrees: config.worktrees,
               envFiles: config.envFiles,
-              repos: this.tracker.repos.map((repo) => ({ name: repo.name, ...(repo.base ? { base: repo.base } : {}), ...(config.setup[repo.name] ? { setup: config.setup[repo.name] } : {}) }))
+              repos: this.tracker.repos.map((repo) => ({ name: repo.name, ...(repo.base ? { base: repo.base } : {}), ...(config.setup[repo.name] ? { setup: config.setup[repo.name] } : {}), envFiles: envFilesFor(config, repo.name) }))
             }
           }
         : {}),
@@ -130,8 +130,8 @@ export class SetupView implements vscode.Disposable {
       case 'setRepoSetup':
         if (this.tracker) updateConfig(this.tracker.root, { setup: { [message.repo]: message.command } })
         return this.refresh()
-      case 'setEnvFiles':
-        if (this.tracker) updateConfig(this.tracker.root, { envFiles: message.value.split(',').map((file) => file.trim()).filter(Boolean) })
+      case 'setRepoEnvFiles':
+        if (this.tracker) updateConfig(this.tracker.root, { env: { [message.repo]: message.value.split(',').map((file) => file.trim()).filter(Boolean) } })
         return this.refresh()
       case 'installAgent': {
         const agent = (await this.providers()).find((candidate) => candidate.id === message.providerId)

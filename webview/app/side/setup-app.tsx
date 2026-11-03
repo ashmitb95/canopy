@@ -206,15 +206,12 @@ function Workspace({ data }: { data: SetupData }) {
       {workspace ? (
         <div data-card="" className="mt-6 rounded-xl bg-surface px-4 py-1">
           {workspace.repos.map((repo) => (
-            <div key={repo.name} className="flex flex-wrap items-end gap-3.5 border-b border-band py-3">
+            <div key={repo.name} className="flex flex-wrap items-end gap-3.5 border-b border-band py-3 last:border-b-0">
               <span className="w-20 shrink-0 pb-2.5 font-mono font-semibold">{repo.name}</span>
               <Field label="Setup command" value={repo.setup ?? ''} placeholder="pnpm install" onSave={(command) => send({ type: 'setRepoSetup', repo: repo.name, command })} />
+              <Field label="Env files to copy" value={repo.envFiles.join(', ')} placeholder={workspace.envFiles.join(', ')} onSave={(value) => send({ type: 'setRepoEnvFiles', repo: repo.name, value })} />
             </div>
           ))}
-          <div className="flex flex-wrap items-end gap-3.5 py-3">
-            <span className="w-20 shrink-0 pb-2.5 font-semibold">All repos</span>
-            <Field label="Env files to copy, comma separated" value={workspace.envFiles.join(', ')} onSave={(value) => send({ type: 'setEnvFiles', value })} />
-          </div>
         </div>
       ) : null}
       <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">

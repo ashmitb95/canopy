@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readConfig, updateConfig } from '../../src/lanes/config'
+import { envFilesFor, readConfig, updateConfig } from '../../src/lanes/config'
 import { LaneMemory } from '../../src/lanes/memory'
 import { matchEnvFiles, warmUp } from '../../src/lanes/warmup'
 import { workspace } from './repos'
@@ -12,15 +12,25 @@ describe('updateConfig', () => {
     mkdirSync(join(root, '.agentdeck'))
     writeFileSync(join(root, '.agentdeck', 'config.toml'), 'max_slots = 2\n\n[setup]\nui = "npm ci"\n')
     updateConfig(root, { envFiles: ['.env', '.env.local'], setup: { api: 'pnpm install' } })
-    expect(readConfig(root)).toEqual({ envFiles: ['.env', '.env.local'], setup: { ui: 'npm ci', api: 'pnpm install' }, worktrees: true, maxSlots: 2 })
+    expect(readConfig(root)).toEqual({ envFiles: ['.env', '.env.local'], env: {}, setup: { ui: 'npm ci', api: 'pnpm install' }, worktrees: true, maxSlots: 2 })
     updateConfig(root, { setup: { ui: '' } })
     expect(readConfig(root).setup).toEqual({ api: 'pnpm install' })
+  })
+
+  it('keeps env files per repo, falling back to the shared list', () => {
+    const root = workspace()
+    updateConfig(root, { env: { api: ['.env', 'config/*.local'] } })
+    const config = readConfig(root)
+    expect(envFilesFor(config, 'api')).toEqual(['.env', 'config/*.local'])
+    expect(envFilesFor(config, 'ui')).toEqual(['.env*'])
+    updateConfig(root, { env: { api: [] } })
+    expect(envFilesFor(readConfig(root), 'api')).toEqual(['.env*'])
   })
 })
 
 describe('readConfig', () => {
   it('defaults: .env* files, no setup, worktrees on', () => {
-    expect(readConfig(workspace())).toEqual({ envFiles: ['.env*'], setup: {}, worktrees: true, maxSlots: 4 })
+    expect(readConfig(workspace())).toEqual({ envFiles: ['.env*'], env: {}, setup: {}, worktrees: true, maxSlots: 4 })
   })
 
   it('reads env files, setup per repo, and the worktree default', () => {
@@ -30,7 +40,7 @@ describe('readConfig', () => {
       join(root, '.agentdeck', 'config.toml'),
       'env_files = [".env", "config/local.json"]\nworktrees = false\n\n[setup]\napi = "pnpm install"\n'
     )
-    expect(readConfig(root)).toEqual({ envFiles: ['.env', 'config/local.json'], setup: { api: 'pnpm install' }, worktrees: false, maxSlots: 4 })
+    expect(readConfig(root)).toEqual({ envFiles: ['.env', 'config/local.json'], env: {}, setup: { api: 'pnpm install' }, worktrees: false, maxSlots: 4 })
   })
 })
 

@@ -1,6 +1,6 @@
 # UI spec
 
-The target UI. Screens are in [design/end-to-end/](design/end-to-end/) as design-canvas source, one file per screen; the live version is the AgentDeck End to End canvas. Nothing here is built yet unless [architecture.md](architecture.md) says so.
+The target UI. Screens are in [design/end-to-end/](design/end-to-end/) as design-canvas source, one file per screen; the live version is the AgentDeck End to End canvas. Every screen and delegate state below is built.
 
 ## Terms
 

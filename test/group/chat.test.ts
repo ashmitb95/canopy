@@ -368,6 +368,9 @@ describe('delegation', () => {
     await tick()
     const [violation] = chat.state().violations
     expect(violation.files).toEqual(expect.arrayContaining(['A\tsneaky.txt', 'M\ta.txt']))
+    chat.allowViolation(violation.id)
+    expect(chat.state().violations[0].allowed).toBe(true)
+    expect(existsSync(join(repo, 'sneaky.txt'))).toBe(true)
     chat.undoViolation(violation.id)
     expect(existsSync(join(repo, 'sneaky.txt'))).toBe(false)
     expect(readFileSync(join(repo, 'a.txt'), 'utf8')).toBe('a\n')
@@ -451,6 +454,58 @@ describe('delegation', () => {
     expect(git('log', '-1', '--format=%s')).toBe('add new')
     expect(git('status', '--porcelain')).toBe('')
     expect(chat.handleTool('codex', 'commit_work', { message: 'again' })).toBe('Nothing to commit.')
+  })
+
+  it('marks a delegate the user stopped, keeps its changes, does not wake the lead, and resumes it on request', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    expect(chat.state().delegations[0].startedAt).toBeTruthy()
+    codex[0].cancel = async () => codex[0].endTurn()
+    writeFileSync(join(repo, 'half.txt'), 'x\n')
+    await chat.stop()
+    await until(() => chat.state().delegations[0].status === 'stopped')
+    expect(chat.state().delegations[0].status).toBe('stopped')
+    expect(existsSync(join(repo, 'half.txt'))).toBe(true)
+    expect(texts(claude[0])).toHaveLength(1)
+    chat.resumeDelegation(chat.state().delegations[0].id)
+    await tick()
+    expect(texts(codex[0]).at(-1)).toContain('You were stopped')
+  })
+
+  it('cancels a delegate that has not started', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.cancelDelegation(chat.state().delegations[0].id)
+    await finish(claude[0], 'ok')
+    expect(chat.state().delegations[0].status).toBe('stopped')
+    expect(codex).toHaveLength(0)
+  })
+
+  it('lets the user answer a delegate in place of the lead', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    await finish(codex[0], 'STATUS: question what format?')
+    chat.answerDelegate(chat.state().delegations[0].id, 'CSV')
+    await settled()
+    // The lead may already be reading the question; the delegate goes on after that turn.
+    await finish(claude[0], 'ok')
+    await settled()
+    expect(texts(codex[0]).at(-1)).toContain('The user answered your question: CSV')
+    expect(chat.state().delegations[0].answers).toEqual([{ question: 'what format?', answer: 'CSV', by: 'user' }])
+  })
+
+  it('sends a message now by stopping the agent it is for', async () => {
+    await chat.send('@grok long task')
+    await tick()
+    grok[0].cancel = async () => grok[0].endTurn()
+    await chat.sendNow('@grok stop that')
+    await tick()
+    expect(texts(grok[0]).at(-1)).toContain('stop that')
   })
 
   it('sends a question to the lead, and its answer back to the same delegate', async () => {

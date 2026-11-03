@@ -9,6 +9,15 @@ const label = (agent: string) => agent.charAt(0).toUpperCase() + agent.slice(1)
 
 const SESSION_STATE: Record<string, string> = { running: 'working', 'needs-input': 'needs you', error: 'failed', stopped: 'stopped', idle: 'idle' }
 
+/** Needs you is a diamond, working a spinning ring: they differ in shape as well as color. */
+function StatusMark({ needs }: { needs: boolean }) {
+  return needs ? (
+    <span role="img" aria-label="Needs you" className="mx-px size-3 shrink-0 rotate-45 rounded-[2px] bg-warning" />
+  ) : (
+    <span role="img" aria-label="Working" className="size-3.5 shrink-0 animate-spin rounded-full border-[3px] border-control border-t-info" />
+  )
+}
+
 function Heading({ children }: { children: string }) {
   return <span className="text-[11px] font-extrabold tracking-[0.08em]">{children}</span>
 }
@@ -106,7 +115,7 @@ export function SideApp() {
           return (
             <Row key={group.id} attention={group.needsYou} active={live} onOpen={() => send({ type: 'openGroup', groupId: group.id })}>
               <div className="flex items-center gap-[7px]">
-                {live ? <span className={`size-3.5 shrink-0 rounded ${group.needsYou ? 'bg-warning' : 'bg-info'}`} /> : null}
+                {live ? <StatusMark needs={group.needsYou} /> : null}
                 <span className={`min-w-0 flex-1 truncate ${live ? 'font-semibold' : ''}`}>{group.title}</span>
               </div>
               {live ? (
@@ -137,7 +146,7 @@ export function SideApp() {
               onOpen={() => send({ type: 'openSession', sessionId: session.id })}
             >
               <div className="flex items-center gap-[7px]">
-                {live ? <span className={`size-3.5 shrink-0 rounded ${attention ? 'bg-warning' : 'bg-info'}`} /> : null}
+                {live ? <StatusMark needs={attention} /> : null}
                 <span className={`min-w-0 flex-1 truncate ${live || session.unread ? 'font-semibold' : ''}`}>{session.title}</span>
               </div>
               <div className={`mt-[3px] truncate text-xs ${attention ? 'text-warning' : 'text-muted-foreground'}`}>

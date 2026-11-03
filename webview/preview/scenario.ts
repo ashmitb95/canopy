@@ -264,6 +264,35 @@ const groupItems: TimelineItem[] = [
   { agent: 'grok', item: { kind: 'tool', id: 'gg3', title: 'Run git diff main -- api/', toolKind: 'execute', status: 'running' } }
 ]
 
+// Every delegate state, one card each.
+const started = new Date(Date.now() - 95_000).toISOString()
+const states = (status: GroupState['delegations'][number]['status'], extra: Partial<GroupState['delegations'][number]> = {}) => ({ id: status + (extra.task ?? ''), lead: 'claude', agent: 'codex', role: 'implement' as const, task: extra.task ?? `Shown ${status}`, doneWhen: '', status, ...extra })
+const statesGroup: GroupState = {
+  ...groupState,
+  running: 'codex',
+  members: [
+    { agent: 'claude', status: 'idle', activity: '' },
+    { agent: 'codex', status: 'running', activity: 'Editing export.ts' },
+    { agent: 'grok', status: 'idle', activity: '' }
+  ],
+  delegations: [
+    states('running', { task: 'Working', startedAt: started }),
+    states('queued', { task: 'Up next', agent: 'grok', role: 'review' }),
+    states('question', { task: 'Asked the lead', report: 'STATUS: question CSV or JSON?', startedAt: started }),
+    states('question', { task: 'Needs your answer', report: 'STATUS: question Block or warn?', startedAt: started }),
+    states('done', { task: 'Report ready', startedAt: started, handoff: '/x', facts: { files: ['M\ta.ts'], commands: [], verify: { command: 'pnpm test', ok: true, output: '' }, violations: [] } }),
+    states('failed', { task: 'Failed', startedAt: started, report: 'pnpm install could not reach the registry', facts: { files: ['M\ta.ts'], commands: [], violations: [] } }),
+    states('stopped', { task: 'Stopped by you', startedAt: started, facts: { files: ['M\ta.ts'], commands: [], violations: [] } }),
+    states('queued', { task: 'Resuming after reload', resuming: true, startedAt: started }),
+    states('question', { task: 'Paused', rounds: 6, report: 'STATUS: question again?', startedAt: started, handoff: '/x' })
+  ],
+  userQuestions: [
+    { id: 'u1', from: 'codex', delegation: 'questionNeeds your answer', question: 'Exports over 1 million rows could take minutes. Block them, or warn and continue?' },
+    { id: 'u2', from: 'codex', delegation: 'questionPaused', question: 'We have gone back and forth five times. Which format?' }
+  ],
+  violations: [{ id: 'v1', agent: 'grok', files: ['M\tapi/export.ts'], before: [] }]
+}
+
 // `?scenario=new` shows the provider chooser instead of a chat.
 const scenario = new URLSearchParams(location.search).get('scenario')
 const messages: HostMessage[] =
@@ -334,7 +363,7 @@ const messages: HostMessage[] =
                 { id: 'gemini', label: 'Gemini', status: 'not-installed', installUrl: '' }
               ],
               roster: { lead: 'claude', research: '', implement: 'codex', review: 'grok', enforce: true, verify: 'pnpm test', questionsTo: 'lead' },
-              workspace: { name: 'my-workspace', maxSlots: 4, worktrees: true, envFiles: ['.env*'], repos: [{ name: 'api', base: 'main', setup: 'pnpm install' }, { name: 'ui', base: 'main' }] },
+              workspace: { name: 'my-workspace', maxSlots: 4, worktrees: true, envFiles: ['.env*'], repos: [{ name: 'api', base: 'main', setup: 'pnpm install', envFiles: ['.env*'] }, { name: 'ui', base: 'main', envFiles: ['.env*'] }] },
               github: 'signed-in',
               linear: false,
               palette: 'paper'
@@ -373,6 +402,8 @@ const messages: HostMessage[] =
             }
           }
         ]
+    : scenario === 'states'
+      ? [providers, { type: 'groupSnapshot', state: statesGroup, items: [] }]
     : scenario === 'group'
       ? [providers, { type: 'groupSnapshot', state: groupState, items: groupItems }]
     : scenario === 'prompts'

@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useMemo, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -9,6 +9,7 @@ import { Codicon } from '../components/codicon'
 import { ProviderAvatar } from '../components/provider-avatar'
 import { send } from '../host'
 import { useApprovalKeys } from '../items/approval-card'
+import { useNow } from '../use-now'
 import { ItemView } from '../items/item-view'
 import type { ChatState } from '../state'
 
@@ -86,81 +87,146 @@ function Header({ group }: { group: GroupState }) {
   )
 }
 
+/** The newest lines, at most a few times a second, so a fast stream does not redraw on every token. */
+function useBatched<T>(value: T, ms = 250): T {
+  const [shown, setShown] = useState(value)
+  const last = useRef(0)
+  useEffect(() => {
+    const wait = Math.max(0, last.current + ms - Date.now())
+    const timer = setTimeout(() => {
+      last.current = Date.now()
+      setShown(value)
+    }, wait)
+    return () => clearTimeout(timer)
+  }, [value, ms])
+  return shown
+}
+
 function Rolling({ items, full }: { items: TimelineItem[]; full: boolean }) {
-  const all = useMemo(() => rollingLines(items.map(({ item }) => item)), [items])
-  const lines = full ? all : all.slice(-WINDOW)
-  if (lines.length === 0) return null
+  const batched = useBatched(items)
+  const all = useMemo(() => rollingLines(batched.map(({ item }) => item)), [batched])
+  const box = useRef<HTMLDivElement>(null)
+  const pinned = useRef(true)
+  // Follows the newest line unless the user has scrolled up to read.
+  useEffect(() => {
+    if (pinned.current && box.current) box.current.scrollTop = box.current.scrollHeight
+  }, [all])
+  if (all.length === 0) return null
   return (
-    <div className={`mx-3 flex flex-col justify-end gap-[3px] overflow-hidden rounded-lg bg-band px-3 py-2.5 text-[12.5px] leading-[1.45] ${full ? '' : 'max-h-[186px]'}`} aria-live="off">
-      {lines.map((line) => (
-        <div
-          key={line.id}
-          className={`flex min-w-0 items-baseline gap-2 ${line.kind === 'tool' ? 'font-mono font-medium' : ''} ${line.kind === 'output' ? 'pl-3.5 font-mono text-muted-foreground' : ''} ${line.kind === 'thought' ? 'text-muted-foreground' : ''} ${line.failed ? 'text-destructive' : ''}`}
-        >
-          <span className={`min-w-0 flex-1 overflow-hidden text-ellipsis ${full ? '' : 'whitespace-nowrap'}`}>
-            {line.text}
-            {line.live ? <span className="animate-pulse"> ▌</span> : null}
-          </span>
-          {line.stat ? <span className="shrink-0 font-mono text-[11.5px]">{line.stat}</span> : null}
-        </div>
-      ))}
+    <div
+      ref={box}
+      tabIndex={0}
+      aria-label="Live activity"
+      aria-live="off"
+      className={`mx-3 overflow-y-auto rounded-lg bg-band px-3 py-2.5 text-[12.5px] leading-[1.45] ${full ? 'max-h-[60vh]' : 'h-[186px]'}`}
+      onScroll={(event) => {
+        const element = event.currentTarget
+        pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 8
+      }}
+    >
+      <div className="flex min-h-full flex-col justify-end gap-[3px]">
+        {all.map((line) => (
+          <div
+            key={line.id}
+            className={`flex min-w-0 items-baseline gap-2 ${line.kind === 'tool' ? 'font-mono font-medium' : ''} ${line.kind === 'output' ? 'pl-3.5 font-mono text-muted-foreground' : ''} ${line.kind === 'thought' ? 'text-muted-foreground' : ''} ${line.failed ? 'text-destructive' : ''}`}
+          >
+            <span className={`min-w-0 flex-1 overflow-hidden text-ellipsis ${full ? '' : 'whitespace-nowrap'}`}>
+              {line.text}
+              {line.live ? <span className="animate-pulse"> ▌</span> : null}
+            </span>
+            {line.stat ? <span className="shrink-0 font-mono text-[11.5px]">{line.stat}</span> : null}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-const STATUS_TEXT: Record<Delegation['status'], string> = {
-  queued: 'Up next',
-  running: 'Working',
-  settling: 'Reported done, waiting for its work to finish',
-  done: 'Report ready',
-  blocked: 'Blocked',
-  question: 'Asked a question',
-  overdue: 'Still running past the limit',
-  unknown: 'Stopped without saying whether it finished',
-  failed: 'Failed',
-  interrupted: 'Interrupted'
+type CardMark = 'spin' | 'wait' | 'done' | 'needs' | 'fail' | 'stopped' | 'none'
+type CardAction = { label: string; run: () => void; primary?: boolean } | { label: string; answer: true }
+type CardState = { text: string; tone: string; mark: CardMark; actions: CardAction[]; time?: string }
+
+function elapsed(since: string | undefined, now: number): string {
+  if (!since) return ''
+  const seconds = Math.max(0, Math.floor((now - Date.parse(since)) / 1000))
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
-function cardStatus(group: GroupState, delegation: Delegation): { text: string; tone: string; mark: 'spin' | 'done' | 'needs' | 'fail' | 'none' } {
+/** One card shape for every state: a status line, a status mark, and the actions that state allows. */
+function cardState(group: GroupState, delegation: Delegation, items: TimelineItem[], now: number): CardState {
   const facts = delegation.facts
-  if (delegation.undone) return { text: 'Undone', tone: 'text-muted-foreground', mark: 'none' }
-  if (delegation.status === 'running' || delegation.status === 'settling') {
-    const activity = group.members.find((member) => member.agent === delegation.agent)?.activity
-    return { text: delegation.status === 'settling' ? STATUS_TEXT.settling : activity || 'Working', tone: 'text-info', mark: 'spin' }
+  const id = delegation.id
+  const viewHandoff: CardAction = { label: 'View handoff', run: () => send({ type: 'viewHandoff', id }) }
+  const undo: CardAction = { label: 'Undo changes', run: () => send({ type: 'undoDelegation', id }) }
+  const review: CardAction = { label: 'Review', run: () => send({ type: 'openReview' }) }
+  const changed = (facts?.files.length ?? 0) > 0 && !delegation.undone
+  if (delegation.undone) return { text: 'Undone · its changes were reversed', tone: 'text-muted-foreground', mark: 'none', actions: delegation.handoff ? [viewHandoff] : [] }
+  switch (delegation.status) {
+    case 'running':
+    case 'settling': {
+      const asking = items.findLast(({ item }) => item.kind === 'approval' && !item.resolved)?.item
+      if (asking?.kind === 'approval') return { text: `Needs permission: ${asking.title}`, tone: 'text-warning', mark: 'needs', actions: [] }
+      if (delegation.resuming) return { text: 'Resuming after reload · session restored', tone: 'text-info', mark: 'spin', actions: [] }
+      const activity = delegation.status === 'settling' ? 'Reported done, waiting for its work to finish' : group.members.find((member) => member.agent === delegation.agent)?.activity || 'Working'
+      return { text: activity, time: elapsed(delegation.startedAt, now), tone: 'text-info', mark: 'spin', actions: [] }
+    }
+    case 'queued':
+      if (delegation.resuming) return { text: 'Resuming after reload · session restored', tone: 'text-info', mark: 'wait', actions: [] }
+      return {
+        text: `Up next, after ${name(group.running ?? delegation.lead)}`,
+        tone: 'text-muted-foreground',
+        mark: 'wait',
+        actions: delegation.startedAt ? [] : [{ label: 'Cancel', run: () => send({ type: 'cancelDelegation', id }) }]
+      }
+    case 'question': {
+      const toUser = group.userQuestions.some((question) => question.delegation === id)
+      if (toUser && (delegation.rounds ?? 0) > 5) return { text: 'Paused: too many rounds with the lead', tone: 'text-warning', mark: 'needs', actions: delegation.handoff ? [{ label: 'Open', run: () => send({ type: 'viewHandoff', id }) }] : [] }
+      if (toUser) return { text: `Needs your answer: ${name(delegation.lead)} could not decide`, tone: 'text-warning', mark: 'needs', actions: [] }
+      return { text: `Asked ${name(delegation.lead)} · waiting for an answer`, tone: 'text-info', mark: 'wait', actions: [{ label: 'Answer myself', answer: true }] }
+    }
+    case 'blocked':
+      return { text: `Blocked: ${(delegation.report ?? '').match(/STATUS:\s*blocked\W*(.*)/i)?.[1] || 'it cannot go on'}`, tone: 'text-warning', mark: 'needs', actions: [{ label: 'Answer myself', answer: true }] }
+    case 'done': {
+      const failedCheck = facts?.verify && !facts.verify.ok
+      const parts = ['Report ready', ...(facts ? [`${facts.files.length} ${facts.files.length === 1 ? 'file' : 'files'}`] : []), ...(facts?.verify ? [facts.verify.ok ? 'checks pass' : 'checks fail'] : [])]
+      return { text: parts.join(' · '), tone: failedCheck ? 'text-destructive' : 'text-success', mark: failedCheck ? 'fail' : 'done', actions: [...(delegation.handoff ? [viewHandoff] : []), ...(changed ? [undo] : [])] }
+    }
+    case 'stopped':
+      if (!delegation.startedAt) return { text: 'Cancelled before it started', tone: 'text-muted-foreground', mark: 'stopped', actions: [] }
+      return { text: `Stopped by you${changed ? ' · partial changes kept' : ''}`, tone: 'text-muted-foreground', mark: 'stopped', actions: [review, { label: 'Resume', run: () => send({ type: 'resumeDelegation', id }), primary: true }] }
+    case 'overdue':
+      return { text: 'Still running past the limit', tone: 'text-warning', mark: 'needs', actions: [{ label: 'Stop', run: () => send({ type: 'groupStop' }) }] }
+    default: {
+      const reason = delegation.status === 'unknown' ? 'it stopped without saying whether it finished' : (delegation.report ?? '').split('\n').find((line) => line.trim())?.trim() || 'the turn ended with an error'
+      return { text: `Failed: ${reason}${changed ? ' · partial changes kept' : ''}`, tone: 'text-destructive', mark: 'fail', actions: [review, ...(changed ? [undo] : [])] }
+    }
   }
-  if (delegation.status === 'question') {
-    const toUser = group.userQuestions.some((question) => question.delegation === delegation.id)
-    return { text: toUser ? 'Needs your answer' : `Waiting for ${name(delegation.lead)} to answer`, tone: toUser ? 'text-warning' : 'text-info', mark: toUser ? 'needs' : 'spin' }
-  }
-  if (delegation.status === 'done') {
-    const parts = ['Report ready', ...(facts ? [`${facts.files.length} ${facts.files.length === 1 ? 'file' : 'files'}`] : []), ...(facts?.verify ? [facts.verify.ok ? 'checks pass' : 'checks fail'] : [])]
-    return { text: parts.join(' · '), tone: facts?.verify && !facts.verify.ok ? 'text-destructive' : 'text-success', mark: facts?.verify && !facts.verify.ok ? 'fail' : 'done' }
-  }
-  if (delegation.status === 'queued') return { text: STATUS_TEXT.queued, tone: 'text-muted-foreground', mark: 'none' }
-  return { text: STATUS_TEXT[delegation.status], tone: delegation.status === 'blocked' ? 'text-warning' : 'text-destructive', mark: delegation.status === 'blocked' ? 'needs' : 'fail' }
 }
 
-function Mark({ mark }: { mark: ReturnType<typeof cardStatus>['mark'] }) {
-  if (mark === 'spin') return <span aria-label="Working" className="size-4 shrink-0 animate-spin rounded-full border-[3px] border-control border-t-info" />
-  if (mark === 'done') return <span aria-label="Done" className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-success text-[11px] font-extrabold text-background">✓</span>
-  if (mark === 'needs') return <span aria-label="Needs you" className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-warning text-[11px] font-extrabold text-background">!</span>
-  if (mark === 'fail') return <span aria-label="Failed" className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-destructive text-[11px] font-extrabold text-background">×</span>
+// Each status differs in shape as well as color.
+function Mark({ mark }: { mark: CardMark }) {
+  if (mark === 'spin') return <span role="img" aria-label="Working" className="size-4 shrink-0 animate-spin rounded-full border-[3px] border-control border-t-info" />
+  if (mark === 'wait') return <span role="img" aria-label="Waiting" className="size-4 shrink-0 rounded-full border-2 border-dashed border-muted-foreground" />
+  if (mark === 'done') return <span role="img" aria-label="Done" className="flex size-4 shrink-0 items-center justify-center rounded-[5px] bg-success text-[11px] font-extrabold text-background">✓</span>
+  if (mark === 'needs') return <span role="img" aria-label="Needs you" className="flex size-4 shrink-0 rotate-45 items-center justify-center rounded-[3px] bg-warning"><span className="-rotate-45 text-[11px] font-extrabold text-background">!</span></span>
+  if (mark === 'fail') return <span role="img" aria-label="Failed" className="flex size-4 shrink-0 items-center justify-center rounded-full bg-destructive text-[11px] font-extrabold text-background">×</span>
+  if (mark === 'stopped') return <span role="img" aria-label="Stopped" className="size-3.5 shrink-0 rounded-[3px] bg-muted-foreground" />
   return null
 }
 
-function AnswerForm({ id }: { id: string }) {
+function AnswerForm({ onAnswer, label = 'Answer' }: { onAnswer: (text: string) => void; label?: string }) {
   const [text, setText] = useState('')
   return (
     <form
       className="mt-2.5 flex flex-wrap gap-2"
       onSubmit={(event) => {
         event.preventDefault()
-        if (text.trim()) send({ type: 'answerQuestion', id, text: text.trim() })
+        if (text.trim()) onAnswer(text.trim())
       }}
     >
       <input aria-label="Your answer" className="h-[38px] min-w-[10rem] flex-1 rounded-[7px] bg-surface px-3" value={text} onChange={(event) => setText(event.target.value)} />
       <button type="submit" className="h-[38px] rounded-[7px] bg-primary px-3.5 font-semibold text-primary-foreground">
-        Answer
+        {label}
       </button>
     </form>
   )
@@ -169,8 +235,10 @@ function AnswerForm({ id }: { id: string }) {
 function DelegateCard({ group, delegation, items, selected, onSelect }: { group: GroupState; delegation: Delegation; items: TimelineItem[]; selected: boolean; onSelect: () => void }) {
   const [open, setOpen] = useState(false)
   const [full, setFull] = useState(false)
+  const [answering, setAnswering] = useState(false)
+  const now = useNow(1000)
   const live = delegation.status === 'running' || delegation.status === 'settling'
-  const status = cardStatus(group, delegation)
+  const state = cardState(group, delegation, items, now)
   const question = group.userQuestions.find((candidate) => candidate.delegation === delegation.id)
   return (
     <div className={`ml-8 overflow-hidden rounded-[10px] border-2 bg-surface ${selected ? 'border-foreground' : 'border-transparent'}`}>
@@ -189,46 +257,61 @@ function DelegateCard({ group, delegation, items, selected, onSelect }: { group:
             {name(delegation.agent)}
             {delegation.role ? ` · ${ROLE_LABEL[delegation.role]}` : ''}: {delegation.task}
           </span>
-          <span className={`mt-0.5 block truncate text-xs font-medium ${status.tone}`}>{status.text}</span>
+          {/* Screen readers hear the state, not the time ticking. */}
+          <span className={`mt-0.5 block truncate text-xs font-medium ${state.tone}`}>
+            <span aria-live="polite">{state.text}</span>
+            {state.time ? <span aria-hidden="true"> · {state.time}</span> : null}
+          </span>
         </span>
-        <Mark mark={status.mark} />
+        <Mark mark={state.mark} />
       </button>
       {live || open ? (
         <>
           <Rolling items={items} full={full || (open && !live)} />
-          <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-            {live ? (
-              <>
-                <span>@{delegation.agent} to redirect</span>
-                <button type="button" className="hover:text-foreground hover:underline" onClick={() => send({ type: 'groupStop' })}>
-                  · Stop
-                </button>
-                <button type="button" className="ml-auto h-[30px] rounded-md bg-control px-2.5 font-semibold text-foreground" onClick={() => setFull(!full)}>
-                  {full ? 'Show less' : 'Show everything'}
-                </button>
-              </>
-            ) : (
-              <>
-                {delegation.handoff ? (
-                  <button type="button" className="h-[30px] rounded-md bg-control px-2.5 font-semibold text-foreground" onClick={() => send({ type: 'viewHandoff', id: delegation.id })}>
-                    Open full transcript
-                  </button>
-                ) : null}
-                {delegation.snapshots && !delegation.undone ? (
-                  <button type="button" className="h-[30px] rounded-md bg-control px-2.5 font-semibold text-foreground" onClick={() => send({ type: 'undoDelegation', id: delegation.id })}>
-                    Undo these changes
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
+          {live ? (
+            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+              <span>@{delegation.agent} to redirect</span>
+              <button type="button" className="hover:text-foreground hover:underline" onClick={() => send({ type: 'groupStop' })}>
+                · Stop
+              </button>
+              <button type="button" className="ml-auto h-[30px] rounded-md bg-control px-2.5 font-semibold text-foreground" onClick={() => setFull(!full)}>
+                {full ? 'Show less' : 'Show everything'}
+              </button>
+            </div>
+          ) : null}
         </>
+      ) : null}
+      {state.actions.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 px-3 pb-2.5">
+          {state.actions.map((action) =>
+            'answer' in action ? (
+              <button key={action.label} type="button" aria-expanded={answering} className="h-[30px] rounded-md bg-control px-2.5 text-xs font-semibold" onClick={() => setAnswering(!answering)}>
+                {action.label}
+              </button>
+            ) : (
+              <button key={action.label} type="button" className={`h-[30px] rounded-md px-2.5 text-xs font-semibold ${action.primary ? 'bg-primary text-primary-foreground' : 'bg-control'}`} onClick={action.run}>
+                {action.label}
+              </button>
+            )
+          )}
+        </div>
+      ) : null}
+      {answering && !question ? (
+        <div className="px-3 pb-3">
+          <AnswerForm
+            label="Send"
+            onAnswer={(text) => {
+              send({ type: 'answerDelegate', id: delegation.id, text })
+              setAnswering(false)
+            }}
+          />
+        </div>
       ) : null}
       {question ? (
         <div className="bg-warning/12 p-3">
           <div className="text-[11px] font-extrabold tracking-[0.06em] text-warning">QUESTION FOR YOU, FROM {delegation.agent.toUpperCase()}</div>
           <div className="mt-[5px] leading-[1.45] font-medium">{question.question}</div>
-          <AnswerForm id={question.id} />
+          <AnswerForm label="Reply" onAnswer={(text) => send({ type: 'answerQuestion', id: question.id, text })} />
         </div>
       ) : null}
     </div>
@@ -332,8 +415,22 @@ function Queue({ group }: { group: GroupState }) {
   )
 }
 
+/** Puts text in the composer, ready to finish and send. */
+function compose(text: string): void {
+  window.dispatchEvent(new CustomEvent('agentdeck:compose', { detail: text }))
+}
+
 function Composer({ group }: { group: GroupState }) {
   const [text, setText] = useState('')
+  const input = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const fill = (event: Event) => {
+      setText((event as CustomEvent<string>).detail)
+      input.current?.focus()
+    }
+    window.addEventListener('agentdeck:compose', fill)
+    return () => window.removeEventListener('agentdeck:compose', fill)
+  }, [])
   const target = /^@(\w+)/.exec(text.trim())?.[1] ?? group.target
   const submit = () => {
     if (!text.trim()) return
@@ -344,6 +441,7 @@ function Composer({ group }: { group: GroupState }) {
   return (
     <div>
       <textarea
+        ref={input}
         aria-label="Message"
         rows={1}
         className="field-sizing-content max-h-48 min-h-11 w-full resize-none rounded-[10px] bg-surface px-3 py-3"
@@ -392,6 +490,18 @@ function Composer({ group }: { group: GroupState }) {
         <span className="ml-auto text-xs text-muted-foreground">
           {name(target)} gets this {group.running === target ? 'when it finishes' : group.running ? 'when it is up' : 'now'}
         </span>
+        {group.running === target && text.trim() ? (
+          <button
+            type="button"
+            className="h-8 rounded-[7px] bg-primary px-2.5 text-xs font-semibold text-primary-foreground"
+            onClick={() => {
+              send({ type: 'groupSendNow', text })
+              setText('')
+            }}
+          >
+            Stop and send now
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -415,7 +525,7 @@ export function GroupView({ state }: { state: ChatState }) {
     <Fragment key={delegation.id}>
       <DelegateCard group={group} delegation={delegation} items={byAgent.get(delegation.agent) ?? []} selected={delegation.id === selected} onSelect={() => setSelected(delegation.id)} />
       {(delegation.answers ?? []).map((answer) => (
-        <Band key={answer.question + answer.answer} action={<BandButton onClick={() => send({ type: 'groupSend', text: `@${delegation.agent} ` })}>Change answer</BandButton>}>
+        <Band key={answer.question + answer.answer} action={<BandButton onClick={() => compose(`@${delegation.agent} `)}>Change answer</BandButton>}>
           {name(delegation.agent)} asked: {answer.question} {answer.by === 'user' ? 'You' : name(answer.by)} answered: {answer.answer}
         </Band>
       ))}
@@ -481,10 +591,19 @@ export function GroupView({ state }: { state: ChatState }) {
                 })}
                 {group.delegations.filter((delegation) => !placed.has(delegation.id)).map(card)}
                 {group.violations
-                  .filter((violation) => !violation.undone)
+                  .filter((violation) => !violation.undone && !violation.allowed)
                   .map((violation) => (
-                    <Band key={violation.id} tone="warning" action={<BandButton onClick={() => send({ type: 'undoViolation', id: violation.id })}>Undo</BandButton>}>
-                      {name(violation.agent)} changed {violation.files.map(fileChange).join(', ')}, but {roleOf(group, violation.agent) || 'its role'} is read-only. AgentDeck flagged it.
+                    <Band
+                      key={violation.id}
+                      tone="warning"
+                      action={
+                        <>
+                          <BandButton onClick={() => send({ type: 'allowViolation', id: violation.id })}>Allow this time</BandButton>
+                          <BandButton onClick={() => send({ type: 'undoViolation', id: violation.id })}>Undo</BandButton>
+                        </>
+                      }
+                    >
+                      Write blocked: {name(violation.agent)} changed {violation.files.map(fileChange).join(', ')}, but {roleOf(group, violation.agent) || 'its role'} is read-only.
                     </Band>
                   ))}
                 {group.userQuestions
@@ -493,7 +612,7 @@ export function GroupView({ state }: { state: ChatState }) {
                     <div key={question.id} className="ml-8 rounded-[10px] bg-warning/12 p-3">
                       <div className="text-[11px] font-extrabold tracking-[0.06em] text-warning">QUESTION FOR YOU, FROM {question.from.toUpperCase()}</div>
                       <div className="mt-[5px] leading-[1.45] font-medium">{question.question}</div>
-                      <AnswerForm id={question.id} />
+                      <AnswerForm label="Reply" onAnswer={(text) => send({ type: 'answerQuestion', id: question.id, text })} />
                     </div>
                   ))}
                 {finished ? (

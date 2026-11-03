@@ -2,7 +2,7 @@ import { join, relative, sep } from 'node:path'
 import type { WriteBoundary } from '../core/types'
 import type { SessionManager } from '../sessions/manager'
 import type { SessionRecord } from '../sessions/store'
-import { readConfig } from './config'
+import { envFilesFor, readConfig } from './config'
 import { deriveLanes } from './lanes'
 import type { LaneMemory } from './memory'
 import type { RepoState } from './state'
@@ -188,7 +188,7 @@ export class LaneCoordinator {
     const { tracker, memory, manager } = this.deps
     const config = readConfig(tracker.root)
     const primary = repo.checkouts.find((checkout) => checkout.primary)?.path ?? repo.path
-    const result = await warmUp(primary, path, config.envFiles, runSetup ? config.setup[repo.name] : undefined, await this.deps.env())
+    const result = await warmUp(primary, path, envFilesFor(config, repo.name), runSetup ? config.setup[repo.name] : undefined, await this.deps.env())
     memory.appendHistory(lane, { event: 'warmed', repo: repo.name, copied: result.copied, ok: result.setup?.ok ?? true })
     if (result.setup && !result.setup.ok) {
       for (const record of this.chatsOn([lane])) {

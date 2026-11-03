@@ -48,7 +48,7 @@ export type LaneCard = {
 export type SetupData = {
   agents: { id: string; label: string; status: ProviderState['status']; account?: string; version?: string; installUrl: string }[]
   roster: { lead: string; research: string; implement: string; review: string; enforce: boolean; verify: string; questionsTo: 'lead' | 'user' }
-  workspace?: { name: string; maxSlots: number; worktrees: boolean; envFiles: string[]; repos: { name: string; base?: string; setup?: string }[] }
+  workspace?: { name: string; maxSlots: number; worktrees: boolean; envFiles: string[]; repos: { name: string; base?: string; setup?: string; envFiles: string[] }[] }
   github: 'signed-in' | 'signed-out' | 'missing'
   linear: boolean
   palette: string
@@ -194,7 +194,7 @@ export type WebviewMessage =
   | { type: 'setQuestionsTo'; value: 'lead' | 'user' }
   | { type: 'setPalette'; value: string }
   | { type: 'setRepoSetup'; repo: string; command: string }
-  | { type: 'setEnvFiles'; value: string }
+  | { type: 'setRepoEnvFiles'; repo: string; value: string }
   | { type: 'finishSetup' }
   | { type: 'openSetup' }
   | { type: 'newLaneFindIssue'; ref: string }
@@ -204,6 +204,11 @@ export type WebviewMessage =
   | { type: 'createPullRequest' }
   | { type: 'openReview' }
   | { type: 'groupSetLead'; agent: string }
+  | { type: 'groupSendNow'; text: string }
+  | { type: 'resumeDelegation'; id: string }
+  | { type: 'cancelDelegation'; id: string }
+  | { type: 'answerDelegate'; id: string; text: string }
+  | { type: 'allowViolation'; id: string }
   | { type: 'connectLinear' }
   | { type: 'disconnectLinear' }
   | { type: 'groupAnswer'; agent: string; itemId: string; response: PromptResponse }

@@ -123,7 +123,7 @@ export function LanesApp({ cards }: { cards?: LaneCard[] }) {
       <section aria-label="Warm lanes">
         <Label>WARM · WORKTREE READY</Label>
         {warm.length > 0 ? (
-          <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+          <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
             {warm.map((lane) => (
               <Warm key={lane.name} lane={lane} />
             ))}

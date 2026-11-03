@@ -360,7 +360,7 @@ function HandoffPanel({ group, delegation }: { group: GroupState; delegation?: D
         'Written by the lead',
         <>
           {delegation.task}
-          {delegation.doneWhen ? ` Done when ${delegation.doneWhen.replace(/^./, (first) => first.toLowerCase())}` : ''}
+          {delegation.doneWhen ? `${/[.!?]$/.test(delegation.task.trim()) ? '' : '.'} Done when ${delegation.doneWhen.replace(/^./, (first) => first.toLowerCase())}` : ''}
           {delegation.context ? <div className="mt-2 max-h-72 overflow-auto border-t border-band pt-2 whitespace-pre-wrap text-muted-foreground">{delegation.context}</div> : null}
         </>
       )}

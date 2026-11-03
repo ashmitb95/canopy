@@ -407,6 +407,8 @@ const messages: HostMessage[] =
             }
           }
         ]
+    : scenario === 'flow'
+      ? [providers]
     : scenario === 'states'
       ? [providers, { type: 'groupSnapshot', state: statesGroup, items: [] }]
     : scenario === 'group'
@@ -423,7 +425,65 @@ const messages: HostMessage[] =
         ]
       : chat
 
+// `?scenario=flow` plays a delegation from start to finish, step by step, for recordings.
+function flowSteps(): [number, HostMessage][] {
+  const brief = 'You are codex, delegated this by claude in a group chat run by AgentDeck, in the implement role.\nTask: Stream invoice rows and fix retries'
+  const user: TimelineItem = { agent: 'claude', item: { kind: 'message', id: 'f-u1', role: 'user', parts: [{ type: 'text', text: 'Large invoice exports time out (ENG-214). Keep the CSV format and the old endpoint.' }] } }
+  const lead = (id: string, text: string, streaming = false): TimelineItem => ({ agent: 'claude', item: { kind: 'message', id, role: 'assistant', text, streaming } })
+  const codex = (item: TimelineItem['item']): TimelineItem => ({ agent: 'codex', item })
+  const base: GroupState = {
+    id: 'flow', title: 'Export timeouts', lead: 'claude', target: 'claude', active: [], queue: [],
+    members: [
+      { agent: 'claude', status: 'idle', activity: '' },
+      { agent: 'codex', status: 'idle', activity: '' },
+      { agent: 'grok', status: 'idle', activity: '' }
+    ],
+    roster: { plan: 'claude', implement: 'codex', review: 'grok' }, delegations: [], violations: [], userQuestions: [], quotas: {}, laneId: 'export-timeouts'
+  }
+  const started = new Date(Date.now() - 4000).toISOString()
+  const task = {
+    id: 'f-d1', lead: 'claude', agent: 'codex', role: 'implement' as const, task: 'Stream invoice rows and fix retries', doneWhen: 'The 50,000-row export test passes.',
+    context: 'Findings: export.ts loads every row before writing the CSV, and retries append to the partial file. Plan: stream rows through a cursor in export.ts, restart retries from an empty file in queue.ts, keep the CSV format and the old endpoint, add a 50,000-row test.',
+    added: ['3 messages from the chat, word for word', 'The export-timeouts lane: goal, plan, notes, and what changed'], startedAt: started
+  }
+  const working = (activity: string, extra: Partial<GroupState> = {}): GroupState => ({
+    ...base, running: 'codex', active: ['codex'],
+    members: base.members.map((member) => (member.agent === 'codex' ? { ...member, status: 'running', activity } : member)),
+    delegations: [{ ...task, status: 'running' }], ...extra
+  })
+  const steps: [number, HostMessage][] = [[0, { type: 'groupSnapshot', state: base, items: [user] }]]
+  const item = (at: number, entry: TimelineItem) => steps.push([at, { type: 'groupItem', agent: entry.agent, item: entry.item }])
+  const state = (at: number, value: GroupState) => steps.push([at, { type: 'groupState', state: value }])
+  state(500, { ...base, running: 'claude', active: ['claude'] })
+  item(700, lead('f-l1', 'export.ts loads every row into memory', true))
+  item(1100, lead('f-l1', "export.ts loads every row into memory, and retries append to the partial file. I'll stream the rows and reset retries. Implement belongs to Codex, so I'm handing it over with the plan."))
+  state(1500, working('Reading export.ts'))
+  item(1500, codex({ kind: 'message', id: 'f-c0', role: 'user', parts: [{ type: 'text', text: brief }] }))
+  item(1900, codex({ kind: 'message', id: 'f-c1', role: 'assistant', text: 'Reading export.ts and queue.ts first.', streaming: false }))
+  item(2300, codex({ kind: 'tool', id: 'f-t1', title: 'Read export.ts', toolKind: 'read', status: 'done' }))
+  item(2600, codex({ kind: 'tool', id: 'f-t2', title: 'Read queue.ts', toolKind: 'read', status: 'done' }))
+  state(2900, working('Editing export.ts'))
+  item(2900, codex({ kind: 'message', id: 'f-c2', role: 'assistant', text: 'Streaming rows through a cursor, then resetting the file on retry.', streaming: false }))
+  item(3300, codex({ kind: 'tool', id: 'f-t3', title: 'Edit export.ts', toolKind: 'edit', status: 'done' }))
+  item(3600, codex({ kind: 'tool', id: 'f-t4', title: 'Edit queue.ts', toolKind: 'edit', status: 'done' }))
+  item(3900, codex({ kind: 'tool', id: 'f-t5', title: 'Edit export.test.ts', toolKind: 'edit', status: 'done' }))
+  state(4200, working('$ pnpm test'))
+  item(4200, codex({ kind: 'tool', id: 'f-t6', title: 'Run pnpm test', toolKind: 'execute', status: 'running' }))
+  item(5000, codex({ kind: 'tool', id: 'f-t6', title: 'Run pnpm test', toolKind: 'execute', status: 'done', output: 'Tests  215 passed (215)' }))
+  item(5300, codex({ kind: 'message', id: 'f-c3', role: 'assistant', text: 'Done. The export streams, retries start clean, and the 50,000-row test passes.\nSTATUS: done', streaming: false }))
+  const done = {
+    ...task, status: 'done' as const, handoff: '/handoff.md', snapshots: [],
+    report: 'Done. The export streams, retries start clean, and the 50,000-row test passes.\nSTATUS: done',
+    facts: { files: ['M\tapi/export.ts', 'M\tapi/queue.ts', 'A\tapi/export.test.ts'], commands: [{ command: 'pnpm test', failed: false }], verify: { command: 'pnpm test', ok: true, output: '215 passed' }, violations: [] }
+  }
+  state(5700, { ...base, running: 'claude', active: ['claude'], delegations: [done] })
+  item(6000, lead('f-l2', 'Codex is done, and the test run checked independently passed: 3 files changed, 215 tests pass. The CSV format and the old endpoint are unchanged.'))
+  state(6400, { ...base, delegations: [done] })
+  return steps
+}
+
 // Posted after the app has mounted and subscribed.
 setTimeout(() => {
   for (const message of messages) window.postMessage(message, '*')
+  if (scenario === 'flow') for (const [at, message] of flowSteps()) setTimeout(() => window.postMessage(message, '*'), at)
 }, 100)

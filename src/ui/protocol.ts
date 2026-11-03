@@ -35,6 +35,15 @@ export type LaneCard = {
   chats: { kind: 'group' | 'session'; id: string; title: string; agents: string[]; state: string; needsYou: boolean }[]
 }
 
+/** The setup page: agents, who does what, the workspace, and issue trackers. */
+export type SetupData = {
+  agents: { id: string; label: string; status: ProviderState['status']; account?: string }[]
+  roster: { lead: string; research: string; implement: string; review: string; enforce: boolean; verify: string }
+  workspace?: { maxSlots: number; worktrees: boolean; envFiles: string[]; repos: { name: string; base?: string; setup?: string }[] }
+  github: 'signed-in' | 'signed-out' | 'missing'
+  linear: boolean
+}
+
 export type SessionSummary = {
   id: string
   title: string
@@ -85,6 +94,7 @@ export type HostMessage =
   | { type: 'groupItem'; agent: string; item: SessionItem }
   | { type: 'side'; side: SideData }
   | { type: 'laneCards'; lanes: LaneCard[] }
+  | { type: 'setup'; setup: SetupData }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -128,6 +138,12 @@ export type WebviewMessage =
   | { type: 'switchLane'; laneId: string }
   | { type: 'parkLane'; laneId: string }
   | { type: 'openLanes' }
+  | { type: 'setRoster'; role: 'lead' | 'research' | 'implement' | 'review' | 'verify'; value: string }
+  | { type: 'setEnforce'; value: boolean }
+  | { type: 'editWorkspaceConfig' }
+  | { type: 'manageAgents' }
+  | { type: 'connectLinear' }
+  | { type: 'disconnectLinear' }
   | { type: 'groupAnswer'; agent: string; itemId: string; response: PromptResponse }
   | { type: 'answerQuestion'; id: string; text: string }
   | { type: 'stopAndSend'; queuedId: string }

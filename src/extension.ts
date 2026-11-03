@@ -8,6 +8,7 @@ import { customAgent } from './providers/acp/agents'
 import { buildProviders } from './providers/registry'
 import type { SessionManager } from './sessions/manager'
 import { type Core, createCore } from './group/host'
+import { githubIssue, type Issue, laneName, linearIssue, seedLane } from './integrations/issues'
 import { attachFile } from './ui/attachments'
 import { ChatSurfaces, type LaneSource, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
 import { configFiles } from './ui/config-files'
@@ -16,6 +17,7 @@ import { EditorContextTracker } from './ui/editor-context'
 import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { Notifier } from './ui/notifier'
 import type { LaneNode, SessionNode } from './ui/sessions-tree'
+import { SetupView } from './ui/setup-view'
 import { SIDE_VIEW, SideView } from './ui/side-view'
 import { SessionsStatusBar } from './ui/status-bar'
 import { KeepAwake } from './ui/keep-awake'
@@ -23,6 +25,9 @@ import { Unread } from './ui/unread'
 
 let manager: SessionManager | undefined
 let core: Core | undefined
+
+/** Where the Linear key lives: VS Code's SecretStorage, sent only to Linear. */
+const LINEAR_SECRET = 'agentdeck.linearKey'
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const custom = vscode.workspace.getConfiguration('agentdeck').get<Record<string, unknown>[]>('customAgents', [])
@@ -49,6 +54,49 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const laneChanges = new LaneChanges()
   const surfaces = new ChatSurfaces(context, sessionManager, providers, getEnv, editor, diffs, unread, laneSource, core.chats)
   side = new SideView((webview, kind) => surfaces.html(webview, kind), () => surfaces.roots(), sessionManager, core.chats, unread, tracker, lanes)
+
+  const setup = new SetupView((webview) => surfaces.html(webview, 'setup'), () => surfaces.roots(), () => surfaces.providerInfos(), context.secrets, LINEAR_SECRET, tracker, root ?? storage)
+
+  /** A group chat with the roster from settings; the lead can be overridden. */
+  const newGroup = async (options: { lead?: string; laneId?: string; title?: string }) => {
+    const config = vscode.workspace.getConfiguration('agentdeck.roster')
+    const lead = options.lead ?? config.get<string>('lead', 'claude')
+    const roster = { plan: lead, ...Object.fromEntries((['research', 'implement', 'review'] as const).flatMap((role) => {
+      const agent = config.get<string>(role, '')
+      return agent ? [[role, agent]] : []
+    })) }
+    const verify = config.get<string>('verify')
+    const chat = core?.chats.create({ lead, roster, mode: 'accept-edits', enforce: config.get<boolean>('enforce', true), ...(verify ? { verify } : {}), ...(options.laneId ? { laneId: options.laneId } : {}), ...(options.title ? { title: options.title } : {}) })
+    if (chat) await surfaces.showGroupInSidebar(chat.record.id)
+  }
+
+  /** An issue to start a lane from: undefined for a blank lane, null if the user backed out. */
+  const pickIssue = async (): Promise<Issue | undefined | null> => {
+    const source = await vscode.window.showQuickPick(
+      [
+        { label: 'Blank', description: 'Name the lane yourself', id: 'blank' },
+        { label: 'From a GitHub issue', description: 'Uses your gh login', id: 'github' },
+        { label: 'From a Linear issue', description: 'Uses your Linear API key', id: 'linear' }
+      ],
+      { placeHolder: 'Start the lane from…' }
+    )
+    if (!source) return null
+    if (source.id === 'blank') return undefined
+    const ref = await vscode.window.showInputBox({ prompt: source.id === 'github' ? 'Issue number or URL' : 'Issue identifier, such as ENG-214' })
+    if (!ref?.trim()) return null
+    try {
+      if (source.id === 'github') return await githubIssue(tracker?.repos[0]?.path ?? root ?? storage, ref.trim())
+      let key = await context.secrets.get(LINEAR_SECRET)
+      if (!key) {
+        await vscode.commands.executeCommand('agentdeck.setLinearKey')
+        key = await context.secrets.get(LINEAR_SECRET)
+      }
+      return key ? await linearIssue(ref.trim(), key) : null
+    } catch (error) {
+      void vscode.window.showErrorMessage(`Couldn't read that issue: ${(error as Error).message}`)
+      return null
+    }
+  }
   void surfaces.markInstalled()
   const notifier = new Notifier(
     sessionManager,
@@ -70,16 +118,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agentdeck.sidebar.newChat', () => surfaces.newChat('view')),
     vscode.commands.registerCommand('agentdeck.newChat.other', () => surfaces.newChat('view')),
     ...[...providers.keys()].map((id) => vscode.commands.registerCommand(`agentdeck.newChat.${id}`, () => surfaces.newChat('view', id))),
-    vscode.commands.registerCommand('agentdeck.newGroupChat', async () => {
-      const config = vscode.workspace.getConfiguration('agentdeck.roster')
-      const lead = config.get<string>('lead', 'claude')
-      const roster = { plan: lead, ...Object.fromEntries((['research', 'implement', 'review'] as const).flatMap((role) => {
-        const agent = config.get<string>(role, '')
-        return agent ? [[role, agent]] : []
-      })) }
-      const chat = core?.chats.create({ lead, roster, mode: 'accept-edits', enforce: config.get<boolean>('enforce', true), ...(config.get<string>('verify') ? { verify: config.get<string>('verify') } : {}) })
-      if (chat) await surfaces.showGroupInSidebar(chat.record.id)
+    vscode.commands.registerCommand('agentdeck.newGroupChat', () => newGroup({})),
+    vscode.commands.registerCommand('agentdeck.setLinearKey', async () => {
+      const key = await vscode.window.showInputBox({ prompt: 'Linear personal API key (Settings → Security & access in Linear)', password: true, ignoreFocusOut: true })
+      if (key?.trim()) await context.secrets.store(LINEAR_SECRET, key.trim())
     }),
+    vscode.commands.registerCommand('agentdeck.clearLinearKey', () => context.secrets.delete(LINEAR_SECRET)),
     vscode.commands.registerCommand('agentdeck.openInEditor', () => surfaces.openSidebarInEditor()),
     vscode.commands.registerCommand('agentdeck.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
@@ -93,6 +137,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerWebviewViewProvider(SIDE_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.commands.registerCommand('agentdeck.openGroup', (groupId: string) => surfaces.showGroupInSidebar(groupId)),
     vscode.commands.registerCommand('agentdeck.openLanes', () => side.openLanes()),
+    vscode.commands.registerCommand('agentdeck.openSetup', () => setup.open()),
+    setup,
     new SessionsStatusBar(sessionManager),
     vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),
     vscode.commands.registerCommand('agentdeck.openSessionInSidebar', (node: SessionNode) => surfaces.showInSidebar(node.id)),
@@ -146,12 +192,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('agentdeck.newLane', async () => {
       if (!lanes || !tracker) return void vscode.window.showInformationMessage('Open a folder to use lanes.')
+      const issue = await pickIssue()
+      if (issue === null) return
       const name = await vscode.window.showInputBox({
         prompt: 'Lane name (the branch name)',
+        ...(issue ? { value: laneName(issue) } : {}),
         validateInput: (value) => (/^[\w][\w./-]*$/.test(value.trim()) ? undefined : 'Letters, digits, and . _ / - only')
       })
       if (!name?.trim()) return
-      const goal = await vscode.window.showInputBox({ prompt: `Goal for ${name.trim()} (optional)` })
+      const goal = issue ? `${issue.title} (${issue.id})` : await vscode.window.showInputBox({ prompt: `Goal for ${name.trim()} (optional)` })
       const repos = await vscode.window.showQuickPick(
         tracker.repos.map((repo) => ({ label: repo.name })),
         { canPickMany: true, placeHolder: 'Repos the lane starts in' }
@@ -165,9 +214,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         { placeHolder: 'Where does the lane start?' }
       )
       if (!where) return
-      await runLane(`Creating ${name.trim()}…`, () =>
-        lanes.newLane(name.trim(), repos.map((repo) => repo.label), { worktrees: where.worktrees, goal: goal?.trim() || undefined })
+      const lead = await vscode.window.showQuickPick(
+        [...providers.values()].map((provider) => ({ label: provider.label, id: provider.id })),
+        { placeHolder: 'Which agent leads? The roster in settings assigns the other roles.' }
       )
+      const created = await runLane(`Creating ${name.trim()}…`, async () => {
+        if (issue && memory) seedLane(memory, name.trim(), issue)
+        await lanes.newLane(name.trim(), repos.map((repo) => repo.label), { worktrees: where.worktrees, goal: goal?.trim() || undefined })
+      })
+      if (created && lead) await newGroup({ lead: lead.id, laneId: name.trim(), title: issue?.title ?? name.trim() })
     }),
     vscode.commands.registerCommand('agentdeck.laneIntoPrimary', (node: LaneNode) =>
       lanes ? runLane(`Moving ${node.lane.name} to the primary checkout…`, () => lanes.moveIntoPrimary(node.lane.name)) : undefined
@@ -236,10 +291,12 @@ export async function deactivate(): Promise<void> {
 }
 
 /** Runs a lane operation with progress; failures (busy chats, stash conflicts) show their message. */
-async function runLane(title: string, operation: () => Promise<unknown>): Promise<void> {
+async function runLane(title: string, operation: () => Promise<unknown>): Promise<boolean> {
   try {
     await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, operation)
+    return true
   } catch (error) {
     void vscode.window.showErrorMessage((error as Error).message)
+    return false
   }
 }

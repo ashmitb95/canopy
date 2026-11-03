@@ -253,6 +253,23 @@ const messages: HostMessage[] =
         { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
         { type: 'empty' }
       ]
+    : scenario === 'setup'
+      ? [
+          {
+            type: 'setup',
+            setup: {
+              agents: [
+                { id: 'claude', label: 'Claude', status: 'signed-in', account: 'Max plan' },
+                { id: 'codex', label: 'Codex', status: 'signed-in' },
+                { id: 'grok', label: 'Grok', status: 'signed-out' }
+              ],
+              roster: { lead: 'claude', research: '', implement: 'codex', review: 'grok', enforce: true, verify: 'pnpm test' },
+              workspace: { maxSlots: 4, worktrees: true, envFiles: ['.env*'], repos: [{ name: 'api', base: 'main', setup: 'pnpm install' }, { name: 'ui', base: 'main' }] },
+              github: 'signed-in',
+              linear: false
+            }
+          }
+        ]
     : scenario === 'lanes'
       ? [
           {

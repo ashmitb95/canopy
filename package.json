@@ -451,10 +451,31 @@
         "command": "agentdeck.openLanes",
         "title": "Open Lanes",
         "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.openSetup",
+        "title": "Open Setup",
+        "category": "AgentDeck",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "agentdeck.setLinearKey",
+        "title": "Connect Linear (API key)",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.clearLinearKey",
+        "title": "Disconnect Linear",
+        "category": "AgentDeck"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "agentdeck.openSetup",
+          "when": "view == agentdeck.sessions",
+          "group": "navigation@9"
+        },
         {
           "submenu": "agentdeck.newChatMenu.chat",
           "when": "view == agentdeck.chat",

@@ -530,6 +530,11 @@ export class ChatSurfaces
     else this.broadcast({ type: 'providers', providers })
   }
 
+  /** Every provider with its sign-in state, probing those not yet known. */
+  providerInfos(): Promise<ProviderInfo[]> {
+    return Promise.all([...this.providers.values()].map((provider) => this.info(provider)))
+  }
+
   private async info(provider: ProviderDefinition): Promise<ProviderInfo> {
     const state = this.states.get(provider.id) ?? (await this.probe(provider))
     return {
@@ -722,7 +727,7 @@ export class ChatSurfaces
     return PALETTES.includes(palette) ? palette : 'paper'
   }
 
-  html(webview: vscode.Webview, kind: SurfaceKind | 'side' | 'lanes'): string {
+  html(webview: vscode.Webview, kind: SurfaceKind | 'side' | 'lanes' | 'setup'): string {
     const nonce = randomBytes(16).toString('base64')
     const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.assets(), name))
     // Scripts run by nonce; the entry module imports its code-split chunks from the webview origin.

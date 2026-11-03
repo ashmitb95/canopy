@@ -66,7 +66,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 **Done when:** an issue goes to a reviewed change through the driver.
 
-## Phase 6: Hardening the core
+## Phase 6: Hardening the core (done)
 
 - Failure and restart tests across phases: crash at each step, CLI death, rate limits, bad sign-in.
 - Long sessions, large repos, and event bursts.

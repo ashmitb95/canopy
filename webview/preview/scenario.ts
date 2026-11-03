@@ -297,10 +297,12 @@ const messages: HostMessage[] =
           {
             type: 'laneCards',
             lanes: [
-              { name: 'export-timeouts', repos: [{ repo: 'api', location: 'worktree', dirty: 1, slot: 'wt-1' }, { repo: 'ui', location: 'worktree', dirty: 0, slot: 'wt-1' }], chats: [{ kind: 'group', id: 'g1', title: 'Export timeouts', agents: ['claude', 'codex', 'grok'], state: 'codex: $ node --test', needsYou: false }] },
-              { name: 'auth-flow', repos: [{ repo: 'api', location: 'primary', dirty: 2 }], chats: [{ kind: 'session', id: 's9', title: 'Sign-in screens', agents: ['claude'], state: 'Idle', needsYou: false }] },
-              { name: 'billing-export', repos: [{ repo: 'api', location: 'worktree', dirty: 0, slot: 'wt-2' }], chats: [{ kind: 'group', id: 'g2', title: 'Billing CSV', agents: ['grok', 'claude'], state: 'Needs you', needsYou: true }] },
-              { name: 'retry-fix', repos: [], chats: [{ kind: 'session', id: 's3', title: 'Retry backoff', agents: ['codex'], state: 'Idle', needsYou: false }] }
+              { name: 'auth-flow', goal: 'Move sign-in to the new session API', place: 'primary', paths: [], dirty: 3, chats: 2, status: { agent: 'claude', text: 'Idle', tone: 'idle' }, shared: [{ path: 'api/session.ts', added: 120, removed: 4 }, { path: 'ui/SignIn.tsx', added: 77, removed: 58 }] },
+              { name: 'export-timeouts', goal: 'Stream invoice exports and fix retries', place: 'warm', paths: ['api/.worktrees/wt-1'], dirty: 0, chats: 1, status: { agent: 'claude', text: 'Finished · 9m ago', tone: 'done' } },
+              { name: 'billing-export', goal: 'CSV export for invoices', place: 'warm', paths: ['api/.worktrees/wt-2'], dirty: 1, chats: 1, status: { agent: 'codex', text: 'Needs you', tone: 'needs' } },
+              { name: 'search-ranking', goal: 'Rank recent documents higher', place: 'warm', paths: ['api/.worktrees/wt-3'], dirty: 0, chats: 1, status: { agent: 'grok', text: 'Working · reading search.ts', tone: 'working' } },
+              { name: 'pdf-preview', place: 'cold', paths: [], dirty: 0, chats: 0 },
+              { name: 'old-theme', place: 'cold', paths: [], dirty: 0, chats: 0 }
             ]
           }
         ]

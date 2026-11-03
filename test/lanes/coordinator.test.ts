@@ -61,6 +61,16 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
     expect(memory.worktrees('x')).toBe(true)
   })
 
+  it('parks a lane to free its slots, and warms it up again from its branch', async () => {
+    const { api, memory, coordinator } = await setup()
+    await coordinator.newLane('x', ['api'], { worktrees: true })
+    await coordinator.park('x')
+    expect(run(join(api, '.worktrees', 'wt-1'), 'branch', '--show-current').trim()).toBe('')
+    expect(memory.lanes()).toContain('x')
+    await coordinator.warmUp('x')
+    expect(run(join(api, '.worktrees', 'wt-1'), 'branch', '--show-current').trim()).toBe('x')
+  })
+
   it('swaps a lane into the primary checkout, tells its chats, and refuses while a chat on it runs', async () => {
     const { api, manager, sessions, coordinator } = await setup()
     await coordinator.newLane('a', ['api'], { worktrees: false })

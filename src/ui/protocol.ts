@@ -28,11 +28,19 @@ export type SideData = {
   sessions: SessionSummary[]
 }
 
-/** The full lane view: every lane, where each repo has it, and the chats working on it. */
+/** The full lane view: the primary checkout, lanes with a worktree (warm), and lanes that are only a branch (cold). */
 export type LaneCard = {
   name: string
-  repos: { repo: string; location: 'primary' | 'worktree'; dirty: number; slot?: string }[]
-  chats: { kind: 'group' | 'session'; id: string; title: string; agents: string[]; state: string; needsYou: boolean }[]
+  goal?: string
+  place: 'primary' | 'warm' | 'cold'
+  /** Worktree folders, relative to the workspace. */
+  paths: string[]
+  dirty: number
+  chats: number
+  /** The chat to show on the card: one that needs you, else one working, else the latest. */
+  status?: { agent: string; text: string; tone: 'needs' | 'working' | 'done' | 'idle' }
+  /** For the primary checkout: files changed from the base branch, which chats on other lanes are told about. */
+  shared?: { path: string; added: number; removed: number }[]
 }
 
 /** The setup page: agents, who does what, the workspace, and issue trackers. */
@@ -160,6 +168,8 @@ export type WebviewMessage =
   | { type: 'newGroupChat' }
   | { type: 'switchLane'; laneId: string }
   | { type: 'parkLane'; laneId: string }
+  | { type: 'warmUpLane'; laneId: string }
+  | { type: 'openLaneChat'; laneId: string }
   | { type: 'openLanes' }
   | { type: 'setRoster'; role: 'lead' | 'research' | 'implement' | 'review' | 'verify'; value: string }
   | { type: 'setEnforce'; value: boolean }

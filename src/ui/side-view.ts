@@ -1,12 +1,15 @@
-import { basename } from 'node:path'
+import { execFile } from 'node:child_process'
+import { basename, relative } from 'node:path'
 import * as vscode from 'vscode'
 import type { GroupChats } from '../group/chat'
 import type { LaneCoordinator } from '../lanes/coordinator'
-import { deriveLanes, laneDescription } from '../lanes/lanes'
+import { deriveLanes, type Lane, laneDescription } from '../lanes/lanes'
+import type { LaneMemory } from '../lanes/memory'
 import { SwitchQuestion } from '../lanes/switch'
 import type { LaneTracker } from '../lanes/tracker'
 import type { SessionManager } from '../sessions/manager'
 import type { HostMessage, LaneCard, SideData, WebviewMessage } from './protocol'
+import { relativeTime } from './time'
 import type { Unread } from './unread'
 
 export const SIDE_VIEW = 'agentdeck.sessions'
@@ -26,7 +29,8 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly chats: GroupChats,
     private readonly unread: Unread,
     private readonly tracker: LaneTracker | undefined,
-    private readonly lanes: LaneCoordinator | undefined
+    private readonly lanes: LaneCoordinator | undefined,
+    private readonly memory: LaneMemory | undefined
   ) {
     this.subscriptions.push(
       { dispose: manager.onDidChange(() => this.refresh()).dispose },
@@ -68,7 +72,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
     this.timer = setTimeout(() => {
       this.timer = undefined
       this.post({ type: 'side', side: this.data() })
-      if (this.panel) void this.panel.webview.postMessage({ type: 'laneCards', lanes: this.laneCards() } satisfies HostMessage)
+      this.postLanes()
     }, 100)
   }
 
@@ -106,20 +110,63 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
     }
   }
 
-  private laneCards(): LaneCard[] {
+  private async laneCards(): Promise<LaneCard[]> {
     const side = this.data()
-    return this.allLanes().map((lane) => ({
-      name: lane.name,
-      repos: lane.repos.map((repo) => ({ repo: repo.repo, location: repo.location, dirty: repo.dirty, ...(repo.location === 'worktree' ? { slot: basename(repo.path) } : {}) })),
-      chats: [
-        ...side.groups
-          .filter((group) => group.laneId === lane.name)
-          .map((group) => ({ kind: 'group' as const, id: group.id, title: group.title, agents: group.agents, state: group.needsYou ? 'Needs you' : group.running ? `${group.running}: ${group.activity || 'working'}` : `Idle · lead ${group.lead}`, needsYou: group.needsYou })),
-        ...side.sessions
-          .filter((session) => session.laneId === lane.name)
-          .map((session) => ({ kind: 'session' as const, id: session.id, title: session.title, agents: [session.providerId], state: session.status === 'needs-input' ? 'Needs you' : session.status === 'running' ? 'Working' : 'Idle', needsYou: session.status === 'needs-input' }))
-      ]
-    }))
+    const root = this.tracker?.root ?? ''
+    const card = (name: string, place: LaneCard['place'], repos: Lane['repos']): LaneCard => {
+      const groups = side.groups.filter((group) => group.laneId === name)
+      const sessions = side.sessions.filter((session) => session.laneId === name)
+      const needs = groups.find((group) => group.needsYou)
+      const working = groups.find((group) => group.running)
+      const session = sessions.find((candidate) => candidate.status === 'needs-input') ?? sessions.find((candidate) => candidate.status === 'running') ?? sessions[0]
+      const status: LaneCard['status'] = needs
+        ? { agent: needs.running ?? needs.lead, text: 'Needs you', tone: 'needs' }
+        : working?.running
+          ? { agent: working.running, text: `Working${working.activity ? ` · ${working.activity}` : ''}`, tone: 'working' }
+          : session
+            ? { agent: session.providerId, text: session.status === 'needs-input' ? 'Needs you' : session.status === 'running' ? 'Working' : `${session.unread ? 'Finished' : 'Idle'} · ${relativeTime(session.updatedAt)}`, tone: session.status === 'needs-input' ? 'needs' : session.status === 'running' ? 'working' : session.unread ? 'done' : 'idle' }
+            : groups[0]
+              ? { agent: groups[0].lead, text: 'Idle', tone: 'idle' }
+              : undefined
+      const goal = this.memory?.goal(name)
+      return {
+        name,
+        ...(goal ? { goal } : {}),
+        place,
+        paths: repos.filter((repo) => repo.location === 'worktree').map((repo) => relative(root, repo.path) || basename(repo.path)),
+        dirty: repos.reduce((sum, repo) => sum + repo.dirty, 0),
+        chats: groups.length + sessions.length,
+        ...(status ? { status } : {})
+      }
+    }
+    const lanes = this.allLanes()
+    const cards = lanes.map((lane) => card(lane.name, lane.repos.some((repo) => repo.location === 'primary') ? 'primary' : lane.repos.length > 0 ? 'warm' : 'cold', lane.repos))
+    const known = new Set(lanes.map((lane) => lane.name))
+    for (const name of this.memory?.lanes() ?? []) if (!known.has(name)) cards.push(card(name, 'cold', []))
+    const primary = lanes.find((lane) => lane.repos.some((repo) => repo.location === 'primary'))
+    const primaryCard = cards.find((candidate) => candidate.place === 'primary')
+    if (primary && primaryCard) primaryCard.shared = await this.shared(primary)
+    return cards
+  }
+
+  /** Files the primary checkout's lane changed from the base branch, committed or not. */
+  private async shared(lane: Lane): Promise<LaneCard['shared']> {
+    const files: NonNullable<LaneCard['shared']> = []
+    for (const laneRepo of lane.repos.filter((repo) => repo.location === 'primary')) {
+      const base = this.tracker?.repos.find((repo) => repo.name === laneRepo.repo)?.base
+      if (!base) continue
+      const out = await new Promise<string>((resolve) => execFile('git', ['diff', '--numstat', base], { cwd: laneRepo.path, maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => resolve(error ? '' : stdout)))
+      for (const row of out.split('\n').filter(Boolean)) {
+        const [added, removed, path] = row.split('\t')
+        files.push({ path: lane.repos.length > 1 ? `${laneRepo.repo}/${path}` : path, added: Number(added) || 0, removed: Number(removed) || 0 })
+      }
+    }
+    return files
+  }
+
+  private postLanes(): void {
+    const panel = this.panel
+    if (panel) void this.laneCards().then((lanes) => panel.webview.postMessage({ type: 'laneCards', lanes } satisfies HostMessage))
   }
 
   private receive(message: WebviewMessage): void {
@@ -130,15 +177,23 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
     switch (message.type) {
       case 'ready':
         this.post({ type: 'side', side: this.data() })
-        if (this.panel) void this.panel.webview.postMessage({ type: 'laneCards', lanes: this.laneCards() } satisfies HostMessage)
+        this.postLanes()
         return
       case 'openLanes':
         this.openLanes()
         return
       case 'parkLane':
-        if (!this.lanes) return
-        void vscode.window.showInformationMessage((await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Moving ${message.laneId} to worktrees…` }, () => this.lanes?.moveToWorktree(message.laneId) ?? Promise.resolve([]))).join(' · '))
+        return this.move(`Parking ${message.laneId}…`, (lanes) => lanes.park(message.laneId))
+      case 'warmUpLane':
+        return this.move(`Warming up ${message.laneId}…`, (lanes) => lanes.warmUp(message.laneId))
+      case 'openLaneChat': {
+        const group = this.chats.list().find((chat) => chat.record.laneId === message.laneId)
+        if (group) return void (await vscode.commands.executeCommand('agentdeck.openGroup', group.record.id))
+        const session = this.manager.list().find(({ record }) => record.laneId === message.laneId)
+        if (session) return void (await vscode.commands.executeCommand('agentdeck.openSessionInSidebar', { id: session.record.id }))
+        await vscode.commands.executeCommand('agentdeck.newGroupChat', { laneId: message.laneId, title: this.memory?.goal(message.laneId) ?? message.laneId })
         return
+      }
       case 'openSession':
         await vscode.commands.executeCommand('agentdeck.openSessionInSidebar', { id: message.sessionId })
         return
@@ -162,6 +217,13 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
       default:
         return
     }
+  }
+
+  private async move(title: string, run: (lanes: LaneCoordinator) => Promise<string[]>): Promise<void> {
+    const lanes = this.lanes
+    if (!lanes) return
+    const lines = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, () => run(lanes))
+    void vscode.window.showInformationMessage(lines.join(' · '))
   }
 
   /** Moves a lane into the primary checkout, asking the questions preflight raises. */

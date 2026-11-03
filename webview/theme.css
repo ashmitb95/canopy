@@ -45,8 +45,34 @@
   --radius: 8px;
 }
 
+/*
+ * Layers for full screens, mixed from the theme: the page, raised surfaces on it, bands (quieter fills),
+ * and controls. Light themes raise surfaces by keeping them the editor color on a tinted page;
+ * dark themes raise them by lightening.
+ */
+body.vscode-light {
+  --page: color-mix(in srgb, var(--vscode-foreground) 4%, var(--vscode-editor-background));
+  --surface: var(--vscode-editor-background);
+  --band: color-mix(in srgb, var(--vscode-foreground) 8%, var(--vscode-editor-background));
+  --control: color-mix(in srgb, var(--vscode-foreground) 13%, var(--vscode-editor-background));
+}
+body.vscode-dark,
+body.vscode-high-contrast {
+  --page: var(--vscode-editor-background);
+  --surface: color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-editor-background));
+  --band: color-mix(in srgb, var(--vscode-foreground) 4%, var(--vscode-editor-background));
+  --control: color-mix(in srgb, var(--vscode-foreground) 14%, var(--vscode-editor-background));
+}
+
+/* In a light sidebar there is nothing lighter than the editor color, so raised rows are a tint instead. */
+body.vscode-light[data-surface="side"] {
+  --surface: color-mix(in srgb, var(--vscode-foreground) 6%, var(--vscode-sideBar-background, var(--vscode-editor-background)));
+  --control: color-mix(in srgb, var(--vscode-foreground) 12%, var(--vscode-sideBar-background, var(--vscode-editor-background)));
+}
+
 /* The sidebar chat sits on the sidebar's background. */
-body[data-surface="view"] {
+body[data-surface="view"],
+body[data-surface="side"] {
   --background: var(--vscode-sideBar-background);
 }
 
@@ -72,6 +98,10 @@ body.vscode-high-contrast [data-card="primary"] * {
 
 @theme inline {
   --color-background: var(--background);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-band: var(--band);
+  --color-control: var(--control);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);

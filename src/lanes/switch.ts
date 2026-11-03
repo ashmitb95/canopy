@@ -407,6 +407,10 @@ export async function unfinishedMove(repo: string): Promise<Journal | undefined>
   return readJournal(repo)
 }
 
+export function hasBranch(repo: string, lane: string): Promise<boolean> {
+  return attempt(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${lane}`])
+}
+
 /** A lane leaves its slot: the branch and work are kept, the folder stays warm for the next lane. */
 export async function park(repo: string, lane: string): Promise<void> {
   const tree = (await worktrees(repo)).find((candidate) => candidate.branch === lane)

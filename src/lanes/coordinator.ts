@@ -6,7 +6,7 @@ import { readConfig } from './config'
 import { deriveLanes } from './lanes'
 import type { LaneMemory } from './memory'
 import type { RepoState } from './state'
-import { joinRepo, migrateToSlots, moveToWorktree, rollback, swapAll, SwitchError, type SwapOptions, unfinishedMove } from './switch'
+import { hasBranch, joinRepo, migrateToSlots, moveToWorktree, park, rollback, swapAll, SwitchError, type SwapOptions, unfinishedMove } from './switch'
 import type { LaneTracker } from './tracker'
 import { warmUp } from './warmup'
 
@@ -91,6 +91,36 @@ export class LaneCoordinator {
       lines.push(`${lane} moved to ${this.rel(slotPath)}`)
       void this.warm(repo, lane, slotPath, setupNeeded.includes(slotPath))
     }
+    await this.settle([lane], lines)
+    return lines
+  }
+
+  /** Frees the worktree slots a lane holds; its branch and commits stay. Refuses while a slot has uncommitted work. */
+  async park(lane: string): Promise<string[]> {
+    const { tracker } = this.deps
+    await tracker.refresh()
+    this.assertIdle([lane])
+    const repos = tracker.repos.filter((repo) => repo.checkouts.some((checkout) => !checkout.primary && checkout.branch === lane))
+    if (repos.length === 0) throw new SwitchError(`${lane} holds no worktree.`)
+    for (const repo of repos) await park(repo.path, lane)
+    const lines = [`${lane} parked: its branch stays, and its worktree is free`]
+    await this.settle([lane], lines)
+    return lines
+  }
+
+  /** Checks a lane's branch out into a worktree again, in every repo that has it, warmed up. */
+  async warmUp(lane: string): Promise<string[]> {
+    const { tracker } = this.deps
+    await tracker.refresh()
+    const lines: string[] = []
+    for (const repo of tracker.repos) {
+      if (!(await hasBranch(repo.path, lane))) continue
+      await migrateToSlots(repo.path)
+      const { path, setupNeeded } = await joinRepo(repo.path, lane, { ...this.limits(repo), worktrees: true })
+      if (path !== repo.path) await this.warm(repo, lane, path, setupNeeded)
+      lines.push(`${lane} is ready in ${this.rel(path)}`)
+    }
+    if (lines.length === 0) throw new SwitchError(`No repo has a branch named ${lane}.`)
     await this.settle([lane], lines)
     return lines
   }

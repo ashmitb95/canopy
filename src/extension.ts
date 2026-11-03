@@ -54,7 +54,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     : undefined
   const laneChanges = new LaneChanges()
   const surfaces = new ChatSurfaces(context, sessionManager, providers, getEnv, editor, diffs, unread, laneSource, core.chats)
-  side = new SideView((webview, kind) => surfaces.html(webview, kind), () => surfaces.roots(), sessionManager, core.chats, unread, tracker, lanes)
+  side = new SideView((webview, kind) => surfaces.html(webview, kind), () => surfaces.roots(), sessionManager, core.chats, unread, tracker, lanes, memory)
 
   const setup = new SetupView((webview) => surfaces.html(webview, 'setup'), () => surfaces.roots(), () => surfaces.providerInfos(), context.secrets, LINEAR_SECRET, tracker, root ?? storage)
 
@@ -136,7 +136,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agentdeck.sidebar.newChat', () => surfaces.newChat('view')),
     vscode.commands.registerCommand('agentdeck.newChat.other', () => surfaces.newChat('view')),
     ...[...providers.keys()].map((id) => vscode.commands.registerCommand(`agentdeck.newChat.${id}`, () => surfaces.newChat('view', id))),
-    vscode.commands.registerCommand('agentdeck.newGroupChat', () => newGroup({})),
+    vscode.commands.registerCommand('agentdeck.newGroupChat', (options?: { laneId?: string; title?: string }) => newGroup(options ?? {})),
     vscode.commands.registerCommand('agentdeck.setLinearKey', async () => {
       const key = await vscode.window.showInputBox({ prompt: 'Linear personal API key (Settings → Security & access in Linear)', password: true, ignoreFocusOut: true })
       if (key?.trim()) await context.secrets.store(LINEAR_SECRET, key.trim())

@@ -24,6 +24,12 @@ export class LaneMemory {
     return join(this.laneDir(lane), 'notes.md')
   }
 
+  /** Every lane with memory, whether or not it is checked out anywhere. */
+  lanes(): string[] {
+    const dir = join(this.dir, 'lanes')
+    return existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name.replaceAll('--', '/')) : []
+  }
+
   exists(lane: string): boolean {
     return existsSync(this.laneDir(lane))
   }

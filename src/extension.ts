@@ -76,6 +76,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (choice === 'Undo it') await runLane('Undoing the interrupted switch…', async () => void vscode.window.showInformationMessage((await lanes.undoUnfinishedMoves()).join(' · ')))
   })
 
+  // Every chat started from a provider is a group chat it leads, so the roster and delegation always apply.
+  surfaces.startGroup = (lead) => newGroup({ lead })
+
   /** A group chat with the roster from settings; the lead can be overridden. */
   const newGroup = async (options: { lead?: string; laneId?: string; title?: string }) => {
     const config = vscode.workspace.getConfiguration('agentdeck.roster')

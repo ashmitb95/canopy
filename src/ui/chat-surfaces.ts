@@ -56,6 +56,9 @@ export class ChatSurfaces
   private readonly files = new FileSearch()
   private readonly attachmentsDir: string
 
+  /** Starts a group chat led by the chosen provider, with the roster from settings; set by the extension. */
+  startGroup: ((lead: string) => Promise<void>) | undefined
+
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly manager: SessionManager,
@@ -97,6 +100,7 @@ export class ChatSurfaces
       if (picked === null) return
       providerId = picked
     }
+    if (providerId && this.startGroup) return this.startGroup(providerId)
     if (providerId) {
       const record = await this.manager.create(providerId)
       if (where === 'panel') this.openPanel(record.id)
@@ -409,6 +413,7 @@ export class ChatSurfaces
         if (sessionId) this.manager.removeQueued(sessionId, message.queuedId)
         return
       case 'newChat':
+        if (message.providerId && this.startGroup) return this.startGroup(message.providerId)
         if (message.providerId) return this.startIn(surface, message.providerId)
         return this.newChat(surface.kind)
       case 'signIn':

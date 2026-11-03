@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Disposable, Emitter } from '../core/emitter'
@@ -87,6 +87,9 @@ function snapshotTree(path: string): string {
   const index = join(realpathSync(tmpdir()), `agentdeck-index-${process.pid}-${randomUUID()}`)
   const git = (args: string[]) => execFileSync('git', args, { cwd: path, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, GIT_INDEX_FILE: index } }).trim()
   try {
+    // Starting from the checkout's own index, Git only rehashes what changed: seconds become milliseconds on large repos.
+    const own = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-path', 'index'], { cwd: path, encoding: 'utf8' }).trim()
+    if (existsSync(own)) copyFileSync(own, index)
     git(['add', '-A', '.'])
     return git(['write-tree'])
   } finally {
@@ -113,6 +116,8 @@ function restoreTree(path: string, tree: string): void {
 const MAX_QUESTION_ROUNDS = 5
 const DEFAULT_SETTLE_MS = 120_000
 const BACKGROUND_GRACE_MS = 2_000
+/** The live activity line only needs the latest items, however long the session. */
+const ACTIVITY_WINDOW = 200
 
 const NARRATE = 'Before each step, say in one short line what you are doing or what you just found.'
 const SAID_DELEGATE = /\b(hand(ing)?( it| this| that)? (off|over)|delegat(e|ing)|pass(ing)? (it|this) to)\b/i
@@ -197,7 +202,8 @@ export class GroupChat implements Disposable {
   }
 
   private get watchesProcesses(): boolean {
-    return this.deps.watchProcesses !== false
+    // Process watching reads `ps` and `lsof`, which Windows lacks.
+    return this.deps.watchProcesses !== false && process.platform !== 'win32'
   }
 
   get agents(): string[] {
@@ -541,7 +547,7 @@ export class GroupChat implements Disposable {
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */
   catchUp(agent: string, parts: PromptPart[]): PromptPart[] {
     const cursor = this.record.cursors[agent] ?? 0
-    const text = catchUpText(this.ledger.missed(cursor, agent, this.current?.agent === agent ? this.current.entry : undefined))
+    const text = catchUpText(this.ledger.missed(cursor, agent, this.current?.agent === agent ? this.current.entry : undefined), join(this.deps.dir, this.record.id, 'ledger.jsonl'))
     this.record.cursors[agent] = this.ledger.length
     const brief = agent === this.record.lead && Object.keys(this.record.roster).length > 0 && this.record.briefed !== agent
     if (brief) this.record.briefed = agent
@@ -819,7 +825,7 @@ export class GroupChat implements Disposable {
   }
 
   private activity(agent: string): string {
-    const lines = rollingLines(this.latest.get(agent) ?? [], this.deps.root)
+    const lines = rollingLines((this.latest.get(agent) ?? []).slice(-ACTIVITY_WINDOW), this.deps.root)
     const tool = [...lines].reverse().find((line) => line.kind === 'tool' && line.live)
     return tool?.text ?? lines.at(-1)?.text ?? ''
   }

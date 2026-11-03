@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { GroupChat, GroupChats } from '../../src/group/chat'
+import { catchUpText } from '../../src/group/ledger'
 import { parseMentions } from '../../src/group/mentions'
 import { SessionManager } from '../../src/sessions/manager'
 import { SessionStore } from '../../src/sessions/store'
@@ -74,6 +75,23 @@ describe('parseMentions', () => {
   it('leaves emails, packages, and unknown names as text', () => {
     expect(parseMentions('ask me@codex.dev about @types/node and @nobody', agents)).toEqual([{ text: 'ask me@codex.dev about @types/node and @nobody' }])
     expect(parseMentions('see @codex/sdk docs', agents)).toEqual([{ text: 'see @codex/sdk docs' }])
+  })
+})
+
+describe('catch-up', () => {
+  it('keeps the newest messages within the limit, and points at the full record', () => {
+    const entries = Array.from({ length: 50 }, (_, seq) => ({ seq, from: 'codex', text: `message ${seq} ${'x'.repeat(100)}`, at: '' }))
+    const text = catchUpText(entries, '/ledger.jsonl', 1_000)
+    expect(text).toContain('message 49')
+    expect(text).not.toContain('message 0 ')
+    expect(text).toMatch(/\d+ earlier messages left out for length; the full record is in \/ledger.jsonl/)
+    expect(text.length).toBeLessThan(1_400)
+  })
+
+  it('cuts one oversized message instead of dropping everything', () => {
+    const text = catchUpText([{ seq: 0, from: 'grok', text: 'y'.repeat(5_000), at: '' }], undefined, 1_000)
+    expect(text).toContain('…')
+    expect(text.length).toBeLessThan(1_200)
   })
 })
 

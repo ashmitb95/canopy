@@ -8,6 +8,7 @@ Read before changing an area:
 - [docs/providers.md](docs/providers.md): the provider contract, per-provider protocol facts, adding an agent
 - [docs/lanes.md](docs/lanes.md): the lane model, `.agentdeck/` files, switching, write boundaries
 - [docs/roadmap.md](docs/roadmap.md): planned work, with what to verify before building it
+- [docs/core-api.md](docs/core-api.md): the core the UI builds on
 - [docs/build-plan.md](docs/build-plan.md): the order it gets built in: a headless core first, the UI last
 - [docs/ui-spec.md](docs/ui-spec.md): the target UI and its terms, with screens in `docs/design/`
 

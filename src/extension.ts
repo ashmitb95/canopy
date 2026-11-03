@@ -15,7 +15,8 @@ import { DIFF_SCHEME, DiffDocuments } from './ui/diff-documents'
 import { EditorContextTracker } from './ui/editor-context'
 import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { Notifier } from './ui/notifier'
-import { type LaneNode, type SessionNode, SessionsTree } from './ui/sessions-tree'
+import type { LaneNode, SessionNode } from './ui/sessions-tree'
+import { SIDE_VIEW, SideView } from './ui/side-view'
 import { SessionsStatusBar } from './ui/status-bar'
 import { KeepAwake } from './ui/keep-awake'
 import { Unread } from './ui/unread'
@@ -41,12 +42,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const editor = new EditorContextTracker()
   const diffs = new DiffDocuments(sessionManager)
   const unread = new Unread(context.workspaceState)
-  const tree = new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label])), tracker, unread)
+  let side: SideView
   const laneSource: LaneSource | undefined = tracker
-    ? { list: () => tree.lanes().map((lane) => ({ name: lane.name, where: laneDescription(lane) })), onDidChange: tracker.onDidChange }
+    ? { list: () => side.allLanes().map((lane) => ({ name: lane.name, where: laneDescription(lane) })), onDidChange: tracker.onDidChange }
     : undefined
   const laneChanges = new LaneChanges()
   const surfaces = new ChatSurfaces(context, sessionManager, providers, getEnv, editor, diffs, unread, laneSource, core.chats)
+  side = new SideView((webview) => surfaces.html(webview, 'side'), () => surfaces.roots(), sessionManager, core.chats, unread, tracker, lanes)
   void surfaces.markInstalled()
   const notifier = new Notifier(
     sessionManager,
@@ -84,10 +86,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.workspace.registerTextDocumentContentProvider(GIT_SCHEME, laneChanges),
     vscode.commands.registerCommand('agentdeck.reviewLane', async (target: LaneNode | string) => {
       const name = typeof target === 'string' ? target : target.lane.name
-      const lane = tree.lanes().find((candidate) => candidate.name === name)
+      const lane = side.allLanes().find((candidate) => candidate.name === name)
       if (lane && tracker) await laneChanges.open(lane, tracker.repos)
     }),
-    tree,
+    side,
+    vscode.window.registerWebviewViewProvider(SIDE_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
+    vscode.commands.registerCommand('agentdeck.openGroup', (groupId: string) => surfaces.showGroupInSidebar(groupId)),
     new SessionsStatusBar(sessionManager),
     vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),
     vscode.commands.registerCommand('agentdeck.openSessionInSidebar', (node: SessionNode) => surfaces.showInSidebar(node.id)),
@@ -123,7 +127,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agentdeck.moveSessionToLane', async (node: SessionNode) => {
       const none = { label: '$(circle-slash) No branch', lane: undefined }
       const choices = [
-        ...tree.lanes().map((lane) => ({ label: `$(git-branch) ${lane.name}`, description: laneDescription(lane), lane: lane.name })),
+        ...side.allLanes().map((lane) => ({ label: `$(git-branch) ${lane.name}`, description: laneDescription(lane), lane: lane.name })),
         none
       ]
       const choice = await vscode.window.showQuickPick(choices, { placeHolder: `Move “${node.title}” to…` })

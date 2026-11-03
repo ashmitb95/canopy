@@ -340,7 +340,7 @@ export class ChatSurfaces
   }
 
   /** The webview may load the bundle and attached images. */
-  private roots(): vscode.Uri[] {
+  roots(): vscode.Uri[] {
     return [this.assets(), vscode.Uri.file(this.attachmentsDir)]
   }
 
@@ -722,7 +722,7 @@ export class ChatSurfaces
     return PALETTES.includes(palette) ? palette : 'paper'
   }
 
-  private html(webview: vscode.Webview, kind: SurfaceKind): string {
+  html(webview: vscode.Webview, kind: SurfaceKind | 'side'): string {
     const nonce = randomBytes(16).toString('base64')
     const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.assets(), name))
     // Scripts run by nonce; the entry module imports its code-split chunks from the webview origin.

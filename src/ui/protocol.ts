@@ -21,6 +21,13 @@ export type ProviderInfo = {
 
 export type LaneInfo = { name: string; where: string }
 
+/** The primary sidebar: lanes, group chats, and single-agent sessions. */
+export type SideData = {
+  lanes?: { name: string; where: string; primary: boolean; warm: boolean; dirty: number }[]
+  groups: { id: string; title: string; lead: string; running?: string; activity?: string; needsYou: boolean; agents: string[]; laneId?: string }[]
+  sessions: SessionSummary[]
+}
+
 export type SessionSummary = {
   id: string
   title: string
@@ -69,6 +76,7 @@ export type HostMessage =
   | { type: 'groupSnapshot'; state: GroupState; items: TimelineItem[] }
   | { type: 'groupState'; state: GroupState }
   | { type: 'groupItem'; agent: string; item: SessionItem }
+  | { type: 'side'; side: SideData }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -107,6 +115,9 @@ export type WebviewMessage =
   | { type: 'deleteSession'; sessionId?: string }
   | { type: 'reviewLane'; laneId: string }
   | { type: 'groupSend'; text: string }
+  | { type: 'openGroup'; groupId: string }
+  | { type: 'newGroupChat' }
+  | { type: 'switchLane'; laneId: string }
   | { type: 'groupAnswer'; agent: string; itemId: string; response: PromptResponse }
   | { type: 'answerQuestion'; id: string; text: string }
   | { type: 'stopAndSend'; queuedId: string }

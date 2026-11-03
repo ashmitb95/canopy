@@ -253,6 +253,24 @@ const messages: HostMessage[] =
         { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
         { type: 'empty' }
       ]
+    : scenario === 'side'
+      ? [
+          {
+            type: 'side',
+            side: {
+              lanes: [
+                { name: 'auth-flow', where: 'api primary ●2', primary: true, warm: false, dirty: 2 },
+                { name: 'export-timeouts', where: 'api worktree ●1', primary: false, warm: true, dirty: 1 },
+                { name: 'billing-export', where: 'api worktree', primary: false, warm: true, dirty: 0 }
+              ],
+              groups: [
+                { id: 'g1', title: 'Export timeouts', lead: 'claude', running: 'codex', activity: '$ node --test', needsYou: false, agents: ['claude', 'codex', 'grok'], laneId: 'export-timeouts' },
+                { id: 'g2', title: 'Billing CSV', lead: 'grok', needsYou: true, agents: ['grok', 'claude'], laneId: 'billing-export' }
+              ],
+              sessions: [{ id: 's9', title: 'Sign-in screens', providerId: 'claude', status: 'idle', updatedAt: '2026-10-28T08:00:00.000Z', inTab: false, unread: true, laneId: 'auth-flow' }]
+            }
+          }
+        ]
     : scenario === 'group'
       ? [providers, { type: 'groupSnapshot', state: groupState, items: groupItems }]
     : scenario === 'prompts'

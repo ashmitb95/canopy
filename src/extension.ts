@@ -2,17 +2,12 @@ import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import * as vscode from 'vscode'
 import { captureEnv, type Env } from './env'
-import { LaneCoordinator } from './lanes/coordinator'
-import { laneContext } from './lanes/lane-context'
-import { watchHistory, watchTurns } from './lanes/lane-turns'
 import { laneDescription } from './lanes/lanes'
-import { LaneMemory } from './lanes/memory'
 import { handoffPrompt, readTasks } from './lanes/tasks'
-import { LaneTracker } from './lanes/tracker'
 import { customAgent } from './providers/acp/agents'
 import { buildProviders } from './providers/registry'
-import { SessionManager } from './sessions/manager'
-import { SessionStore } from './sessions/store'
+import type { SessionManager } from './sessions/manager'
+import { type Core, createCore } from './group/host'
 import { attachFile } from './ui/attachments'
 import { ChatSurfaces, type LaneSource, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
 import { configFiles } from './ui/config-files'
@@ -26,8 +21,9 @@ import { KeepAwake } from './ui/keep-awake'
 import { Unread } from './ui/unread'
 
 let manager: SessionManager | undefined
+let core: Core | undefined
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const custom = vscode.workspace.getConfiguration('agentdeck').get<Record<string, unknown>[]>('customAgents', [])
   const providers = buildProviders(custom.flatMap((entry) => customAgent(entry) ?? []))
   let env: Promise<Env> | undefined
@@ -35,34 +31,22 @@ export function activate(context: vscode.ExtensionContext): void {
   const getEnv = () => (env ??= captureEnv().then((captured) => ({ ...captured, CLAUDE_NOTIFIER_DISABLE: '1' })))
   const storage = (context.storageUri ?? context.globalStorageUri).fsPath
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-  // Without a folder there is nothing to track (and the home folder is not scanned).
-  const tracker = root ? new LaneTracker(root) : undefined
-  const memory = tracker ? new LaneMemory(tracker.root) : undefined
-  let coordinator: LaneCoordinator | undefined
-  manager = new SessionManager({
-    providers,
-    store: new SessionStore(context.workspaceState),
-    journalDir: join(storage, 'sessions'),
-    cwd: root ?? homedir(),
-    env: getEnv,
-    decorate: tracker && memory ? laneContext(tracker, memory) : undefined,
-    boundary: async (record) => coordinator?.boundary(record)
-  })
-  const sessionManager = manager
-  coordinator =
-    tracker && memory
-      ? new LaneCoordinator({ tracker, memory, manager: sessionManager, env: async () => (await getEnv()) as NodeJS.ProcessEnv })
-      : undefined
-  const lanes = coordinator
+  // The same core the terminal driver hosts. Without a folder it works in AgentDeck's storage, so the home folder is never scanned.
+  core = await createCore({ root: root ?? storage, storage, memento: context.workspaceState, env: getEnv, providers })
+  manager = core.manager
+  const sessionManager = core.manager
+  const tracker = root ? core.tracker : undefined
+  const memory = root ? core.memory : undefined
+  const lanes = root ? core.lanes : undefined
   const editor = new EditorContextTracker()
-  const diffs = new DiffDocuments(manager)
+  const diffs = new DiffDocuments(sessionManager)
   const unread = new Unread(context.workspaceState)
   const tree = new SessionsTree(sessionManager, new Map([...providers].map(([id, provider]) => [id, provider.label])), tracker, unread)
   const laneSource: LaneSource | undefined = tracker
     ? { list: () => tree.lanes().map((lane) => ({ name: lane.name, where: laneDescription(lane) })), onDidChange: tracker.onDidChange }
     : undefined
   const laneChanges = new LaneChanges()
-  const surfaces = new ChatSurfaces(context, manager, providers, getEnv, editor, diffs, unread, laneSource)
+  const surfaces = new ChatSurfaces(context, sessionManager, providers, getEnv, editor, diffs, unread, laneSource)
   void surfaces.markInstalled()
   const notifier = new Notifier(
     sessionManager,
@@ -218,10 +202,7 @@ export function activate(context: vscode.ExtensionContext): void {
   )
 
   if (tracker) {
-    void tracker.refresh().catch(() => {})
     context.subscriptions.push(
-      tracker,
-      ...(memory ? [watchTurns(sessionManager, tracker, memory), watchHistory(tracker, memory)] : []),
       // Saves change dirty counts; refocusing catches work done in a terminal or another app.
       vscode.workspace.onDidSaveTextDocument(() => tracker.schedule()),
       vscode.window.onDidChangeWindowState((state) => state.focused && tracker.schedule())
@@ -236,7 +217,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
-  await manager?.dispose()
+  await core?.dispose()
 }
 
 /** Runs a lane operation with progress; failures (busy chats, stash conflicts) show their message. */

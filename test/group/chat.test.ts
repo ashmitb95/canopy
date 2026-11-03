@@ -358,6 +358,17 @@ describe('delegation', () => {
     expect(chat.state().blocked).toContain('codex')
   })
 
+  it('commits for the writer only, including new files', async () => {
+    git('config', 'commit.gpgsign', 'false')
+    writeFileSync(join(repo, 'new.txt'), 'x\n')
+    expect(chat.handleTool('claude', 'commit_work', { message: 'nope' })).toContain('Only codex')
+    expect(chat.handleTool('codex', 'commit_work', { message: '' })).toContain('message is required')
+    expect(chat.handleTool('codex', 'commit_work', { message: 'add new' })).toContain('Committed')
+    expect(git('log', '-1', '--format=%s')).toBe('add new')
+    expect(git('status', '--porcelain')).toBe('')
+    expect(chat.handleTool('codex', 'commit_work', { message: 'again' })).toBe('Nothing to commit.')
+  })
+
   it('lets a mention reach a delegate while it works', async () => {
     await chat.send('build')
     await tick()

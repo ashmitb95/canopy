@@ -110,6 +110,12 @@ export function groupTools(handle: (caller: string, name: string, args: Record<s
       description: 'Hands work to another agent in this chat, by role or by name. It returns at once. End your turn right after; the report starts your next turn.',
       inputSchema: { type: 'object', properties: { to: { type: 'string', description: 'A role (research, plan, implement, review) or an agent name.' }, task: { type: 'string' }, doneWhen: { type: 'string' } }, required: ['to', 'task'] },
       call: (args, caller) => handle(caller, 'delegate', args)
+    },
+    {
+      name: 'commit_work',
+      description: 'Commits everything changed in this lane, including new files. Use this when your sandbox cannot run git commit. Only the agent allowed to write can use it.',
+      inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+      call: (args, caller) => handle(caller, 'commit_work', args)
     }
   ]
 }
@@ -287,6 +293,7 @@ export class GroupChat implements Disposable {
 
   /** Called through the tool server by an agent in this chat. */
   handleTool(agent: string, name: string, args: Record<string, unknown>): string {
+    if (name === 'commit_work') return this.commitWork(agent, String(args.message ?? ''))
     if (name !== 'delegate') return `Unknown tool ${name}.`
     if (agent !== this.record.lead) return `Only the lead (${this.record.lead}) can delegate.`
     const to = String(args.to ?? '').toLowerCase()
@@ -300,6 +307,26 @@ export class GroupChat implements Disposable {
     this.save()
     this.changed()
     return `Accepted: ${target} will do this. End your turn now; its report starts your next turn.`
+  }
+
+  /** Commits for an agent whose sandbox protects Git's own files. Never amends, resets, or pushes. */
+  private commitWork(agent: string, message: string): string {
+    const writer = this.record.roster.implement
+    if (this.record.enforce && writer && agent !== writer) return `Only ${writer} can commit here.`
+    if (!message.trim()) return 'A commit message is required.'
+    const done: string[] = []
+    for (const path of this.deps.checkouts?.(this.record.laneId) ?? []) {
+      try {
+        const git = (args: string[]) => execFileSync('git', args, { cwd: path, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+        if (!git(['status', '--porcelain'])) continue
+        git(['add', '-A'])
+        git(['commit', '-m', message])
+        done.push(git(['log', '-1', '--format=%h']))
+      } catch (error) {
+        return `The commit failed in ${path}: ${(error as Error).message.split('\n')[0]}`
+      }
+    }
+    return done.length > 0 ? `Committed ${done.join(', ')}.` : 'Nothing to commit.'
   }
 
   /** Read-only for anyone but the Implement agent, when roles are enforced. */
@@ -330,7 +357,7 @@ export class GroupChat implements Disposable {
   }
 
   private delegationText(delegation: Delegation): string {
-    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by AgentDeck${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.task}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked.`
+    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by AgentDeck${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.task}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the agentdeck MCP server.`
   }
 
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */

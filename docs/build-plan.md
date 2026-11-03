@@ -36,7 +36,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 **Done when:** a small real feature is built by mentioning agents by hand through the driver. This is the largest change to existing code.
 
-## Phase 3: Delegation
+## Phase 3: Delegation (done)
 
 - One local tool server for all providers, and the `delegate` tool.
 - Roster configuration, and the lead's brief.
@@ -48,7 +48,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 **Done when:** a lead delegates by roster on a real feature, on all three providers, through the driver. This is the first real test of handoff quality on larger work, and it may change later phases.
 
-## Phase 4: The lead in charge
+## Phase 4: The lead in charge (done)
 
 - Settling: open tool calls, process tree, working directories, a helper ignore list per provider.
 - A verification turn for delegates that started background work.
@@ -58,7 +58,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 **Done when:** a long feature runs with failures, questions, and limits, and the user stays in control from the driver.
 
-## Phase 5: Review data and integrations
+## Phase 5: Review data and integrations (done)
 
 - Per-delegate snapshots, diffs, and undo.
 - Who-did-what data for review; create a pull request.

@@ -9,6 +9,7 @@ import { LaneMemory } from '../lanes/memory'
 import { LaneTracker } from '../lanes/tracker'
 import { SessionManager } from '../sessions/manager'
 import { type Memento, SessionStore } from '../sessions/store'
+import { type Issue, laneName, seedLane } from '../integrations/issues'
 import { GroupChats, groupTools } from './chat'
 import { startToolServer } from './tool-server'
 
@@ -38,6 +39,14 @@ export type CoreOptions = {
   memento?: Memento
   env: () => Promise<Env>
   providers: ReadonlyMap<string, ProviderDefinition>
+}
+
+/** Starts a lane from an issue: the branch is named from it, and its goal and text seed the lane's memory. */
+export async function laneFromIssue(core: Core, issue: Issue, options: { repos?: string[]; worktrees?: boolean } = {}): Promise<string> {
+  const lane = laneName(issue)
+  seedLane(core.memory, lane, issue)
+  await core.lanes.newLane(lane, options.repos ?? core.tracker.repos.map((repo) => repo.name), { worktrees: options.worktrees ?? true, goal: `${issue.title} (${issue.id})` })
+  return lane
 }
 
 export type Core = { manager: SessionManager; tracker: LaneTracker; memory: LaneMemory; lanes: LaneCoordinator; chats: GroupChats; dispose(): Promise<void> }

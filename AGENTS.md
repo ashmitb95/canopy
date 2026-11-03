@@ -47,7 +47,7 @@ Live scripts run real CLIs on the user's subscription, so they spend quota. Afte
 
 ## Hard rules
 
-- Never read, store, log, or forward credentials, and never call provider APIs directly. Auth stays in each CLI.
+- Never read, store, log, or forward AI provider credentials, and never call provider APIs directly; that auth stays in each CLI. Integration keys the user adds, such as Linear's, go only in VS Code's SecretStorage and only to that service. GitHub goes through the user's own `gh` login.
 - Never print raw ACP frames or the environment: they can contain API keys.
 - Do not install CLIs or other software on the user's machine without asking.
 - Git operations on user repos must never lose work: no `reset --hard`, no deleting branches. A step that cannot finish cleanly stops and shows why.

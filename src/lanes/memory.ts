@@ -100,6 +100,12 @@ export class LaneMemory {
     writeFileSync(join(this.laneDir(lane), 'chats', `${chatId}.md`), text)
   }
 
+  /** Adds an entry to the lane's notes, which every brief points agents at. */
+  appendNote(lane: string, text: string): void {
+    this.ensure(lane)
+    appendFileSync(this.notesPath(lane), `${existsSync(this.notesPath(lane)) && readFileSync(this.notesPath(lane), 'utf8').trim() ? '\n' : ''}${text.trim()}\n`)
+  }
+
   /** Records an observed event; lanes AgentDeck holds no memory for are not given a folder just for this. */
   appendHistory(lane: string, event: Record<string, unknown>): void {
     if (!this.exists(lane)) return

@@ -22,7 +22,7 @@ export type Roster = Partial<Record<Role, string>>
 
 export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted'
 export type Facts = { files: string[]; commands: { command: string; failed: boolean }[]; verify?: { command: string; ok: boolean; output: string }; violations: string[]; stillRunning?: string[]; servicesLeft?: string[] }
-export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; before?: string[]; rounds?: number; verified?: boolean }
+export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean }
 export type UserQuestion = { id: string; from: string; delegation?: string; question: string; itemId?: string }
 export type Violation = { id: string; agent: string; files: string[]; before: { path: string; tree: string }[]; undone?: boolean }
 
@@ -484,6 +484,36 @@ export class GroupChat implements Disposable {
     return { roots: [], except: [], outside: async () => `Your role is read-only here. ${agent === this.record.lead ? `Delegate this edit to ${writer}.` : `Report what should change; ${writer} edits code.`}` }
   }
 
+  /** What each delegate changed, as a diff, with its report and the facts AgentDeck recorded. */
+  review(): { delegation: Delegation; diff: string }[] {
+    return this.record.delegations.flatMap((delegation) => {
+      if (!delegation.snapshots) return []
+      const diff = delegation.snapshots.map(({ path, before, after }) => execFileSync('git', ['diff', before, after], { cwd: path, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })).join('')
+      return [{ delegation, diff }]
+    })
+  }
+
+  /** Reverses one delegate's changes, keeping later work. Refuses, changing nothing, when later edits overlap. */
+  undoDelegation(id: string): string {
+    const delegation = this.record.delegations.find((candidate) => candidate.id === id)
+    if (!delegation?.snapshots || delegation.undone) return 'Nothing to undo.'
+    const patches = delegation.snapshots.map(({ path, before, after }) => ({ path, patch: execFileSync('git', ['diff', '--binary', before, after], { cwd: path, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }) }))
+    for (const { path, patch } of patches) {
+      if (!patch) continue
+      try {
+        execFileSync('git', ['apply', '-R', '--check'], { cwd: path, input: patch, stdio: ['pipe', 'ignore', 'pipe'] })
+      } catch {
+        return `Later changes overlap ${delegation.agent}'s, so nothing was undone. Review the diff and undo by hand.`
+      }
+    }
+    for (const { path, patch } of patches) if (patch) execFileSync('git', ['apply', '-R'], { cwd: path, input: patch })
+    delegation.undone = true
+    this.ledger.append({ from: 'user', text: `Undid ${delegation.agent}'s changes for: ${delegation.task}` })
+    this.save()
+    this.changed()
+    return `Undid ${delegation.agent}'s changes.`
+  }
+
   /** Puts files back after a write the role did not allow. */
   undoViolation(id: string): void {
     const violation = this.record.violations.find((candidate) => candidate.id === id)
@@ -696,6 +726,7 @@ export class GroupChat implements Disposable {
     const items = (this.latest.get(agent) ?? []).slice(current.itemsAtStart)
     const commands = items.flatMap((item) => (item.kind === 'tool' && (item.toolKind === 'execute' || item.title.startsWith('Run ') || item.title.startsWith('Bash ')) ? [{ command: item.title.replace(/^(Bash|Run|Command Execute)\s+/, '').split('\n')[0].slice(0, 160), failed: item.status === 'failed' }] : []))
     const files = current.before.filter((entry) => !entry.outsideLane).flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
+    delegation.snapshots = current.before.filter((entry) => !entry.outsideLane).map(({ path, tree }) => ({ path, before: tree, after: snapshotTree(path) }))
     const facts: Facts = { files, commands, violations: violation ? violation.files : [], ...this.pendingFacts }
     this.pendingFacts = {}
     if (this.record.verify && agent === this.record.roster.implement && files.length > 0) facts.verify = await this.runVerify(this.record.verify)

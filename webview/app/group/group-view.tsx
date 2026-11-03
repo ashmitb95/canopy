@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -255,6 +255,15 @@ export function GroupView({ state }: { state: ChatState }) {
     return map
   }, [items])
   let previous: string | undefined
+  // Each card sits right after the handoff that started it; any whose handoff is not loaded go at the end.
+  const placed = new Set<string>()
+  const cardFor = (entry: TimelineItem) => {
+    const task = /\nTask: (.*)/.exec(userText(entry))?.[1]
+    const delegation = task === undefined ? undefined : group.delegations.find((candidate) => !placed.has(candidate.id) && candidate.agent === entry.agent && candidate.task === task)
+    if (!delegation) return null
+    placed.add(delegation.id)
+    return <DelegateCard key={delegation.id} group={group} delegation={delegation} items={byAgent.get(delegation.agent) ?? []} />
+  }
   return (
     <AttachmentsContext.Provider value={state.attachmentsUri}>
       <TooltipProvider>
@@ -267,10 +276,13 @@ export function GroupView({ state }: { state: ChatState }) {
                 if (line) {
                   previous = undefined
                   return (
-                    <div key={`${entry.agent}:${entry.item.id}`} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <ProviderAvatar providerId={entry.agent} className="size-5 text-[10px]" />
-                      <span className="truncate">{line}</span>
-                    </div>
+                    <Fragment key={`${entry.agent}:${entry.item.id}`}>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ProviderAvatar providerId={entry.agent} className="size-5 text-[10px]" />
+                        <span className="truncate">{line}</span>
+                      </div>
+                      {cardFor(entry)}
+                    </Fragment>
                   )
                 }
                 if (entry.item.kind === 'turn' || inCard(group, entry)) return null
@@ -290,7 +302,7 @@ export function GroupView({ state }: { state: ChatState }) {
                   </div>
                 )
               })}
-              {group.delegations.map((delegation) => (
+              {group.delegations.filter((delegation) => !placed.has(delegation.id)).map((delegation) => (
                 <DelegateCard key={delegation.id} group={group} delegation={delegation} items={byAgent.get(delegation.agent) ?? []} />
               ))}
               {group.violations.filter((violation) => !violation.undone).map((violation) => (

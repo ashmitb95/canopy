@@ -59,6 +59,14 @@ describe('settling', { timeout: 30_000 }, () => {
     expect(existsSync(join(folder, 'detached.txt'))).toBe(true)
   })
 
+  it('ignores a helper a CLI starts directly mid-turn, outside any shell', async () => {
+    const base = await baseline(folder)
+    const helper = spawn('sleep', ['30'], { cwd: tmpdir(), stdio: 'ignore' })
+    children.push(helper)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect((await activity(folder, base)).work.map((proc) => proc.pid)).not.toContain(helper.pid)
+  })
+
   it('treats a process listening on a port as a service, not as work', async () => {
     const base = await baseline(folder)
     sh(`exec node -e '${server}'`)

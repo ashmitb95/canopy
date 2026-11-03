@@ -64,7 +64,7 @@ export type MemberState = { agent: string; status: SessionStatus; activity: stri
 export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
 export type TimelineItem = { agent: string; item: SessionItem }
 
-export type GroupEvent = { type: 'item'; agent: string; item: SessionItem } | { type: 'state'; state: GroupState } | { type: 'queueChanged'; agent: string }
+export type GroupEvent = { type: 'item'; agent: string; item: SessionItem } | { type: 'state'; state: GroupState }
 
 export type GroupDeps = {
   manager: SessionManager

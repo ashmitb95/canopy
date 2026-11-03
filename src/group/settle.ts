@@ -69,10 +69,25 @@ export async function baseline(folder: string, root = process.pid): Promise<Set<
 // The CLIs' own helpers can start mid-turn, so a baseline alone misses them.
 const OURS = /^(ps|lsof|git)\b|\/(ps|lsof)\b|\/codex-[\w-]+(\s|$)/
 
-/** What is still running for this turn. Shells only waiting on children count through those children. */
+const SHELL = /(^|\/)(sh|bash|zsh|fish|dash)( |$)/
+
+/** Whether a process came from a shell below `root`: an agent's commands do; a CLI's own helpers, such as MCP servers it starts mid-turn, do not. */
+function fromShell(all: Proc[], pid: number, root: number): boolean {
+  const byPid = new Map(all.map((proc) => [proc.pid, proc]))
+  let proc = byPid.get(pid)
+  while (proc && proc.pid !== root) {
+    if (SHELL.test(proc.command)) return true
+    proc = byPid.get(proc.ppid)
+  }
+  return false
+}
+
+/** What is still running for this turn: agents' commands, and anything working in the folder, even detached. */
 export async function activity(folder: string, base: Set<number>, root = process.pid): Promise<Activity> {
   const all = await processes()
-  const candidates = new Set([...descendants(all, root), ...(await workingIn(folder))])
+  const inFolder = await workingIn(folder)
+  const below = descendants(all, root)
+  const candidates = new Set([...[...below].filter((pid) => fromShell(all, pid, root)), ...inFolder])
   const live = all.filter((proc) => candidates.has(proc.pid) && !base.has(proc.pid) && !proc.state.startsWith('Z') && !OURS.test(proc.command))
   const ports = await listeners(live.map((proc) => proc.pid))
   const services = live.flatMap((proc) => (ports.has(proc.pid) ? [{ ...proc, ports: ports.get(proc.pid) ?? [] }] : []))

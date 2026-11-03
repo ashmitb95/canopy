@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const chat = core.chats.create({ lead: 'claude', mode: 'full-access', laneId: 'driver-review', roster: { plan: 'claude', implement: 'codex', review: 'grok' }, verify: 'node_modules/.bin/tsc --noEmit && node_modules/.bin/tsc --noEmit -p webview && node_modules/.bin/vitest run' })
   const started = Date.now()
   chat.onEvent((event) => {
-    if (event.type === 'state') return
+    if (event.type !== 'item') return
     if (event.item.kind === 'tool' && event.item.status !== 'running') console.log(`      ${Math.round((Date.now() - started) / 1000)}s [${event.agent}] ${event.item.title.split('\n')[0].slice(0, 90)}`)
   })
   await chat.send(TASK)

@@ -20,9 +20,9 @@ export const ROLES = ['research', 'plan', 'implement', 'review'] as const
 export type Role = (typeof ROLES)[number]
 export type Roster = Partial<Record<Role, string>>
 
-export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted' | 'stopped'
+export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted' | 'stopped' | 'planned'
 export type Facts = { files: string[]; commands: { command: string; failed: boolean }[]; verify?: { command: string; ok: boolean; output: string }; violations: string[]; stillRunning?: string[]; servicesLeft?: string[] }
-export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; context?: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean; startedAt?: string; resuming?: boolean; added?: string[]; answers?: { question: string; answer: string; by: string }[] }
+export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; context?: string; status: DelegationStatus; series?: string; phase?: number; phases?: number; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean; startedAt?: string; resuming?: boolean; added?: string[]; answers?: { question: string; answer: string; by: string }[] }
 export type UserQuestion = { id: string; from: string; delegation?: string; question: string; itemId?: string }
 export type Violation = { id: string; agent: string; files: string[]; before: { path: string; tree: string }[]; undone?: boolean; allowed?: boolean }
 
@@ -155,6 +155,11 @@ export function groupTools(handle: (caller: string, name: string, args: Record<s
           to: { type: 'string', description: 'A role (research, plan, implement, review) or an agent name.' },
           task: { type: 'string' },
           doneWhen: { type: 'string' },
+          phases: {
+            type: 'array',
+            description: 'For a plan with several phases: one entry per phase, in order. AgentDeck hands them over one at a time and starts the next only when the last reports done and its checks pass.',
+            items: { type: 'object', properties: { task: { type: 'string' }, doneWhen: { type: 'string' } }, required: ['task'] }
+          },
           context: { type: 'string', description: 'Everything the delegate needs for its role, so it can start at once. Implement: your findings and the plan (files, approach, steps, facts you verified). Review: what changed and what to check it against. Research: the questions and what is already known.' }
         },
         required: ['to', 'task', 'context']
@@ -454,11 +459,20 @@ export class GroupChat implements Disposable {
     const context = String(args.context ?? '').trim()
     // A delegate should start on its work, not rediscover what the lead already knows.
     if (context.length < MIN_CONTEXT) return `Not sent: give ${target} what it needs as \`context\`: ${NEEDS[held ?? 'other']}. Research it yourself first, or delegate the research.`
-    const delegation: Delegation = { id: randomUUID(), lead: agent, agent: target, ...(held ? { role: held } : {}), task: String(args.task ?? ''), doneWhen: String(args.doneWhen ?? ''), context, status: 'queued' }
-    this.record.delegations.push(delegation)
+    const base = { lead: agent, agent: target, ...(held ? { role: held } : {}), context }
+    const phases = Array.isArray(args.phases) ? args.phases.filter((phase): phase is { task: string; doneWhen?: string } => typeof phase === 'object' && phase !== null && typeof (phase as { task?: unknown }).task === 'string') : []
+    if (phases.length > 1) {
+      const series = randomUUID()
+      for (const [index, phase] of phases.entries()) {
+        this.record.delegations.push({ id: randomUUID(), ...base, task: phase.task, doneWhen: String(phase.doneWhen ?? ''), status: index === 0 ? 'queued' : 'planned', series, phase: index + 1, phases: phases.length })
+      }
+    } else {
+      this.record.delegations.push({ id: randomUUID(), ...base, task: String(phases[0]?.task ?? args.task ?? ''), doneWhen: String(phases[0]?.doneWhen ?? args.doneWhen ?? ''), status: 'queued' })
+    }
     this.save()
     this.changed()
-    return `Accepted: ${target} will do this.${limit ? ` Warning: ${limit}` : ''} End your turn now; its report starts your next turn.`
+    const how = phases.length > 1 ? ` in ${phases.length} phases, one at a time` : ''
+    return `Accepted: ${target} will do this${how}.${limit ? ` Warning: ${limit}` : ''} End your turn now; its report starts your next turn.`
   }
 
   private quotaWarning(agent: string): string | undefined {
@@ -511,7 +525,7 @@ export class GroupChat implements Disposable {
   private leadMessages(agent: string, text: string): string {
     if (!this.record.members[agent]) return `${agent} has not worked in this chat yet: delegate to it instead.`
     // More instructions reopen the delegate's latest task, so its next reply is tracked and reported like the first.
-    const delegation = [...this.record.delegations].reverse().find((candidate) => candidate.agent === agent)
+    const delegation = [...this.record.delegations].reverse().find((candidate) => candidate.agent === agent && candidate.status !== 'planned')
     const reopen = delegation && !delegation.undone && !['running', 'settling', 'queued'].includes(delegation.status) ? delegation : undefined
     if (reopen) reopen.status = 'queued'
     this.record.queue.push({ id: randomUUID(), target: agent, text, internal: true, ...(reopen ? { delegation: reopen.id } : {}) })
@@ -643,11 +657,11 @@ export class GroupChat implements Disposable {
 
   private leadBrief(agent: string): string {
     const writer = this.record.roster.implement
-    return `You lead a group chat of coding agents run by AgentDeck, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only.` : ''} When work belongs to another agent, call the delegate tool from the agentdeck MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what AgentDeck recorded, and decide what happens next.`
+    return `You lead a group chat of coding agents run by AgentDeck, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. For a plan with several phases, pass them as phases: they are handed over one at a time, which keeps each delegate on track. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only.` : ''} When work belongs to another agent, call the delegate tool from the agentdeck MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what AgentDeck recorded, and decide what happens next.`
   }
 
   private delegationText(delegation: Delegation): string {
-    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by AgentDeck${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.task}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}${delegation.context ? `\n\nContext from ${delegation.lead}:\n${delegation.context}` : ''}\n\n${GUIDE[delegation.role ?? 'other']}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the agentdeck MCP server.`
+    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by AgentDeck${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.phase ? `Phase ${delegation.phase} of ${delegation.phases}: ` : ''}${delegation.task}${delegation.phase ? `\nDo only this phase. The whole plan, for reference: ${this.seriesOf(delegation).map((phase) => `${phase.phase}. ${phase.task}`).join(' ')}` : ''}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}${delegation.context ? `\n\nContext from ${delegation.lead}:\n${delegation.context}` : ''}\n\n${GUIDE[delegation.role ?? 'other']}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the agentdeck MCP server.`
   }
 
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */
@@ -898,13 +912,26 @@ export class GroupChat implements Disposable {
         return
       }
     }
+    // A phase that is done, checked, and clean hands straight on to the next; anything else goes to the lead.
+    const next = this.seriesOf(delegation).find((phase) => phase.phase === (delegation.phase ?? 0) + 1 && phase.status === 'planned')
+    const passed = delegation.status === 'done' && delegation.facts?.verify?.ok !== false && !delegation.facts?.violations.length
+    if (next && passed) {
+      next.status = 'queued'
+      return
+    }
     this.record.queue.unshift({ id: randomUUID(), target: delegation.lead, internal: true, text: this.reportText(delegation), reportOf: delegation.id })
+  }
+
+  /** The phases of the plan a delegation belongs to, in order. */
+  private seriesOf(delegation: Delegation): Delegation[] {
+    return delegation.series ? this.record.delegations.filter((candidate) => candidate.series === delegation.series).sort((a, b) => (a.phase ?? 0) - (b.phase ?? 0)) : []
   }
 
   private reportText(delegation: Delegation): string {
     const facts = delegation.facts
     const lines = [
-      `Report from ${delegation.agent} on: ${delegation.task}`,
+      `Report from ${delegation.agent} on: ${delegation.phase ? `phase ${delegation.phase} of ${delegation.phases}, ` : ''}${delegation.task}`,
+      ...this.seriesNote(delegation),
       delegation.report ?? '(no reply)',
       '',
       'Recorded by AgentDeck, not by the agent:',
@@ -921,6 +948,14 @@ export class GroupChat implements Disposable {
       'Tell the user the real result, and hand out what comes next if the roster calls for it. Do not repeat a claim the record does not support.'
     ]
     return lines.join('\n')
+  }
+
+  private seriesNote(delegation: Delegation): string[] {
+    const series = this.seriesOf(delegation)
+    if (series.length === 0) return []
+    const held = series.filter((phase) => phase.status === 'planned')
+    if (held.length === 0) return series.every((phase) => phase.status === 'done') ? [`All ${series.length} phases reported done; each was checked before the next began.`] : []
+    return [`Phase ${held[0].phase} of ${series.length} is on hold until this one is sorted out. Send ${delegation.agent} back with message_delegate; the next phase starts when this one reports done and its checks pass.`]
   }
 
   private saveHandoff(delegation: Delegation, items: SessionItem[]): string {

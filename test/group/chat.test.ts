@@ -539,6 +539,39 @@ describe('delegation', () => {
     expect(chat.state().delegations[0].status).toBe('running')
   })
 
+  it('hands a plan over one phase at a time, and moves on only when a phase is done and its checks pass', async () => {
+    await chat.send('build')
+    await tick()
+    const phases = [
+      { task: 'Add the cursor', doneWhen: 'built.txt exists' },
+      { task: 'Stream the CSV', doneWhen: 'built.txt exists' }
+    ]
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Fix exports', context: CONTEXT, phases })).toContain('2 phases')
+    await finish(claude[0], 'handing over')
+    expect(texts(codex[0])[0]).toContain('Phase 1 of 2: Add the cursor')
+    expect(chat.state().delegations.map((delegation) => delegation.status)).toEqual(['running', 'planned'])
+    writeFileSync(join(repo, 'built.txt'), 'x\n')
+    await finish(codex[0], 'Cursor added.\nSTATUS: done')
+    await until(() => codex[0].prompts.length === 2)
+    expect(texts(codex[0]).at(-1)).toContain('Phase 2 of 2: Stream the CSV')
+    expect(texts(claude[0])).toHaveLength(1)
+    await finish(codex[0], 'Streaming.\nSTATUS: done')
+    await until(() => texts(claude[0]).length === 2)
+    expect(texts(claude[0]).at(-1)).toContain('All 2 phases reported done')
+  })
+
+  it('stops a plan at a phase that fails, and tells the lead what is left', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Fix exports', context: CONTEXT, phases: [{ task: 'One' }, { task: 'Two' }] })
+    await finish(claude[0], 'handing over')
+    await finish(codex[0], 'STATUS: blocked cannot find export.ts')
+    await until(() => texts(claude[0]).length === 2)
+    expect(texts(claude[0]).at(-1)).toContain('Phase 2 of 2 is on hold')
+    expect(chat.state().delegations[1].status).toBe('planned')
+    expect(codex[0].prompts).toHaveLength(1)
+  })
+
   it('cancels a delegate that has not started', async () => {
     await chat.send('build')
     await tick()

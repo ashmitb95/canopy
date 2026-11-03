@@ -174,6 +174,8 @@ function cardState(group: GroupState, delegation: Delegation, items: TimelineIte
       const activity = delegation.status === 'settling' ? 'Reported done, waiting for its work to finish' : group.members.find((member) => member.agent === delegation.agent)?.activity || 'Working'
       return { text: activity, time: elapsed(delegation.startedAt, now), tone: 'text-info', mark: 'spin', actions: [] }
     }
+    case 'planned':
+      return { text: `Starts when phase ${(delegation.phase ?? 2) - 1} is done and checked`, tone: 'text-muted-foreground', mark: 'wait', actions: [] }
     case 'queued':
       if (delegation.resuming) return { text: 'Resuming after reload · session restored', tone: 'text-info', mark: 'wait', actions: [] }
       return {
@@ -259,7 +261,8 @@ function DelegateCard({ group, delegation, items, selected, onSelect }: { group:
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold">
             {name(delegation.agent)}
-            {delegation.role ? ` · ${ROLE_LABEL[delegation.role]}` : ''}: {delegation.task}
+            {delegation.role ? ` · ${ROLE_LABEL[delegation.role]}` : ''}: {delegation.phase ? `Phase ${delegation.phase} of ${delegation.phases}: ` : ''}
+            {delegation.task}
           </span>
           {/* Screen readers hear the state, not the time ticking. */}
           <span className={`mt-0.5 block truncate text-xs font-medium ${state.tone}`}>

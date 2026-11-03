@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { activity, baseline, stop, waitForSettled } from './settle'
+import { activity, baseline, stop, waitForSettled } from '../../src/group/settle'
 
 let folder: string
 const children: ChildProcess[] = []

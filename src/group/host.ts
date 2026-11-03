@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ProviderDefinition } from '../core/types'
+import type { ProviderDefinition, Quota } from '../core/types'
 import type { Env } from '../env'
 import { LaneCoordinator } from '../lanes/coordinator'
 import { laneContext } from '../lanes/lane-context'
@@ -70,8 +70,10 @@ export async function createCore(options: CoreOptions): Promise<Core> {
     boundary: async (record) => chats?.boundary(record) ?? lanes?.boundary(record),
     toolServer: (record) => (toolUrl ? chats?.toolServer(record, toolUrl) : undefined)
   })
+  const quotas = new Map<string, Quota>()
+  manager.onQuota(({ providerId, quota }) => quotas.set(providerId, quota))
   const memoryDir = (lane: string) => memory.laneDir(lane)
-  chats = new GroupChats({ manager, providers: options.providers, dir: join(options.storage, 'groups'), root: tracker.root, checkouts, memoryDir })
+  chats = new GroupChats({ manager, providers: options.providers, dir: join(options.storage, 'groups'), root: tracker.root, checkouts, memoryDir, quota: (agent) => quotas.get(agent) })
   const server = await startToolServer(groupTools((caller, name, args) => chats?.handleTool(caller, name, args) ?? 'AgentDeck is not ready.'))
   toolUrl = server.url
   lanes = new LaneCoordinator({ tracker, memory, manager, env: async () => (await options.env()) as NodeJS.ProcessEnv })

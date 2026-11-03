@@ -4,12 +4,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Disposable, Emitter } from '../core/emitter'
-import type { PermissionMode, PromptPart, PromptResponse, ProviderDefinition, SessionItem, WriteBoundary } from '../core/types'
+import type { PermissionMode, PromptPart, PromptResponse, ProviderDefinition, SessionItem, Quota, WriteBoundary } from '../core/types'
 import type { SessionEvent, SessionManager } from '../sessions/manager'
 import type { SessionRecord, SessionStatus } from '../sessions/store'
 import { catchUpText, Ledger } from './ledger'
 import { parseMentions } from './mentions'
 import { rollingLines } from './rolling'
+import { activity, baseline, stop as stopProcesses, waitForSettled } from './settle'
 import type { Tool } from './tool-server'
 
 export type Delivery = 'now' | 'end-of-turn' | 'queued'
@@ -19,9 +20,10 @@ export const ROLES = ['research', 'plan', 'implement', 'review'] as const
 export type Role = (typeof ROLES)[number]
 export type Roster = Partial<Record<Role, string>>
 
-export type DelegationStatus = 'queued' | 'running' | 'done' | 'blocked' | 'question' | 'unknown' | 'failed'
-export type Facts = { files: string[]; commands: { command: string; failed: boolean }[]; verify?: { command: string; ok: boolean; output: string }; violations: string[] }
-export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; before?: string[] }
+export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted'
+export type Facts = { files: string[]; commands: { command: string; failed: boolean }[]; verify?: { command: string; ok: boolean; output: string }; violations: string[]; stillRunning?: string[]; servicesLeft?: string[] }
+export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; before?: string[]; rounds?: number; verified?: boolean }
+export type UserQuestion = { id: string; from: string; delegation?: string; question: string; itemId?: string }
 export type Violation = { id: string; agent: string; files: string[]; before: { path: string; tree: string }[]; undone?: boolean }
 
 /** Saved per chat: everything else comes from each agent's own session and the ledger. */
@@ -46,6 +48,10 @@ export type GroupRecord = {
   verify?: string
   delegations: Delegation[]
   violations: Violation[]
+  /** Where delegate questions go first. Permissions always go to the user. */
+  questionsTo: 'lead' | 'user'
+  /** Questions waiting for the user. */
+  userQuestions: UserQuestion[]
   /** Which lead was last told how this chat works. */
   briefed?: string
   /** The lead has been reminded once this turn to really delegate. */
@@ -55,7 +61,7 @@ export type GroupRecord = {
 }
 
 export type MemberState = { agent: string; status: SessionStatus; activity: string }
-export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[] }
+export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
 export type TimelineItem = { agent: string; item: SessionItem }
 
 export type GroupEvent = { type: 'item'; agent: string; item: SessionItem } | { type: 'state'; state: GroupState } | { type: 'queueChanged'; agent: string }
@@ -69,6 +75,11 @@ export type GroupDeps = {
   /** Where a lane's code is: its checkouts, or the primary checkouts for a chat on no lane. */
   checkouts?: (lane: string | undefined) => string[]
   memoryDir?: (lane: string) => string
+  /** How long AgentDeck waits for background work before telling the lead. */
+  settleLimitMs?: number
+  /** Off only in tests that have no real processes to watch. */
+  watchProcesses?: boolean
+  quota?: (agent: string) => Quota | undefined
 }
 
 /** Everything in a folder, untracked files included, without touching the working tree, the index, or the stash list. */
@@ -99,6 +110,9 @@ function restoreTree(path: string, tree: string): void {
   }
 }
 
+const MAX_QUESTION_ROUNDS = 5
+const DEFAULT_SETTLE_MS = 120_000
+
 const NARRATE = 'Before each step, say in one short line what you are doing or what you just found.'
 const SAID_DELEGATE = /\b(hand(ing)?( it| this| that)? (off|over)|delegat(e|ing)|pass(ing)? (it|this) to)\b/i
 
@@ -116,6 +130,30 @@ export function groupTools(handle: (caller: string, name: string, args: Record<s
       description: 'Commits everything changed in this lane, including new files. Use this when your sandbox cannot run git commit. Only the agent allowed to write can use it.',
       inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
       call: (args, caller) => handle(caller, 'commit_work', args)
+    },
+    {
+      name: 'answer_delegate',
+      description: 'Answers a question from a delegate, when this conversation already settles it. Cite where. Never guess at a product decision.',
+      inputSchema: { type: 'object', properties: { agent: { type: 'string' }, answer: { type: 'string' } }, required: ['agent', 'answer'] },
+      call: (args, caller) => handle(caller, 'answer_delegate', args)
+    },
+    {
+      name: 'ask_user',
+      description: 'Sends a delegate question to the user, when this conversation does not settle it.',
+      inputSchema: { type: 'object', properties: { agent: { type: 'string' }, question: { type: 'string' } }, required: ['question'] },
+      call: (args, caller) => handle(caller, 'ask_user', args)
+    },
+    {
+      name: 'message_delegate',
+      description: 'Sends more instructions to a delegate, in the same session it has been working in.',
+      inputSchema: { type: 'object', properties: { agent: { type: 'string' }, text: { type: 'string' } }, required: ['agent', 'text'] },
+      call: (args, caller) => handle(caller, 'message_delegate', args)
+    },
+    {
+      name: 'stop_work',
+      description: 'Stops background work and servers a delegate left running in this chat. A shell and its children stop together.',
+      inputSchema: { type: 'object', properties: { pid: { type: 'number', description: 'Only this process and what the record shows as work; omit for everything left running.' } } },
+      call: (args, caller) => handle(caller, 'stop_work', args)
     }
   ]
 }
@@ -136,7 +174,10 @@ export class GroupChat implements Disposable {
   private readonly seenItems = new Set<string>()
   private readonly timeline: { agent: string; id: string }[] = []
   private readonly latest = new Map<string, SessionItem[]>()
-  private current: { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string }[] } | undefined
+  private current: { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string }[]; processes: Set<number> } | undefined
+  private limited: string | undefined
+  private starting = false
+  private pendingFacts: Pick<Facts, 'stillRunning' | 'servicesLeft'> = {}
 
   constructor(
     private readonly deps: GroupDeps,
@@ -152,6 +193,10 @@ export class GroupChat implements Disposable {
       }
     }
     for (const agent of Object.keys(record.members)) this.watch(agent)
+  }
+
+  private get watchesProcesses(): boolean {
+    return this.deps.watchProcesses !== false
   }
 
   get agents(): string[] {
@@ -172,7 +217,13 @@ export class GroupChat implements Disposable {
       ...(record.laneId ? { laneId: record.laneId } : {}),
       roster: record.roster,
       delegations: record.delegations,
-      violations: record.violations
+      violations: record.violations,
+      userQuestions: record.userQuestions,
+      ...(this.limited ? { limited: this.limited } : {}),
+      quotas: Object.fromEntries(Object.keys(record.members).flatMap((agent) => {
+        const quota = this.deps.quota?.(agent)
+        return quota ? [[agent, quota]] : []
+      }))
     }
   }
 
@@ -294,6 +345,15 @@ export class GroupChat implements Disposable {
   /** Called through the tool server by an agent in this chat. */
   handleTool(agent: string, name: string, args: Record<string, unknown>): string {
     if (name === 'commit_work') return this.commitWork(agent, String(args.message ?? ''))
+    if (agent === this.record.lead) {
+      if (name === 'answer_delegate') return this.leadAnswers(String(args.agent ?? ''), String(args.answer ?? ''))
+      if (name === 'ask_user') return this.askUser(String(args.agent ?? ''), String(args.question ?? ''))
+      if (name === 'message_delegate') return this.leadMessages(String(args.agent ?? ''), String(args.text ?? ''))
+      if (name === 'stop_work') {
+        void this.stopWork()
+        return 'Stopping what was left running. End your turn now.'
+      }
+    } else if (['answer_delegate', 'ask_user', 'message_delegate', 'stop_work'].includes(name)) return `Only the lead (${this.record.lead}) can do this.`
     if (name !== 'delegate') return `Unknown tool ${name}.`
     if (agent !== this.record.lead) return `Only the lead (${this.record.lead}) can delegate.`
     const to = String(args.to ?? '').toLowerCase()
@@ -301,12 +361,99 @@ export class GroupChat implements Disposable {
     const target = role ? this.record.roster[role] : this.agents.find((candidate) => candidate === to)
     if (!target) return `Nobody holds "${to}". Roster: ${this.rosterText()}.`
     if (target === agent) return `That is you: do this work yourself, without delegating.`
+    const limit = this.quotaWarning(target)
     const held = role ?? ROLES.find((candidate) => this.record.roster[candidate] === target)
     const delegation: Delegation = { id: randomUUID(), lead: agent, agent: target, ...(held ? { role: held } : {}), task: String(args.task ?? ''), doneWhen: String(args.doneWhen ?? ''), status: 'queued' }
     this.record.delegations.push(delegation)
     this.save()
     this.changed()
-    return `Accepted: ${target} will do this. End your turn now; its report starts your next turn.`
+    return `Accepted: ${target} will do this.${limit ? ` Warning: ${limit}` : ''} End your turn now; its report starts your next turn.`
+  }
+
+  private quotaWarning(agent: string): string | undefined {
+    const limited = this.deps.quota?.(agent)?.windows.find((window) => window.status !== 'ok')
+    return limited ? `${agent} is ${limited.status === 'limited' ? 'at its limit' : 'close to its limit'} (${limited.label}: ${limited.usedPercent}% used).` : undefined
+  }
+
+  private leadAnswers(agent: string, answer: string): string {
+    const delegation = this.waitingOn(agent)
+    if (!delegation) return `${agent} is not waiting on a question.`
+    this.ledger.append({ from: this.record.lead, to: agent, text: `Answer: ${answer}` })
+    this.resumeDelegate(delegation, `The lead answered your question: ${answer}\nCarry on. End with a STATUS line as before.`)
+    return 'Sent. End your turn now.'
+  }
+
+  private askUser(agent: string, question: string): string {
+    const delegation = this.waitingOn(agent)
+    this.record.userQuestions.push({ id: randomUUID(), from: agent || this.record.lead, question, ...(delegation ? { delegation: delegation.id } : {}) })
+    this.save()
+    this.changed()
+    return 'Sent to the user. End your turn now; their answer reaches the agent that asked.'
+  }
+
+  /** The user answers a question that came to them, and the agent that asked carries on. */
+  answerQuestion(id: string, answer: string): void {
+    const question = this.record.userQuestions.find((candidate) => candidate.id === id)
+    if (!question) return
+    this.record.userQuestions = this.record.userQuestions.filter((candidate) => candidate.id !== id)
+    this.ledger.append({ from: 'user', to: question.from, text: `Answer to "${question.question}": ${answer}` })
+    if (question.itemId) {
+      const item = this.deps.manager.item(this.record.members[question.from], question.itemId)
+      if (item?.kind === 'question') this.answer(question.from, question.itemId, { kind: 'answers', answers: item.questions.map((asked) => ({ questionId: asked.id, optionIds: [], other: answer })) })
+    } else {
+      const delegation = this.record.delegations.find((candidate) => candidate.id === question.delegation)
+      if (delegation) this.resumeDelegate(delegation, `The user answered your question: ${answer}\nCarry on. End with a STATUS line as before.`)
+      else this.record.queue.unshift({ id: randomUUID(), target: question.from, text: answer })
+    }
+    this.save()
+    this.changed()
+    void this.pump()
+  }
+
+  private leadMessages(agent: string, text: string): string {
+    if (!this.record.members[agent]) return `${agent} has not worked in this chat yet: delegate to it instead.`
+    this.record.queue.push({ id: randomUUID(), target: agent, text, internal: true })
+    this.save()
+    this.changed()
+    return `Sent to ${agent}. End your turn now.`
+  }
+
+  /** Stops what a delegate left running. Stops every process seen as this turn's work, never just one. */
+  private async stopWork(): Promise<void> {
+    const left = this.record.delegations.flatMap((delegation) => [...(delegation.facts?.stillRunning ?? []), ...(delegation.facts?.servicesLeft ?? [])])
+    stopProcesses(left.flatMap((entry) => {
+      const pid = Number(entry.split(' ')[0])
+      return Number.isFinite(pid) ? [pid] : []
+    }))
+    for (const delegation of this.record.delegations) {
+      if (delegation.facts) {
+        delete delegation.facts.stillRunning
+        delete delegation.facts.servicesLeft
+      }
+    }
+    this.ledger.append({ from: 'agentdeck', text: 'Stopped what delegates left running.' })
+    this.save()
+    this.changed()
+  }
+
+  private waitingOn(agent: string): Delegation | undefined {
+    return [...this.record.delegations].reverse().find((delegation) => delegation.agent === agent && (delegation.status === 'question' || delegation.status === 'blocked'))
+  }
+
+  private resumeDelegate(delegation: Delegation, text: string): void {
+    delegation.status = 'queued'
+    this.record.queue.unshift({ id: randomUUID(), target: delegation.agent, text, delegation: delegation.id, internal: true })
+    this.save()
+    this.changed()
+    void this.pump()
+  }
+
+  /** After a restart nothing is running: an interrupted delegate resumes its session and is told to ask again. */
+  resumeAfterRestart(): void {
+    for (const delegation of this.record.delegations) {
+      if (delegation.status !== 'running' && delegation.status !== 'settling') continue
+      this.resumeDelegate(delegation, 'AgentDeck restarted while you were working. Check what got done, then finish. If you were waiting for an approval or an answer, ask again. End with a STATUS line.')
+    }
   }
 
   /** Commits for an agent whose sandbox protects Git's own files. Never amends, resets, or pushes. */
@@ -372,15 +519,30 @@ export class GroupChat implements Disposable {
   }
 
   private async pump(): Promise<void> {
-    if (this.current || this.record.blocked) return
+    if (this.current || this.starting || this.record.blocked) return
     const next = this.record.queue[0]
     if (!next) return
     this.record.queue.shift()
+    this.starting = true
+    try {
+      await this.start(next)
+    } finally {
+      this.starting = false
+    }
+  }
+
+  private async start(next: QueuedMessage): Promise<void> {
     const sessionId = await this.member(next.target)
     const delegation = next.delegation ? this.record.delegations.find((candidate) => candidate.id === next.delegation) : undefined
+    let processes = new Set<number>()
+    if (this.watchesProcesses) {
+      // The CLI and its helpers are running first, so they do not count as this turn's work.
+      await this.deps.manager.warm(sessionId).catch(() => undefined)
+      processes = await baseline(this.deps.root ?? process.cwd()).catch(() => processes)
+    }
     const entry = this.ledger.append(next.internal ? { from: 'agentdeck', to: next.target, text: next.text } : delegation ? { from: delegation.lead, to: next.target, text: `${delegation.task}` } : { from: 'user', to: next.target, text: next.text })
     if (delegation) delegation.status = 'running'
-    this.current = { agent: next.target, entry: entry.seq, started: false, ...(delegation ? { delegation: delegation.id } : {}), itemsAtStart: this.latest.get(next.target)?.length ?? 0, before: this.snapshot() }
+    this.current = { agent: next.target, entry: entry.seq, started: false, ...(delegation ? { delegation: delegation.id } : {}), itemsAtStart: this.latest.get(next.target)?.length ?? 0, before: this.snapshot(), processes }
     await this.applyRole(next.target, sessionId)
     this.save()
     this.changed()
@@ -423,6 +585,13 @@ export class GroupChat implements Disposable {
     if (index >= 0) items[index] = item
     else items.push(item)
     this.latest.set(agent, items)
+    if (item.kind === 'notice' && item.level === 'error' && /rate.?limit|usage limit|quota/i.test(item.text)) {
+      this.limited = `${agent} hit a limit: ${item.text}. Retry later, give the work to another agent, or sign in again if your plan changed.`
+      this.record.blocked = this.limited
+      this.save()
+      this.changed()
+    }
+    if (item.kind === 'question' && !item.resolved) this.routeQuestion(agent, item)
     const key = `${agent}:${item.id}`
     if (!this.seenItems.has(key)) {
       this.seenItems.add(key)
@@ -432,6 +601,14 @@ export class GroupChat implements Disposable {
       writeFileSync(join(dir, 'timeline.jsonl'), `${JSON.stringify({ agent, id: item.id })}\n`, { flag: 'a' })
     }
     this.events.fire({ type: 'item', agent, item })
+  }
+
+  /** A provider's own question tool leaves the agent paused. The lead may answer from the chat; otherwise it comes to the user. */
+  private routeQuestion(agent: string, item: Extract<SessionItem, { kind: 'question' }>): void {
+    if (this.record.userQuestions.some((question) => question.itemId === item.id)) return
+    this.record.userQuestions.push({ id: randomUUID(), from: agent, itemId: item.id, question: item.questions.map((question) => question.question).join(' ') })
+    this.save()
+    this.changed()
   }
 
   private onStatus(agent: string, status: SessionStatus): void {
@@ -451,7 +628,17 @@ export class GroupChat implements Disposable {
     const violation = this.checkViolation(agent, current.before)
     if (status === 'error') this.record.blocked = `${agent} stopped with an error.`
     const delegation = current.delegation ? this.record.delegations.find((candidate) => candidate.id === current.delegation) : undefined
-    if (delegation) await this.finishDelegation(delegation, agent, status, reply ?? '', current, violation)
+    if (delegation) {
+      const carryOn = await this.settle(delegation, status, current)
+      if (carryOn) {
+        this.current = undefined
+        this.save()
+        this.changed()
+        void this.pump()
+        return
+      }
+      await this.finishDelegation(delegation, agent, status, reply ?? '', current, violation)
+    }
     this.current = undefined
     if (!delegation) this.afterLeadTurn(agent, reply ?? '')
     // New work the lead asked for goes first, in the order it was asked.
@@ -463,6 +650,35 @@ export class GroupChat implements Disposable {
     this.save()
     this.changed()
     void this.pump()
+  }
+
+  /**
+   * "Done" is a claim. Waits for work the turn left running. If some ran on after the agent stopped, the same agent
+   * gets one more turn to check the results and correct its report. Returns true when that turn is queued.
+   */
+  private async settle(delegation: Delegation, status: SessionStatus, current: NonNullable<GroupChat['current']>): Promise<boolean> {
+    if (status === 'error' || !this.watchesProcesses || !this.deps.root) return false
+    const root = this.deps.root
+    const first = await activity(root, current.processes)
+    delegation.status = 'settling'
+    this.changed()
+    const outcome = await waitForSettled(root, current.processes, this.deps.settleLimitMs ?? DEFAULT_SETTLE_MS)
+    const describe = (proc: { pid: number; command: string }) => `${proc.pid} ${proc.command.slice(0, 80)}`
+    const services = outcome.activity.services.map((proc) => `${proc.pid} ${proc.command.slice(0, 80)} (port ${proc.ports.join(',')})`)
+    current.processes = new Set([...current.processes])
+    if (!outcome.settled) {
+      delegation.status = 'overdue'
+      this.pendingFacts = { stillRunning: outcome.activity.work.map(describe), servicesLeft: services }
+      return false
+    }
+    this.pendingFacts = services.length > 0 ? { servicesLeft: services } : {}
+    if (first.work.length > 0 && !delegation.verified) {
+      delegation.verified = true
+      delegation.status = 'running'
+      this.record.queue.unshift({ id: randomUUID(), target: delegation.agent, delegation: delegation.id, internal: true, text: 'The background work you started has now really finished. Check its results, not just that it ran, and correct your report. End with a STATUS line: done only if it succeeded.' })
+      return true
+    }
+    return false
   }
 
   /** A lead that says it will delegate but has not called the tool gets one reminder. */
@@ -477,14 +693,23 @@ export class GroupChat implements Disposable {
     const items = (this.latest.get(agent) ?? []).slice(current.itemsAtStart)
     const commands = items.flatMap((item) => (item.kind === 'tool' && (item.toolKind === 'execute' || item.title.startsWith('Run ') || item.title.startsWith('Bash ')) ? [{ command: item.title.replace(/^(Bash|Run|Command Execute)\s+/, '').split('\n')[0].slice(0, 160), failed: item.status === 'failed' }] : []))
     const files = current.before.flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
-    const facts: Facts = { files, commands, violations: violation ? violation.files : [] }
+    const facts: Facts = { files, commands, violations: violation ? violation.files : [], ...this.pendingFacts }
+    this.pendingFacts = {}
     if (this.record.verify && agent === this.record.roster.implement && files.length > 0) facts.verify = await this.runVerify(this.record.verify)
     delegation.facts = facts
     delegation.report = reply
     const stated = /STATUS:\s*(done|blocked|question)/i.exec(reply)?.[1]?.toLowerCase() as DelegationStatus | undefined
-    delegation.status = status === 'error' ? 'failed' : (stated ?? 'unknown')
+    if (delegation.status !== 'overdue') delegation.status = status === 'error' ? 'failed' : (stated ?? 'unknown')
     delegation.handoff = this.saveHandoff(delegation, items)
     if (status === 'error') return
+    const asked = delegation.status === 'question' ? /STATUS:\s*question\W*(.*)/i.exec(reply)?.[1]?.trim() : undefined
+    if (delegation.status === 'question') {
+      delegation.rounds = (delegation.rounds ?? 0) + 1
+      if (this.record.questionsTo === 'user' || delegation.rounds > MAX_QUESTION_ROUNDS) {
+        this.record.userQuestions.push({ id: randomUUID(), from: agent, delegation: delegation.id, question: asked || reply })
+        return
+      }
+    }
     this.record.queue.unshift({ id: randomUUID(), target: delegation.lead, internal: true, text: this.reportText(delegation) })
   }
 
@@ -499,6 +724,9 @@ export class GroupChat implements Disposable {
       `Commands run: ${facts?.commands.map((command) => `${command.command}${command.failed ? ' (failed)' : ''}`).join('; ') || 'none'}`,
       ...(facts?.verify ? [`AgentDeck ran ${facts.verify.command}: ${facts.verify.ok ? 'passed' : `FAILED\n${facts.verify.output}`}`] : []),
       ...(facts?.violations.length ? [`Writes its role does not allow: ${facts.violations.join('; ')}`] : []),
+      ...(facts?.stillRunning?.length ? [`Still running after AgentDeck stopped waiting: ${facts.stillRunning.join('; ')}. Decide whether to keep waiting or call stop_work.`] : []),
+      ...(facts?.servicesLeft?.length ? [`Servers left running: ${facts.servicesLeft.join('; ')}. Stop them with stop_work when nothing needs them.`] : []),
+      ...(delegation.status === 'question' ? [`${delegation.agent} is asking the question above and waiting. If this conversation already settles it, call answer_delegate and cite where. If not, or if it is a product decision, call ask_user. Never guess.`] : []),
       ...(delegation.status === 'unknown' ? ['It did not give a status line, so treat it as not finished until checked.'] : []),
       ...(delegation.handoff ? [`Full record: ${delegation.handoff}`] : []),
       '',
@@ -578,8 +806,10 @@ export class GroupChats implements Disposable {
     for (const id of readdirSync(deps.dir)) {
       const path = join(deps.dir, id, 'record.json')
       if (!existsSync(path)) continue
-      const record = JSON.parse(readFileSync(path, 'utf8')) as GroupRecord
-      this.chats.set(id, new GroupChat(deps, record))
+      const record = { questionsTo: 'lead', userQuestions: [], ...JSON.parse(readFileSync(path, 'utf8')) } as GroupRecord
+      const chat = new GroupChat(deps, record)
+      this.chats.set(id, chat)
+      chat.resumeAfterRestart()
     }
   }
 
@@ -616,7 +846,7 @@ export class GroupChats implements Disposable {
     return undefined
   }
 
-  create(options: { lead: string; title?: string; mode?: PermissionMode; laneId?: string; roster?: Roster; enforce?: boolean; verify?: string }): GroupChat {
+  create(options: { lead: string; title?: string; mode?: PermissionMode; laneId?: string; roster?: Roster; enforce?: boolean; verify?: string; questionsTo?: 'lead' | 'user' }): GroupChat {
     const record: GroupRecord = {
       id: randomUUID(),
       title: options.title ?? 'New chat',
@@ -631,6 +861,8 @@ export class GroupChats implements Disposable {
       enforce: options.enforce ?? true,
       delegations: [],
       violations: [],
+      questionsTo: options.questionsTo ?? 'lead',
+      userQuestions: [],
       ...(options.verify ? { verify: options.verify } : {}),
       ...(options.laneId ? { laneId: options.laneId } : {})
     }

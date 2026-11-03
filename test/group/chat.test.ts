@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,11 +21,18 @@ let grok: FakeSession[]
 let dir: string
 let memento: MemoryMemento
 
-function rebuild(root: string): void {
-  build(root)
+function rebuild(root: string, settleLimitMs?: number): void {
+  build(root, settleLimitMs, settleLimitMs !== undefined)
 }
 
-function build(root?: string): void {
+async function until(test: () => boolean, ms = 12_000): Promise<void> {
+  const started = Date.now()
+  while (!test() && Date.now() - started < ms) await new Promise((resolve) => setTimeout(resolve, 50))
+}
+
+const settled = (ms = 1_500) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function build(root?: string, settleLimitMs?: number, watchProcesses = false): void {
   const providers = [fakeProvider('claude', ['steer']), fakeProvider('codex', ['steer']), fakeProvider('grok')]
   ;[claude, codex, grok] = providers.map((provider) => provider.sessions)
   const map = new Map(providers.map(({ provider }) => [provider.id, provider]))
@@ -39,7 +46,7 @@ function build(root?: string): void {
     decorate: (record, parts) => group?.decorate(record, parts) ?? Promise.resolve(parts),
     boundary: async (record) => group?.boundary(record)
   })
-  group = new GroupChats({ manager, providers: map, dir: join(dir, 'groups'), ...(root ? { root, checkouts: () => [root] } : {}) })
+  group = new GroupChats({ manager, providers: map, dir: join(dir, 'groups'), ...(root ? { root, checkouts: () => [root], ...(settleLimitMs ? { settleLimitMs } : {}) } : {}), watchProcesses })
   chats = group
 }
 
@@ -255,7 +262,7 @@ describe('delegation', () => {
     writeFileSync(join(repo, 'a.txt'), 'a\n')
     git('add', '.')
     git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'i')
-    rebuild(repo)
+    build(repo)
     chat = lead()
   })
 
@@ -368,6 +375,140 @@ describe('delegation', () => {
     expect(git('status', '--porcelain')).toBe('')
     expect(chat.handleTool('codex', 'commit_work', { message: 'again' })).toBe('Nothing to commit.')
   })
+
+  it('sends a question to the lead, and its answer back to the same delegate', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    await finish(codex[0], 'STATUS: question what format?')
+    await settled()
+    expect(texts(claude[0]).at(-1)).toContain('call answer_delegate')
+    expect(chat.handleTool('claude', 'answer_delegate', { agent: 'codex', answer: 'CSV, from the first message' })).toContain('Sent')
+    await finish(claude[0], 'answered')
+    await settled()
+    expect(texts(codex[0]).at(-1)).toContain('CSV, from the first message')
+    expect(codex).toHaveLength(1)
+  })
+
+  it('brings a question the lead cannot settle to the user, then back to the agent', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    await finish(codex[0], 'STATUS: question block or warn?')
+    await settled()
+    chat.handleTool('claude', 'ask_user', { agent: 'codex', question: 'Block or warn?' })
+    await finish(claude[0], 'asked')
+    await settled()
+    const [question] = chat.state().userQuestions
+    expect(question).toMatchObject({ from: 'codex', question: 'Block or warn?' })
+    chat.answerQuestion(question.id, 'warn')
+    await settled()
+    expect(texts(codex[0]).at(-1)).toContain('warn')
+    expect(chat.state().userQuestions).toEqual([])
+  })
+
+  it('sends questions straight to the user when set to', async () => {
+    const direct = chats.create({ lead: 'claude', roster: { implement: 'codex' }, questionsTo: 'user' })
+    await direct.send('build')
+    await tick()
+    direct.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude.at(-1), 'ok')
+    await finish(codex.at(-1), 'STATUS: question which?')
+    await settled()
+    expect(direct.state().userQuestions[0].question).toBe('which?')
+  })
+
+  it('stops looping and asks the user after too many rounds', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    for (let round = 0; round < 6; round += 1) {
+      await finish(codex[0], `STATUS: question round ${round}`)
+      await settled(100)
+      if (chat.state().userQuestions.length > 0) break
+      chat.handleTool('claude', 'answer_delegate', { agent: 'codex', answer: 'keep going' })
+      await finish(claude[0], 'answered')
+      await settled(100)
+    }
+    expect(chat.state().userQuestions).toHaveLength(1)
+  }, 20_000)
+
+  it('lets only the lead use its tools', () => {
+    expect(chat.handleTool('codex', 'stop_work', {})).toContain('Only the lead')
+    expect(chat.handleTool('codex', 'ask_user', { question: 'x' })).toContain('Only the lead')
+    expect(chat.handleTool('claude', 'answer_delegate', { agent: 'grok', answer: 'x' })).toContain('not waiting')
+  })
+
+  it('warns the lead about a provider near its limit, and shows a limit as a clear stop', async () => {
+    await chat.send('build')
+    await tick()
+    claude[0].emit({ kind: 'notice', id: 'n', level: 'error', text: 'session/prompt: Rate limited' })
+    await tick()
+    expect(chat.state().limited).toContain('sign in again')
+    expect(chat.state().blocked).toContain('Rate limited')
+  })
+
+  it('resumes an interrupted delegate after a restart and tells it to ask again', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    expect(chat.state().delegations[0].status).toBe('running')
+    const { id } = chat.record
+    chats.dispose()
+    build(repo)
+    await settled()
+    expect(chats.get(id)?.state().running).toBe('codex')
+    expect(texts(codex[0])[0]).toContain('AgentDeck restarted')
+    expect(codex[0].options.resumeId).toBeDefined()
+  })
+
+  it('holds a report until background work really ends, then gives one verification turn', async () => {
+    rebuild(repo, 15_000)
+    chat = lead()
+    await chat.send('build')
+    await until(() => (claude[0]?.prompts.length ?? 0) > 0)
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude[0], 'ok')
+    await until(() => (codex[0]?.prompts.length ?? 0) > 0)
+    const child = spawn('sh', ['-c', 'sleep 3; echo failed > log.txt'], { cwd: repo, stdio: 'ignore' })
+    await finish(codex[0], 'All done.\nSTATUS: done')
+    await until(() => chat.state().delegations[0].status === 'settling', 2_000)
+    expect(chat.state().delegations[0].status).toBe('settling')
+    expect(existsSync(join(repo, 'log.txt'))).toBe(false)
+    expect(claude[0].prompts).toHaveLength(1)
+    await new Promise((resolve) => child.once('exit', resolve))
+    await until(() => codex[0].prompts.length > 1)
+    expect(existsSync(join(repo, 'log.txt'))).toBe(true)
+    expect(texts(codex[0]).at(-1)).toContain('has now really finished')
+    await finish(codex[0], 'It failed.\nSTATUS: blocked')
+    await until(() => texts(claude[0]).at(-1)?.includes('It failed.') ?? false)
+    expect(texts(claude[0]).at(-1)).toContain('It failed.')
+    expect(chat.state().delegations[0].status).toBe('blocked')
+  }, 20_000)
+
+  it('tells the lead when work outlasts the limit, and stops it on request', async () => {
+    rebuild(repo, 1_000)
+    chat = lead()
+    await chat.send('build')
+    await until(() => (claude.at(-1)?.prompts.length ?? 0) > 0)
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    await finish(claude.at(-1), 'ok')
+    await until(() => (codex.at(-1)?.prompts.length ?? 0) > 0)
+    const child = spawn('sh', ['-c', 'exec sleep 60'], { cwd: repo, stdio: 'ignore' })
+    await finish(codex.at(-1), 'STATUS: done')
+    await until(() => chat.state().delegations[0].status === 'overdue')
+    await until(() => texts(claude.at(-1)).at(-1)?.includes('Still running') ?? false)
+    expect(chat.state().delegations[0].status).toBe('overdue')
+    expect(texts(claude.at(-1)).at(-1)).toContain('Still running')
+    const exited = new Promise((resolve) => child.once('exit', resolve))
+    chat.handleTool('claude', 'stop_work', {})
+    await exited
+    expect(chat.state().delegations[0].facts?.stillRunning).toBeUndefined()
+  }, 20_000)
 
   it('lets a mention reach a delegate while it works', async () => {
     await chat.send('build')

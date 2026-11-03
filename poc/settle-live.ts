@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { captureEnv, type Env } from '../src/env'
 import { Group, tempRepo } from './group'
-import { activity, baseline, type Outcome, stop, waitForSettled } from './settle'
+import { activity, baseline, type Outcome, stop, waitForSettled } from '../src/group/settle'
 
 const line = (name: string, ok: boolean | string, detail = '') => console.log(`${ok === true ? 'PASS' : ok === false ? 'FAIL' : String(ok)}  ${name}${detail ? `  ${detail.replace(/\s+/g, ' ').slice(0, 230)}` : ''}`)
 const describeWork = (outcome: Outcome) => [...outcome.activity.work.map((proc) => proc.command), ...outcome.activity.services.map((proc) => `${proc.command} (port ${proc.ports.join(',')})`)].map((text) => text.slice(0, 70)).join('; ')

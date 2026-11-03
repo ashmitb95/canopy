@@ -1,4 +1,4 @@
-// Proof of concept: whether work has really stopped, whatever a delegate reports.
+// Whether work has really stopped, whatever an agent reports.
 import { execFile } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { sep } from 'node:path'

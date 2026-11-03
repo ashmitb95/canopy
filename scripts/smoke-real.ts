@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   await core.lanes.newLane('driver-review', [core.tracker.repos[0].name], { worktrees: true, goal: 'Review and undo from the driver' })
   const slot = join(root, '.worktrees', 'wt-1')
   symlinkSync(join(source, 'node_modules'), join(slot, 'node_modules'))
-  const chat = core.chats.create({ lead: 'claude', mode: 'full-access', laneId: 'driver-review', roster: { plan: 'claude', implement: 'codex', review: 'grok' }, verify: 'pnpm -s typecheck && pnpm -s test' })
+  const chat = core.chats.create({ lead: 'claude', mode: 'full-access', laneId: 'driver-review', roster: { plan: 'claude', implement: 'codex', review: 'grok' }, verify: 'node_modules/.bin/tsc --noEmit && node_modules/.bin/tsc --noEmit -p webview && node_modules/.bin/vitest run' })
   const started = Date.now()
   chat.onEvent((event) => {
     if (event.type === 'state') return
@@ -44,8 +44,9 @@ async function main(): Promise<void> {
   console.log(`blocked: ${state.blocked ?? 'no'}; violations: ${state.violations.length}; user questions: ${state.userQuestions.length}`)
   let checks = 'not run'
   try {
-    execFileSync('pnpm', ['-s', 'typecheck'], { cwd: slot, stdio: 'ignore' })
-    execFileSync('pnpm', ['-s', 'test'], { cwd: slot, stdio: 'ignore' })
+    // Run directly: pnpm refuses a linked node_modules, which this clone uses to avoid a full install.
+    execFileSync('node_modules/.bin/tsc', ['--noEmit'], { cwd: slot, stdio: 'ignore' })
+    execFileSync('node_modules/.bin/vitest', ['run'], { cwd: slot, stdio: 'ignore' })
     checks = 'pass'
   } catch {
     checks = 'FAIL'
@@ -53,7 +54,15 @@ async function main(): Promise<void> {
   const diff = execFileSync('git', ['diff', '--stat', 'HEAD'], { cwd: slot, encoding: 'utf8' }) + execFileSync('git', ['log', '--oneline', 'core..HEAD'], { cwd: slot, encoding: 'utf8' })
   console.log(`typecheck and tests in the lane, run here: ${checks}`)
   console.log(`changes:\n${diff.trim()}`)
-  console.log(`has /review: ${execFileSync('git', ['grep', '-c', "'/review'", 'HEAD', '--', 'scripts/driver.ts'], { cwd: slot, encoding: 'utf8' }).trim() !== '' ? 'committed' : 'not committed'}; in the working tree: ${execFileSync('grep', ['-c', '/undo-delegate', 'scripts/driver.ts'], { cwd: slot, encoding: 'utf8' }).trim()} mentions`)
+  const grep = (args: string[]) => {
+    try {
+      return execFileSync(args[0], args.slice(1), { cwd: slot, encoding: 'utf8' }).trim()
+    } catch {
+      return ''
+    }
+  }
+  console.log(`commands: /review ${grep(['grep', '-c', '/review', 'scripts/driver.ts']) || 0}, /undo-delegate ${grep(['grep', '-c', '/undo-delegate', 'scripts/driver.ts']) || 0} mentions; committed on the lane: ${grep(['git', 'log', '--oneline', 'core..HEAD']).split('\n').filter(Boolean).length}`)
+  for (const delegation of state.delegations) if (delegation.facts?.stillRunning || delegation.facts?.servicesLeft) console.log(`left running by ${delegation.agent}: ${[...(delegation.facts.stillRunning ?? []), ...(delegation.facts.servicesLeft ?? [])].join(' | ').slice(0, 300)}`)
   console.log(`lead's last word: ${chat.ledger.all().at(-1)?.text.replace(/\s+/g, ' ').slice(0, 400)}`)
   console.log(`minutes: ${((Date.now() - started) / 60000).toFixed(1)}`)
   await core.dispose()

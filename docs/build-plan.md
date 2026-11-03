@@ -75,7 +75,7 @@ How the [roadmap](roadmap.md) and [UI spec](ui-spec.md) get built: the plumbing 
 
 **Done when:** a real feature of your choosing runs end to end on the driver without manual repair.
 
-## Phase 7: UI
+## Phase 7: UI (built; the walkthrough in VS Code remains)
 
 The whole UI at once, on the frozen API, from the [UI spec](ui-spec.md), in this order:
 

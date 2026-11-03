@@ -283,6 +283,19 @@
           "default": true,
           "description": "Only the implement agent may edit code in group chats."
         },
+        "agentdeck.roster.questionsTo": {
+          "type": "string",
+          "enum": [
+            "lead",
+            "user"
+          ],
+          "enumDescriptions": [
+            "The lead answers a delegate's questions from the chat; you can change any answer.",
+            "Every question from a delegate comes to you."
+          ],
+          "default": "lead",
+          "description": "Who answers questions from delegates in new group chats."
+        },
         "agentdeck.roster.verify": {
           "type": "string",
           "default": "",

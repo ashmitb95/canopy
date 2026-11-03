@@ -281,14 +281,16 @@ const messages: HostMessage[] =
             type: 'setup',
             setup: {
               agents: [
-                { id: 'claude', label: 'Claude', status: 'signed-in', account: 'Max plan' },
-                { id: 'codex', label: 'Codex', status: 'signed-in' },
-                { id: 'grok', label: 'Grok', status: 'signed-out' }
+                { id: 'claude', label: 'Claude', status: 'signed-in', version: '2.1', installUrl: '' },
+                { id: 'codex', label: 'Codex', status: 'signed-in', account: 'ChatGPT account', version: '0.160', installUrl: '' },
+                { id: 'grok', label: 'Grok', status: 'signed-out', installUrl: '' },
+                { id: 'gemini', label: 'Gemini', status: 'not-installed', installUrl: '' }
               ],
-              roster: { lead: 'claude', research: '', implement: 'codex', review: 'grok', enforce: true, verify: 'pnpm test' },
-              workspace: { maxSlots: 4, worktrees: true, envFiles: ['.env*'], repos: [{ name: 'api', base: 'main', setup: 'pnpm install' }, { name: 'ui', base: 'main' }] },
+              roster: { lead: 'claude', research: '', implement: 'codex', review: 'grok', enforce: true, verify: 'pnpm test', questionsTo: 'lead' },
+              workspace: { name: 'my-workspace', maxSlots: 4, worktrees: true, envFiles: ['.env*'], repos: [{ name: 'api', base: 'main', setup: 'pnpm install' }, { name: 'ui', base: 'main' }] },
               github: 'signed-in',
-              linear: false
+              linear: false,
+              palette: 'paper'
             }
           }
         ]

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parseToml } from './toml'
+import { parseToml, stringifyToml } from './toml'
 
 export type WorkspaceConfig = {
   /** Files copied from a primary checkout into a new worktree: names or paths relative to the repo; a trailing `*` matches the rest of a name. */
@@ -25,4 +25,21 @@ export function readConfig(root: string): WorkspaceConfig {
     worktrees: data.worktrees !== false,
     maxSlots: typeof data.max_slots === 'number' && data.max_slots > 0 ? data.max_slots : 4
   }
+}
+
+/** Writes the given settings into `.agentdeck/config.toml`, keeping every other key. An empty setup command removes it. */
+export function updateConfig(root: string, patch: { envFiles?: string[]; setup?: Record<string, string> }): void {
+  const path = join(root, '.agentdeck', 'config.toml')
+  const data = existsSync(path) ? parseToml(readFileSync(path, 'utf8')) : {}
+  if (patch.envFiles) data.env_files = patch.envFiles
+  if (patch.setup) {
+    const setup: Record<string, unknown> = typeof data.setup === 'object' && data.setup !== null && !Array.isArray(data.setup) ? { ...data.setup } : {}
+    for (const [repo, command] of Object.entries(patch.setup)) {
+      if (command.trim()) setup[repo] = command.trim()
+      else delete setup[repo]
+    }
+    data.setup = setup
+  }
+  mkdirSync(join(root, '.agentdeck'), { recursive: true })
+  writeFileSync(path, stringifyToml(data))
 }

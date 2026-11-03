@@ -45,11 +45,12 @@ export type LaneCard = {
 
 /** The setup page: agents, who does what, the workspace, and issue trackers. */
 export type SetupData = {
-  agents: { id: string; label: string; status: ProviderState['status']; account?: string }[]
-  roster: { lead: string; research: string; implement: string; review: string; enforce: boolean; verify: string }
-  workspace?: { maxSlots: number; worktrees: boolean; envFiles: string[]; repos: { name: string; base?: string; setup?: string }[] }
+  agents: { id: string; label: string; status: ProviderState['status']; account?: string; version?: string; installUrl: string }[]
+  roster: { lead: string; research: string; implement: string; review: string; enforce: boolean; verify: string; questionsTo: 'lead' | 'user' }
+  workspace?: { name: string; maxSlots: number; worktrees: boolean; envFiles: string[]; repos: { name: string; base?: string; setup?: string }[] }
   github: 'signed-in' | 'signed-out' | 'missing'
   linear: boolean
+  palette: string
 }
 
 /** The review screen for one group chat: who did what, with what AgentDeck recorded and each delegate's diff. */
@@ -175,6 +176,13 @@ export type WebviewMessage =
   | { type: 'setEnforce'; value: boolean }
   | { type: 'editWorkspaceConfig' }
   | { type: 'manageAgents' }
+  | { type: 'installAgent'; providerId: string }
+  | { type: 'addAgent' }
+  | { type: 'setQuestionsTo'; value: 'lead' | 'user' }
+  | { type: 'setPalette'; value: string }
+  | { type: 'setRepoSetup'; repo: string; command: string }
+  | { type: 'setEnvFiles'; value: string }
+  | { type: 'finishSetup' }
   | { type: 'viewHandoff'; id: string }
   | { type: 'openLaneDiff' }
   | { type: 'createPullRequest' }

@@ -1,10 +1,22 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readConfig } from '../../src/lanes/config'
+import { readConfig, updateConfig } from '../../src/lanes/config'
 import { LaneMemory } from '../../src/lanes/memory'
 import { matchEnvFiles, warmUp } from '../../src/lanes/warmup'
 import { workspace } from './repos'
+
+describe('updateConfig', () => {
+  it('changes only the keys given, keeping the rest', () => {
+    const root = workspace()
+    mkdirSync(join(root, '.agentdeck'))
+    writeFileSync(join(root, '.agentdeck', 'config.toml'), 'max_slots = 2\n\n[setup]\nui = "npm ci"\n')
+    updateConfig(root, { envFiles: ['.env', '.env.local'], setup: { api: 'pnpm install' } })
+    expect(readConfig(root)).toEqual({ envFiles: ['.env', '.env.local'], setup: { ui: 'npm ci', api: 'pnpm install' }, worktrees: true, maxSlots: 2 })
+    updateConfig(root, { setup: { ui: '' } })
+    expect(readConfig(root).setup).toEqual({ api: 'pnpm install' })
+  })
+})
 
 describe('readConfig', () => {
   it('defaults: .env* files, no setup, worktrees on', () => {

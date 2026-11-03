@@ -84,7 +84,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return agent ? [[role, agent]] : []
     })) }
     const verify = config.get<string>('verify')
-    const chat = core?.chats.create({ lead, roster, mode: 'accept-edits', enforce: config.get<boolean>('enforce', true), ...(verify ? { verify } : {}), ...(options.laneId ? { laneId: options.laneId } : {}), ...(options.title ? { title: options.title } : {}) })
+    const chat = core?.chats.create({ lead, roster, mode: 'accept-edits', enforce: config.get<boolean>('enforce', true), questionsTo: config.get<'lead' | 'user'>('questionsTo', 'lead'), ...(verify ? { verify } : {}), ...(options.laneId ? { laneId: options.laneId } : {}), ...(options.title ? { title: options.title } : {}) })
     if (chat) await surfaces.showGroupInSidebar(chat.record.id)
   }
 

@@ -14,7 +14,7 @@ import { activity, baseline, stop as stopProcesses, waitForSettled } from './set
 import type { Tool } from './tool-server'
 
 export type Delivery = 'now' | 'end-of-turn' | 'queued'
-export type QueuedMessage = { id: string; target: string; text: string; delegation?: string; internal?: boolean; reportOf?: string }
+export type QueuedMessage = { id: string; target: string; text: string; delegation?: string; internal?: boolean; reportOf?: string; redirect?: boolean }
 
 export const ROLES = ['research', 'plan', 'implement', 'review'] as const
 export type Role = (typeof ROLES)[number]
@@ -464,7 +464,11 @@ export class GroupChat implements Disposable {
 
   private leadMessages(agent: string, text: string): string {
     if (!this.record.members[agent]) return `${agent} has not worked in this chat yet: delegate to it instead.`
-    this.record.queue.push({ id: randomUUID(), target: agent, text, internal: true })
+    // More instructions reopen the delegate's latest task, so its next reply is tracked and reported like the first.
+    const delegation = [...this.record.delegations].reverse().find((candidate) => candidate.agent === agent)
+    const reopen = delegation && !delegation.undone && !['running', 'settling', 'queued'].includes(delegation.status) ? delegation : undefined
+    if (reopen) reopen.status = 'queued'
+    this.record.queue.push({ id: randomUUID(), target: agent, text, internal: true, ...(reopen ? { delegation: reopen.id } : {}) })
     this.save()
     this.changed()
     return `Sent to ${agent}. End your turn now.`
@@ -642,7 +646,7 @@ export class GroupChat implements Disposable {
       await this.deps.manager.warm(sessionId).catch(() => undefined)
       processes = await baseline(this.deps.root ?? process.cwd()).catch(() => processes)
     }
-    const entry = this.ledger.append(next.internal ? { from: 'agentdeck', to: next.target, text: next.text } : delegation ? { from: delegation.lead, to: next.target, text: `${delegation.task}` } : { from: 'user', to: next.target, text: next.text })
+    const entry = this.ledger.append(next.internal ? { from: 'agentdeck', to: next.target, text: next.text } : next.redirect ? { from: 'user', to: next.target, text: next.text } : delegation ? { from: delegation.lead, to: next.target, text: `${delegation.task}` } : { from: 'user', to: next.target, text: next.text })
     if (delegation) {
       delegation.status = 'running'
       delegation.startedAt = new Date().toISOString()
@@ -733,6 +737,18 @@ export class GroupChat implements Disposable {
     const violation = this.checkViolation(agent, current.before)
     if (status === 'error') this.record.blocked = `${agent} stopped with an error.`
     const delegation = current.delegation ? this.record.delegations.find((candidate) => candidate.id === current.delegation) : undefined
+    // A message for the delegate ended its turn early (a redirect). The delegation is not over: it carries on with that message.
+    const next = this.record.queue[0]
+    if (delegation && status !== 'error' && !current.stopped && !/STATUS:/i.test(reply ?? '') && next?.target === agent && !next.delegation) {
+      next.delegation = delegation.id
+      if (!next.internal) next.redirect = true
+      delegation.status = 'queued'
+      this.current = undefined
+      this.save()
+      this.changed()
+      void this.pump()
+      return
+    }
     if (delegation) {
       const carryOn = await this.settle(delegation, status, current)
       if (carryOn) {

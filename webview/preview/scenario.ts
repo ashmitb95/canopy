@@ -212,6 +212,7 @@ const groupState: GroupState = {
   lead: 'claude',
   target: 'claude',
   running: 'grok',
+  active: ['grok'],
   queue: [],
   members: [
     { agent: 'claude', status: 'idle', activity: '' },
@@ -271,6 +272,7 @@ const states = (status: GroupState['delegations'][number]['status'], extra: Part
 const statesGroup: GroupState = {
   ...groupState,
   running: 'codex',
+  active: ['codex'],
   members: [
     { agent: 'claude', status: 'idle', activity: '' },
     { agent: 'codex', status: 'running', activity: 'Editing export.ts' },

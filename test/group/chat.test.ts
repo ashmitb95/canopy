@@ -98,21 +98,21 @@ describe('catch-up', () => {
 })
 
 describe('GroupChat', () => {
-  it('sends to the lead by default, then to whoever was last addressed', async () => {
+  it('sends to the lead unless a message mentions another agent', async () => {
     await chat.send('hello')
     await tick()
     expect(texts(claude[0])).toEqual(['hello'])
     await finish(claude[0], 'hi')
     await chat.send('@codex build it')
     await tick()
-    expect(chat.record.target).toBe('codex')
     await finish(codex[0], 'built')
     await chat.send('and test it')
     await tick()
-    expect(codex[0].prompts).toHaveLength(2)
+    expect(claude[0].prompts).toHaveLength(2)
+    expect(codex[0].prompts).toHaveLength(1)
   })
 
-  it('runs one agent at a time, in order', async () => {
+  it('runs agents that can write one at a time, in order', async () => {
     const results = await chat.send('@codex do this @grok do that')
     expect(results.map((result) => [result.target, result.delivery])).toEqual([['codex', 'now'], ['grok', 'queued']])
     await tick()
@@ -524,6 +524,19 @@ describe('delegation', () => {
     await finish(grok[0], 'Done now.\nSTATUS: done')
     await tick()
     expect(chat.state().delegations[0].status).toBe('done')
+  })
+
+  it('lets the lead answer at once while the implementer works, since the lead is read-only', async () => {
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'implement', task: 'x', context: CONTEXT })
+    await finish(claude[0], 'handing over')
+    const [result] = await chat.send('how is it going?')
+    await tick()
+    expect(result).toMatchObject({ target: 'claude', delivery: 'now' })
+    expect(texts(claude[0]).at(-1)).toContain('how is it going?')
+    expect(chat.state().active).toEqual(expect.arrayContaining(['claude', 'codex']))
+    expect(chat.state().delegations[0].status).toBe('running')
   })
 
   it('cancels a delegate that has not started', async () => {

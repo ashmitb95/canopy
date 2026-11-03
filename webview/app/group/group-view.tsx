@@ -76,7 +76,7 @@ function Header({ group }: { group: GroupState }) {
     <header className="flex flex-wrap items-center gap-2 border-b border-control px-4 py-2.5">
       <strong className="mr-auto truncate text-[15px] font-bold">{group.title}</strong>
       {group.members.map((member) => {
-        const active = group.running ? group.running === member.agent : group.lead === member.agent
+        const active = group.active.length > 0 ? group.active.includes(member.agent) : group.lead === member.agent
         return (
           <span key={member.agent} title={`${name(member.agent)}: ${roleOf(group, member.agent) || 'In this chat'}`} className={`inline-flex h-10 items-center gap-[7px] rounded-lg px-2.5 max-[480px]:h-8 max-[480px]:px-1.5 ${active ? 'bg-primary text-primary-foreground' : 'bg-surface'}`}>
             <ProviderAvatar providerId={member.agent} className="size-5 rounded-md text-[10px]" />
@@ -398,7 +398,15 @@ function Status({ group }: { group: GroupState }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-control px-4 py-2 text-xs max-[480px]:gap-1.5 max-[480px]:px-3">
       <strong className="max-[480px]:hidden">Now</strong>
-      <span className="rounded-[5px] bg-primary px-2 py-[3px] font-semibold text-primary-foreground">{group.running ? name(group.running) : 'Waiting for you'}</span>
+      {group.active.length > 0 ? (
+        group.active.map((agent) => (
+          <span key={agent} className="rounded-[5px] bg-primary px-2 py-[3px] font-semibold text-primary-foreground">
+            {name(agent)}
+          </span>
+        ))
+      ) : (
+        <span className="rounded-[5px] bg-primary px-2 py-[3px] font-semibold text-primary-foreground">Waiting for you</span>
+      )}
       {waiting.length > 0 ? <strong className="ml-2 max-[480px]:ml-0">Next</strong> : null}
       {waiting.map((message) => (
         <span key={message.id} className="flex items-center gap-1 rounded-[5px] bg-control px-2 py-[3px]">
@@ -443,7 +451,7 @@ function GroupComposer({ state, group }: { state: ChatState; group: GroupState }
   const composerState: ChatState = {
     ...state,
     sessionId: member?.sessionId ?? group.id,
-    status: group.running ? 'running' : 'idle',
+    status: group.active.includes(target) ? 'running' : 'idle',
     facts: member?.facts ?? {},
     ...(member ? { provider: member.provider } : {}),
     // The mode and lane pickers read the record; the group's lane applies to every agent in it.
@@ -451,7 +459,7 @@ function GroupComposer({ state, group }: { state: ChatState; group: GroupState }
     items: state.groupItems.flatMap(({ item }) => (item.kind === 'message' && item.role === 'user' && !marker({ agent: '', item }) ? [item] : []))
   }
   const agents = group.members.map((entry) => ({ id: entry.agent, label: name(entry.agent), detail: roleOf(group, entry.agent) || 'In this chat' }))
-  const hint = group.running && group.running !== target ? `${name(target)} gets this when ${name(group.running)} finishes · @ to message another agent` : `${name(target)} gets this now · @ to message another agent`
+  const hint = `${name(target)} gets this now · @ to message another agent`
   return <Composer state={composerState} group={{ agents, placeholder: `Message ${name(target)}, or @ an agent or file`, hint }} />
 }
 
@@ -570,7 +578,7 @@ export function GroupView({ state }: { state: ChatState }) {
                   .map((message) => (
                     <div key={message.id} className="ml-auto max-w-[min(100%,52rem)] min-w-0 opacity-70">
                       <div className="mb-1 text-right text-xs text-muted-foreground">
-                        To {name(message.target)} · waiting for {group.running ? name(group.running) : 'its turn'}
+                        To {name(message.target)} · {group.active.includes(message.target) ? 'after its current message' : 'waiting for the agent editing code to finish'}
                       </div>
                       <div className="rounded-[10px] border border-dashed border-control px-3 py-2.5 whitespace-pre-wrap">{message.text}</div>
                     </div>

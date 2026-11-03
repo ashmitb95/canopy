@@ -61,7 +61,7 @@ export type GroupRecord = {
 }
 
 export type MemberState = { agent: string; status: SessionStatus; activity: string }
-export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
+export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; active: string[]; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
 export type TimelineItem = { agent: string; item: SessionItem }
 
 export type GroupEvent = { type: 'item'; agent: string; item: SessionItem } | { type: 'state'; state: GroupState }
@@ -194,6 +194,8 @@ export function groupTools(handle: (caller: string, name: string, args: Record<s
   ]
 }
 
+type Turn = { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string; outsideLane?: boolean }[]; processes: Set<number>; stopped?: boolean; overlapped?: boolean }
+
 const isBusy = (status: SessionStatus) => status === 'running' || status === 'needs-input'
 
 /**
@@ -210,10 +212,12 @@ export class GroupChat implements Disposable {
   private readonly seenItems = new Set<string>()
   private readonly timeline: { agent: string; id: string }[] = []
   private readonly latest = new Map<string, SessionItem[]>()
-  private current: { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string; outsideLane?: boolean }[]; processes: Set<number>; stopped?: boolean } | undefined
+  /** Agents working now, each on its own turn. Read-only agents run alongside others; two writers never do. */
+  private readonly running = new Map<string, Turn>()
   private limited: string | undefined
-  private starting = false
-  private pendingFacts: Pick<Facts, 'stillRunning' | 'servicesLeft'> = {}
+  private readonly starting = new Set<string>()
+  /** Facts settling found, per delegation, for its report. */
+  private readonly pendingFacts = new Map<string, Pick<Facts, 'stillRunning' | 'servicesLeft'>>()
 
   constructor(
     private readonly deps: GroupDeps,
@@ -249,7 +253,8 @@ export class GroupChat implements Disposable {
       target: record.target,
       queue: [...record.queue],
       members: Object.keys(record.members).map((agent) => ({ agent, status: this.statuses.get(agent) ?? 'idle', activity: this.activity(agent) })),
-      ...(this.current ? { running: this.current.agent } : {}),
+      ...(this.running.size > 0 ? { running: [...this.running.keys()].at(-1) } : {}),
+      active: [...this.running.keys()],
       ...(record.blocked ? { blocked: record.blocked } : {}),
       ...(record.laneId ? { laneId: record.laneId } : {}),
       roster: record.roster,
@@ -273,18 +278,14 @@ export class GroupChat implements Disposable {
     })
   }
 
-  /** Sends a message: each `@agent` part to that agent, the rest to whoever was last addressed. Says when each part arrives. */
+  /** Sends a message at once: each `@agent` part to that agent, the rest to the lead. Says when each part arrives. */
   async send(text: string): Promise<{ id: string; target: string; delivery: Delivery }[]> {
     this.record.nudged = false
     const results: { id: string; target: string; delivery: Delivery }[] = []
-    // The first message of an idle chat goes at once; the rest wait for it.
-    let busy = Boolean(this.current) || this.record.queue.length > 0 || Boolean(this.record.blocked)
     for (const segment of parseMentions(text, this.agents)) {
-      const target = segment.target ?? this.record.target
-      this.record.target = target
+      const target = segment.target ?? this.record.lead
       const queued: QueuedMessage = { id: randomUUID(), target, text: segment.text }
-      results.push({ id: queued.id, target, delivery: await this.deliver(queued, busy) })
-      busy = true
+      results.push({ id: queued.id, target, delivery: await this.deliver(queued) })
     }
     this.save()
     this.changed()
@@ -292,8 +293,8 @@ export class GroupChat implements Disposable {
     return results
   }
 
-  private async deliver(message: QueuedMessage, busy: boolean): Promise<Delivery> {
-    const running = this.current?.agent === message.target && this.statuses.get(message.target) === 'running'
+  private async deliver(message: QueuedMessage): Promise<Delivery> {
+    const running = this.running.has(message.target) && this.statuses.get(message.target) === 'running'
     if (running && this.deps.providers.get(message.target)?.capabilities.has('steer')) {
       await this.steer(message)
       return 'now'
@@ -306,7 +307,16 @@ export class GroupChat implements Disposable {
       return 'now'
     }
     this.record.queue.push(message)
-    return busy ? 'queued' : 'now'
+    await this.pump()
+    // Still waiting only when its agent is busy with an earlier message, or another writer is working.
+    return this.record.queue.includes(message) ? 'queued' : 'now'
+  }
+
+  /** Whether an agent may start now: anyone read-only may; one that can write waits while another writer works. */
+  private canStart(agent: string): boolean {
+    const writes = (candidate: string) => !this.readOnlyBoundary(candidate)
+    if (!writes(agent)) return true
+    return ![...this.running.keys(), ...this.starting].some((other) => other !== agent && writes(other))
   }
 
   private async steer(message: QueuedMessage): Promise<void> {
@@ -320,11 +330,11 @@ export class GroupChat implements Disposable {
   /** Interrupts the running agent, so a queued message for it goes now. */
   async stopAndSend(queuedId: string): Promise<void> {
     const index = this.record.queue.findIndex((message) => message.id === queuedId)
-    if (index < 0 || !this.current) return
+    if (index < 0 || !this.running.has(this.record.queue[index].target)) return
     const [message] = this.record.queue.splice(index, 1)
     this.record.queue.unshift(message)
     this.save()
-    await this.deps.manager.cancel(this.record.members[this.current.agent])
+    await this.deps.manager.cancel(this.record.members[message.target])
   }
 
   cancelQueued(queuedId: string): void {
@@ -365,15 +375,16 @@ export class GroupChat implements Disposable {
   }
 
   async stop(): Promise<void> {
-    if (!this.current) return
-    this.current.stopped = true
-    await this.deps.manager.cancel(this.record.members[this.current.agent])
+    for (const [agent, turn] of this.running) {
+      turn.stopped = true
+      await this.deps.manager.cancel(this.record.members[agent])
+    }
   }
 
   /** Sends a message, stopping the agent it is for if that agent is working, so it goes now. */
   async sendNow(text: string): Promise<void> {
     const results = await this.send(text)
-    const forRunning = results.find((result) => result.target === this.current?.agent && result.delivery !== 'now')
+    const forRunning = results.find((result) => this.running.has(result.target) && result.delivery !== 'now')
     if (forRunning) await this.stopAndSend(forRunning.id)
   }
 
@@ -642,7 +653,7 @@ export class GroupChat implements Disposable {
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */
   catchUp(agent: string, parts: PromptPart[]): PromptPart[] {
     const cursor = this.record.cursors[agent] ?? 0
-    const missed = this.ledger.missed(cursor, agent, this.current?.agent === agent ? this.current.entry : undefined)
+    const missed = this.ledger.missed(cursor, agent, this.running.get(agent)?.entry)
     const text = catchUpText(missed, join(this.deps.dir, this.record.id, 'ledger.jsonl'))
     // What AgentDeck put in a delegate's first prompt, for the handoff panel.
     const starting = this.record.delegations.find((delegation) => delegation.agent === agent && delegation.status === 'running' && !delegation.added)
@@ -659,16 +670,20 @@ export class GroupChat implements Disposable {
     return [...(brief ? [{ type: 'text' as const, text: this.leadBrief(agent) }] : []), ...(text ? [{ type: 'text' as const, text }] : []), ...parts]
   }
 
+  /** Starts every waiting message that can go now: the first one for each idle agent, in queue order. */
   private async pump(): Promise<void> {
-    if (this.current || this.starting || this.record.blocked) return
-    const next = this.record.queue[0]
-    if (!next) return
-    this.record.queue.shift()
-    this.starting = true
-    try {
-      await this.start(next)
-    } finally {
-      this.starting = false
+    if (this.record.blocked) return
+    const chosen = new Set<string>()
+    for (const next of [...this.record.queue]) {
+      const agent = next.target
+      if (chosen.has(agent) || this.running.has(agent) || this.starting.has(agent) || !this.canStart(agent)) {
+        chosen.add(agent)
+        continue
+      }
+      chosen.add(agent)
+      this.record.queue = this.record.queue.filter((message) => message.id !== next.id)
+      this.starting.add(agent)
+      void this.start(next).finally(() => this.starting.delete(agent))
     }
   }
 
@@ -686,7 +701,10 @@ export class GroupChat implements Disposable {
       delegation.status = 'running'
       delegation.startedAt = new Date().toISOString()
     }
-    this.current = { agent: next.target, entry: entry.seq, started: false, ...(delegation ? { delegation: delegation.id } : {}), itemsAtStart: this.latest.get(next.target)?.length ?? 0, before: this.snapshot(), processes }
+    // Changes made while another agent also worked cannot be told apart, so neither turn flags the other's writes.
+    const others = [...this.running.values()]
+    for (const other of others) other.overlapped = true
+    this.running.set(next.target, { agent: next.target, entry: entry.seq, started: false, ...(delegation ? { delegation: delegation.id } : {}), itemsAtStart: this.latest.get(next.target)?.length ?? 0, before: this.snapshot(), processes, ...(others.length > 0 ? { overlapped: true } : {}) })
     await this.applyRole(next.target, sessionId)
     this.save()
     this.changed()
@@ -762,28 +780,28 @@ export class GroupChat implements Disposable {
 
   private onStatus(agent: string, status: SessionStatus): void {
     this.statuses.set(agent, status)
-    const current = this.current
-    if (current?.agent === agent && isBusy(status)) current.started = true
-    if (current?.agent === agent && current.started && !isBusy(status)) {
+    const current = this.running.get(agent)
+    if (current && isBusy(status)) current.started = true
+    if (current?.started && !isBusy(status)) {
       void this.turnFinished(agent, status, current)
       return
     }
     this.changed()
   }
 
-  private async turnFinished(agent: string, status: SessionStatus, current: NonNullable<GroupChat['current']>): Promise<void> {
+  private async turnFinished(agent: string, status: SessionStatus, current: Turn): Promise<void> {
     const reply = this.deps.manager.lastReply(this.record.members[agent])
     if (reply) this.ledger.append({ from: agent, text: reply })
-    const violation = this.checkViolation(agent, current.before)
+    const violation = current.overlapped ? undefined : this.checkViolation(agent, current.before)
     if (status === 'error') this.record.blocked = `${agent} stopped with an error.`
     const delegation = current.delegation ? this.record.delegations.find((candidate) => candidate.id === current.delegation) : undefined
     // A message for the delegate ended its turn early (a redirect). The delegation is not over: it carries on with that message.
-    const next = this.record.queue[0]
-    if (delegation && status !== 'error' && !current.stopped && !/STATUS:/i.test(reply ?? '') && next?.target === agent && !next.delegation) {
+    const next = this.record.queue.find((message) => message.target === agent)
+    if (delegation && status !== 'error' && !current.stopped && !/STATUS:/i.test(reply ?? '') && next && !next.delegation) {
       next.delegation = delegation.id
       if (!next.internal) next.redirect = true
       delegation.status = 'queued'
-      this.current = undefined
+      this.running.delete(agent)
       this.save()
       this.changed()
       void this.pump()
@@ -792,7 +810,7 @@ export class GroupChat implements Disposable {
     if (delegation) {
       const carryOn = await this.settle(delegation, status, current)
       if (carryOn) {
-        this.current = undefined
+        this.running.delete(agent)
         this.save()
         this.changed()
         void this.pump()
@@ -800,7 +818,7 @@ export class GroupChat implements Disposable {
       }
       await this.finishDelegation(delegation, agent, status, reply ?? '', current, violation)
     }
-    this.current = undefined
+    this.running.delete(agent)
     if (!delegation) this.afterLeadTurn(agent, reply ?? '')
     // New work the lead asked for goes first, in the order it was asked.
     const pending = this.record.delegations.filter((candidate) => candidate.status === 'queued' && !this.record.queue.some((message) => message.delegation === candidate.id))
@@ -817,7 +835,7 @@ export class GroupChat implements Disposable {
    * "Done" is a claim. Waits for work the turn left running. If some ran on after the agent stopped, the same agent
    * gets one more turn to check the results and correct its report. Returns true when that turn is queued.
    */
-  private async settle(delegation: Delegation, status: SessionStatus, current: NonNullable<GroupChat['current']>): Promise<boolean> {
+  private async settle(delegation: Delegation, status: SessionStatus, current: Turn): Promise<boolean> {
     if (status === 'error' || !this.watchesProcesses || !this.deps.root) return false
     const root = this.deps.root
     delegation.status = 'settling'
@@ -831,10 +849,10 @@ export class GroupChat implements Disposable {
     current.processes = new Set([...current.processes])
     if (!outcome.settled) {
       delegation.status = 'overdue'
-      this.pendingFacts = { stillRunning: outcome.activity.work.map(describe), servicesLeft: services }
+      this.pendingFacts.set(delegation.id, { stillRunning: outcome.activity.work.map(describe), servicesLeft: services })
       return false
     }
-    this.pendingFacts = services.length > 0 ? { servicesLeft: services } : {}
+    this.pendingFacts.set(delegation.id, services.length > 0 ? { servicesLeft: services } : {})
     if (first.work.length > 0 && !delegation.verified) {
       delegation.verified = true
       delegation.status = 'running'
@@ -852,13 +870,13 @@ export class GroupChat implements Disposable {
     this.record.queue.unshift({ id: randomUUID(), target: agent, internal: true, text: 'You said you would hand this off, but no delegate call reached AgentDeck. Call the delegate tool now if you meant to; otherwise carry on.' })
   }
 
-  private async finishDelegation(delegation: Delegation, agent: string, status: SessionStatus, reply: string, current: NonNullable<GroupChat['current']>, violation: Violation | undefined): Promise<void> {
+  private async finishDelegation(delegation: Delegation, agent: string, status: SessionStatus, reply: string, current: Turn, violation: Violation | undefined): Promise<void> {
     const items = (this.latest.get(agent) ?? []).slice(current.itemsAtStart)
     const commands = items.flatMap((item) => (item.kind === 'tool' && (item.toolKind === 'execute' || item.title.startsWith('Run ') || item.title.startsWith('Bash ')) ? [{ command: item.title.replace(/^(Bash|Run|Command Execute)\s+/, '').split('\n')[0].slice(0, 160), failed: item.status === 'failed' }] : []))
     const files = current.before.filter((entry) => !entry.outsideLane).flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
     delegation.snapshots = current.before.filter((entry) => !entry.outsideLane).map(({ path, tree }) => ({ path, before: tree, after: snapshotTree(path) }))
-    const facts: Facts = { files, commands, violations: violation ? violation.files : [], ...this.pendingFacts }
-    this.pendingFacts = {}
+    const facts: Facts = { files, commands, violations: violation ? violation.files : [], ...this.pendingFacts.get(delegation.id) }
+    this.pendingFacts.delete(delegation.id)
     if (this.record.verify && agent === this.record.roster.implement && files.length > 0) facts.verify = await this.runVerify(this.record.verify)
     delegation.facts = facts
     delegation.report = reply

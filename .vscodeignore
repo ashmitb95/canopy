@@ -1,6 +1,7 @@
 **
 !dist/extension.js
 !dist/webview/**
-!media/agentdeck.svg
+!media/canopy-mark.svg
+!media/canopy-icon.png
 !media/lanes.svg
 !package.json

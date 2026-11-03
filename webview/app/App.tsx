@@ -17,6 +17,7 @@ import { selectedModel } from './components/model-picker'
 import { TurnFooterView } from './items/turn-footer'
 import { turnFooters } from './turns'
 import { initialState, reduce } from './state'
+import { GroupView } from './group/group-view'
 
 export function App() {
   const [state, dispatch] = useReducer(reduce, initialState)
@@ -41,6 +42,7 @@ export function App() {
   const [since, setSince] = useState<number>()
   useEffect(() => setSince((started) => (busy ? (started ?? Date.now()) : undefined)), [busy])
 
+  if (state.group) return <GroupView state={state} />
   if (state.empty) return <EmptyState providers={state.providers} signIns={state.signIns} />
 
   return (

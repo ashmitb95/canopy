@@ -1,4 +1,6 @@
 import type { Capability, PermissionMode, PromptPart, PromptResponse, ProviderState, Quota } from '../core/types'
+import type { GroupState, TimelineItem } from '../group/chat'
+import type { SessionItem } from '../core/types'
 import type { SessionEvent } from '../sessions/manager'
 import type { SessionStatus } from '../sessions/store'
 
@@ -63,6 +65,10 @@ export type HostMessage =
   | { type: 'insertAttachments'; attachments: Attachment[] }
   /** A rewound message to edit and resend. */
   | { type: 'editPrompt'; parts: PromptPart[] }
+  /** A group chat: everything so far, then live state and items. */
+  | { type: 'groupSnapshot'; state: GroupState; items: TimelineItem[] }
+  | { type: 'groupState'; state: GroupState }
+  | { type: 'groupItem'; agent: string; item: SessionItem }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -100,3 +106,12 @@ export type WebviewMessage =
   | { type: 'renameSession'; sessionId?: string }
   | { type: 'deleteSession'; sessionId?: string }
   | { type: 'reviewLane'; laneId: string }
+  | { type: 'groupSend'; text: string }
+  | { type: 'groupAnswer'; agent: string; itemId: string; response: PromptResponse }
+  | { type: 'answerQuestion'; id: string; text: string }
+  | { type: 'stopAndSend'; queuedId: string }
+  | { type: 'cancelQueued'; queuedId: string }
+  | { type: 'groupStop' }
+  | { type: 'groupRetry' }
+  | { type: 'undoViolation'; id: string }
+  | { type: 'undoDelegation'; id: string }

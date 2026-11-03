@@ -4,6 +4,7 @@ import * as vscode from 'vscode'
 import type { Disposable, Event } from '../core/emitter'
 import type { PromptPart, ProviderDefinition, ProviderState, Quota, SignInFlow } from '../core/types'
 import type { Env } from '../env'
+import type { GroupChats } from '../group/chat'
 import type { Attention, SessionManager } from '../sessions/manager'
 import { attachFile, saveImage } from './attachments'
 import type { DiffDocuments } from './diff-documents'
@@ -17,6 +18,7 @@ export const PANEL_TYPE = 'agentdeck.chatPanel'
 export const SIDEBAR_VIEW = 'agentdeck.chat'
 const PALETTES = ['theme', 'paper', 'peach', 'lilac', 'sage', 'sky']
 const SIDEBAR_SESSION_KEY = 'agentdeck.sidebarSession'
+const SIDEBAR_GROUP_KEY = 'agentdeck.sidebarGroup'
 const QUOTA_KEY = 'agentdeck.quota'
 const DEFAULT_PROVIDER = 'claude'
 
@@ -31,6 +33,8 @@ type Surface = {
   readonly kind: SurfaceKind
   panel?: vscode.WebviewPanel
   sessionId?: string
+  /** A group chat shown instead of a single session. */
+  groupId?: string
   subscription?: Disposable
   listener?: vscode.Disposable
 }
@@ -60,7 +64,8 @@ export class ChatSurfaces
     private readonly editor: EditorContextTracker,
     private readonly diffs: DiffDocuments,
     private readonly unread: Unread,
-    private readonly lanes?: LaneSource
+    private readonly lanes?: LaneSource,
+    private readonly chats?: GroupChats
   ) {
     this.attachmentsDir = join((context.storageUri ?? context.globalStorageUri).fsPath, 'attachments')
     this.quotas = context.globalState.get<Record<string, Quota>>(QUOTA_KEY) ?? {}
@@ -186,8 +191,81 @@ export class ChatSurfaces
 
   async showInSidebar(sessionId: string): Promise<void> {
     await this.context.workspaceState.update(SIDEBAR_SESSION_KEY, sessionId)
+    await this.context.workspaceState.update(SIDEBAR_GROUP_KEY, undefined)
+    if (this.sidebar) this.sidebar.groupId = undefined
     await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
     if (this.sidebar) this.show(this.sidebar, sessionId)
+  }
+
+  /** Shows a group chat in the sidebar. */
+  async showGroupInSidebar(chatId: string): Promise<void> {
+    await this.context.workspaceState.update(SIDEBAR_GROUP_KEY, chatId)
+    await this.context.workspaceState.update(SIDEBAR_SESSION_KEY, undefined)
+    await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
+    if (this.sidebar) this.showGroup(this.sidebar, chatId)
+  }
+
+  private showGroup(surface: Surface, chatId: string): void {
+    const chat = this.chats?.get(chatId)
+    if (!chat) return
+    surface.subscription?.dispose()
+    surface.sessionId = undefined
+    surface.groupId = chatId
+    this.post(surface, { type: 'groupSnapshot', state: chat.state(), items: chat.items() })
+    surface.subscription = chat.onEvent((event) =>
+      this.post(surface, event.type === 'state' ? { type: 'groupState', state: event.state } : { type: 'groupItem', agent: event.agent, item: event.item })
+    )
+  }
+
+  /** Handles a message from a webview showing a group chat; false for messages that are not about the group. */
+  private async handleGroup(surface: Surface, message: WebviewMessage): Promise<boolean> {
+    const chat = surface.groupId ? this.chats?.get(surface.groupId) : undefined
+    if (!chat) return false
+    switch (message.type) {
+      case 'ready':
+        this.post(surface, { type: 'groupSnapshot', state: chat.state(), items: chat.items() })
+        return false
+      case 'groupSend':
+        await chat.send(message.text)
+        return true
+      case 'prompt':
+        await chat.send(message.parts.map((part) => (part.type === 'text' || part.type === 'pasted' ? part.text : '')).join(' ').trim())
+        return true
+      case 'groupAnswer':
+        chat.answer(message.agent, message.itemId, message.response)
+        return true
+      case 'answer': {
+        const found = chat.items().find(({ item }) => item.id === message.itemId)
+        if (found) chat.answer(found.agent, message.itemId, message.response)
+        return true
+      }
+      case 'answerQuestion':
+        chat.answerQuestion(message.id, message.text)
+        return true
+      case 'stopAndSend':
+        await chat.stopAndSend(message.queuedId)
+        return true
+      case 'cancelQueued':
+        chat.cancelQueued(message.queuedId)
+        return true
+      case 'cancel':
+      case 'groupStop':
+        await chat.stop()
+        return true
+      case 'groupRetry':
+        chat.retry()
+        return true
+      case 'undoViolation':
+        chat.undoViolation(message.id)
+        return true
+      case 'undoDelegation': {
+        const result = chat.undoDelegation(message.id)
+        void vscode.window.showInformationMessage(result)
+        return true
+      }
+      default:
+        return false
+    }
   }
 
   /** The chat in the focused tab, else the sidebar's chat. */
@@ -206,6 +284,8 @@ export class ChatSurfaces
     const surface = this.surface(view.webview, 'view', this.sidebarSession())
     this.sidebar = surface
     this.sidebarView = view
+    const group = this.context.workspaceState.get<string>(SIDEBAR_GROUP_KEY)
+    if (!surface.sessionId && group && this.chats?.get(group)) this.showGroup(surface, group)
     view.onDidDispose(() => {
       this.release(surface)
       if (this.sidebar === surface) {
@@ -269,6 +349,7 @@ export class ChatSurfaces
   }
 
   private async handle(surface: Surface, message: WebviewMessage): Promise<void> {
+    if (await this.handleGroup(surface, message)) return
     const sessionId = surface.sessionId
     switch (message.type) {
       case 'ready':
@@ -420,6 +501,7 @@ export class ChatSurfaces
 
   private show(surface: Surface, sessionId: string): void {
     surface.subscription?.dispose()
+    surface.groupId = undefined
     surface.sessionId = sessionId
     surface.subscription = this.manager.subscribe(sessionId, (event) =>
       this.post(surface, { type: 'session', sessionId, event })

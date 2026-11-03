@@ -1,5 +1,6 @@
 import type { SessionItem } from '../../src/core/types'
 import type { SessionRecord } from '../../src/sessions/store'
+import type { GroupState, TimelineItem } from '../../src/group/chat'
 import type { HostMessage, ProviderInfo } from '../../src/ui/protocol'
 
 const record: SessionRecord = {
@@ -205,6 +206,44 @@ const prompts: SessionItem[] = [
   }
 ]
 
+const groupState: GroupState = {
+  id: 'g1',
+  title: 'Export timeouts',
+  lead: 'claude',
+  target: 'claude',
+  running: 'codex',
+  queue: [{ id: 'q1', target: 'grok', text: 'review it' }],
+  members: [
+    { agent: 'claude', status: 'idle', activity: '' },
+    { agent: 'codex', status: 'running', activity: '$ node --test' },
+    { agent: 'grok', status: 'idle', activity: '' }
+  ],
+  roster: { plan: 'claude', implement: 'codex', review: 'grok' },
+  delegations: [
+    {
+      id: 'd1',
+      lead: 'claude',
+      agent: 'codex',
+      role: 'implement',
+      task: 'Stream invoice rows and fix retries',
+      doneWhen: 'the 50,000-row test passes',
+      status: 'running'
+    }
+  ],
+  violations: [{ id: 'v1', agent: 'grok', files: ['A\tnotes.txt'], before: [] }],
+  userQuestions: [{ id: 'uq1', from: 'codex', question: 'Exports over 1 million rows could take minutes. Block them, or warn and continue?' }],
+  quotas: {}
+}
+const groupItems: TimelineItem[] = [
+  { agent: 'claude', item: { kind: 'message', id: 'gu1', role: 'user', parts: [{ type: 'text', text: 'Exports time out on large invoices. Keep the CSV format.' }] } },
+  { agent: 'claude', item: { kind: 'message', id: 'ga1', role: 'assistant', text: 'export.ts loads every row into memory. I will stream rows instead, and hand the build to Codex.', streaming: false } },
+  { agent: 'codex', item: { kind: 'message', id: 'gc0', role: 'user', parts: [{ type: 'text', text: 'You are codex, delegated this by claude in a group chat run by AgentDeck, in the implement role.\nTask: Stream invoice rows and fix retries' }] } },
+  { agent: 'codex', item: { kind: 'message', id: 'gc1', role: 'assistant', text: 'Reading export.ts first.', streaming: false } },
+  { agent: 'codex', item: { kind: 'tool', id: 'gt1', title: 'Run cat export.ts queue.ts', toolKind: 'execute', status: 'done', output: 'export const limit = 10' } },
+  { agent: 'codex', item: { kind: 'message', id: 'gc2', role: 'assistant', text: 'Found that retries append to the partial file; fixing that too.', streaming: false } },
+  { agent: 'codex', item: { kind: 'tool', id: 'gt2', title: 'Run node --test', toolKind: 'execute', status: 'running' } }
+]
+
 // `?scenario=new` shows the provider chooser instead of a chat.
 const scenario = new URLSearchParams(location.search).get('scenario')
 const messages: HostMessage[] =
@@ -214,6 +253,8 @@ const messages: HostMessage[] =
         { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
         { type: 'empty' }
       ]
+    : scenario === 'group'
+      ? [providers, { type: 'groupSnapshot', state: groupState, items: groupItems }]
     : scenario === 'prompts'
       ? [
           providers,

@@ -1,6 +1,7 @@
 import type { Quota, SessionItem } from '../../src/core/types'
 import type { QueuedPrompt, SessionEvent } from '../../src/sessions/manager'
 import type { SessionRecord, SessionStatus } from '../../src/sessions/store'
+import type { GroupState, TimelineItem } from '../../src/group/chat'
 import type { EditorContext, HostMessage, LaneInfo, ProviderInfo, SessionSummary, SignInProgress } from '../../src/ui/protocol'
 
 export type ChatState = {
@@ -21,6 +22,9 @@ export type ChatState = {
   attachmentsUri?: string
   /** The sidebar has no session to show. */
   empty: boolean
+  /** A group chat, shown instead of a single session. */
+  group?: GroupState
+  groupItems: TimelineItem[]
 }
 
 export const initialState: ChatState = {
@@ -33,7 +37,17 @@ export const initialState: ChatState = {
   sessions: [],
   quotas: {},
   signIns: {},
-  empty: false
+  empty: false,
+  groupItems: []
+}
+
+/** Replaces an item streamed again under the same id, or adds it in arrival order. */
+function upsertGroupItem(items: TimelineItem[], next: TimelineItem): TimelineItem[] {
+  const index = items.findIndex(({ agent, item }) => agent === next.agent && item.id === next.item.id)
+  if (index < 0) return [...items, next]
+  const copy = [...items]
+  copy[index] = next
+  return copy
 }
 
 export function reduce(state: ChatState, message: HostMessage): ChatState {
@@ -52,6 +66,12 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
       return state
     case 'editorContext':
       return { ...state, editorContext: message.context }
+    case 'groupSnapshot':
+      return { ...state, empty: false, group: message.state, groupItems: message.items }
+    case 'groupState':
+      return { ...state, group: message.state }
+    case 'groupItem':
+      return { ...state, groupItems: upsertGroupItem(state.groupItems, { agent: message.agent, item: message.item }) }
     case 'empty':
       return { ...initialState, provider: state.provider, providers: state.providers, editorContext: state.editorContext, sessions: state.sessions, lanes: state.lanes, quotas: state.quotas, signIns: state.signIns, empty: true }
     case 'title':
@@ -75,7 +95,7 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
       return { ...state, signIns }
     }
     case 'session':
-      return sessionEvent(state, message.sessionId, message.event)
+      return { ...sessionEvent(state, message.sessionId, message.event), group: undefined, groupItems: [] }
   }
 }
 

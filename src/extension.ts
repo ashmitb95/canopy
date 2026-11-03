@@ -46,7 +46,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ? { list: () => tree.lanes().map((lane) => ({ name: lane.name, where: laneDescription(lane) })), onDidChange: tracker.onDidChange }
     : undefined
   const laneChanges = new LaneChanges()
-  const surfaces = new ChatSurfaces(context, sessionManager, providers, getEnv, editor, diffs, unread, laneSource)
+  const surfaces = new ChatSurfaces(context, sessionManager, providers, getEnv, editor, diffs, unread, laneSource, core.chats)
   void surfaces.markInstalled()
   const notifier = new Notifier(
     sessionManager,
@@ -68,6 +68,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agentdeck.sidebar.newChat', () => surfaces.newChat('view')),
     vscode.commands.registerCommand('agentdeck.newChat.other', () => surfaces.newChat('view')),
     ...[...providers.keys()].map((id) => vscode.commands.registerCommand(`agentdeck.newChat.${id}`, () => surfaces.newChat('view', id))),
+    vscode.commands.registerCommand('agentdeck.newGroupChat', async () => {
+      const config = vscode.workspace.getConfiguration('agentdeck.roster')
+      const lead = config.get<string>('lead', 'claude')
+      const roster = { plan: lead, ...Object.fromEntries((['research', 'implement', 'review'] as const).flatMap((role) => {
+        const agent = config.get<string>(role, '')
+        return agent ? [[role, agent]] : []
+      })) }
+      const chat = core?.chats.create({ lead, roster, mode: 'accept-edits', enforce: config.get<boolean>('enforce', true), ...(config.get<string>('verify') ? { verify: config.get<string>('verify') } : {}) })
+      if (chat) await surfaces.showGroupInSidebar(chat.record.id)
+    }),
     vscode.commands.registerCommand('agentdeck.openInEditor', () => surfaces.openSidebarInEditor()),
     vscode.commands.registerCommand('agentdeck.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),

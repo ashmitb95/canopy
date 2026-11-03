@@ -256,6 +256,36 @@
           ],
           "default": "paper",
           "description": "Brand and status colors for the chat, in light and dark to match your VS Code theme. Backgrounds, text, and borders always come from your theme. High-contrast themes keep their own colors."
+        },
+        "agentdeck.roster.lead": {
+          "type": "string",
+          "default": "claude",
+          "description": "The agent that leads new group chats."
+        },
+        "agentdeck.roster.research": {
+          "type": "string",
+          "default": "",
+          "description": "The agent that holds the research role in new group chats; empty for none."
+        },
+        "agentdeck.roster.implement": {
+          "type": "string",
+          "default": "codex",
+          "description": "The agent that holds the implement role in new group chats; empty for none."
+        },
+        "agentdeck.roster.review": {
+          "type": "string",
+          "default": "grok",
+          "description": "The agent that holds the review role in new group chats; empty for none."
+        },
+        "agentdeck.roster.enforce": {
+          "type": "boolean",
+          "default": true,
+          "description": "Only the implement agent may edit code in group chats."
+        },
+        "agentdeck.roster.verify": {
+          "type": "string",
+          "default": "",
+          "description": "A command AgentDeck runs itself after the implement agent changes files, such as `pnpm test`."
         }
       }
     },
@@ -404,6 +434,11 @@
       {
         "command": "agentdeck.newChat.other",
         "title": "Other Agent…",
+        "category": "AgentDeck"
+      },
+      {
+        "command": "agentdeck.newGroupChat",
+        "title": "New Group Chat",
         "category": "AgentDeck"
       }
     ],

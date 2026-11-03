@@ -56,8 +56,8 @@ export class ChatSurfaces
   private readonly files = new FileSearch()
   private readonly attachmentsDir: string
 
-  /** Starts a group chat led by the chosen provider, with the roster from settings; set by the extension. */
-  startGroup: ((lead: string) => Promise<void>) | undefined
+  /** Starts a group chat with the roster from settings, led by the given provider or the roster's lead; set by the extension. */
+  startGroup: ((lead?: string, text?: string) => Promise<void>) | undefined
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -397,6 +397,12 @@ export class ChatSurfaces
         else this.post(surface, { type: 'empty' })
         return
       case 'prompt': {
+        // A blank chat becomes a group chat led by the roster's lead, starting with what was typed.
+        if (!sessionId && this.startGroup) {
+          const text = message.parts.map((part) => (part.type === 'text' || part.type === 'pasted' ? part.text : '')).join(' ').trim()
+          if (surface.kind === 'panel') surface.panel?.dispose()
+          return this.startGroup(undefined, text)
+        }
         const target = sessionId ?? (await this.createFor(surface))
         const parts: PromptPart[] = [...message.parts]
         const file = message.includeContext ? this.editor.part() : null

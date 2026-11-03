@@ -8,6 +8,8 @@ import { AttachmentsContext } from '../assets'
 import { Codicon } from '../components/codicon'
 import { ProviderAvatar } from '../components/provider-avatar'
 import { send } from '../host'
+import { Composer } from '../components/composer'
+import { editInComposer } from '../composer/edit-bus'
 import { useApprovalKeys } from '../items/approval-card'
 import { useNow } from '../use-now'
 import { ItemView } from '../items/item-view'
@@ -47,6 +49,8 @@ function fileChange(row: string): string {
 /** A delegate's own work shows in its card; the conversation keeps only what needs the user. */
 function inCard(group: GroupState, entry: TimelineItem): boolean {
   if (entry.agent === group.lead || entry.item.kind === 'approval' || entry.item.kind === 'question') return false
+  // The user's own messages always stay in the conversation, whoever they went to.
+  if (entry.item.kind === 'message' && entry.item.role === 'user') return false
   return group.delegations.some((delegation) => delegation.agent === entry.agent)
 }
 
@@ -74,9 +78,9 @@ function Header({ group }: { group: GroupState }) {
       {group.members.map((member) => {
         const active = group.running ? group.running === member.agent : group.lead === member.agent
         return (
-          <span key={member.agent} className={`inline-flex h-10 items-center gap-[7px] rounded-lg px-2.5 ${active ? 'bg-primary text-primary-foreground' : 'bg-surface'}`}>
+          <span key={member.agent} title={`${name(member.agent)}: ${roleOf(group, member.agent) || 'In this chat'}`} className={`inline-flex h-10 items-center gap-[7px] rounded-lg px-2.5 max-[480px]:h-8 max-[480px]:px-1.5 ${active ? 'bg-primary text-primary-foreground' : 'bg-surface'}`}>
             <ProviderAvatar providerId={member.agent} className="size-5 rounded-md text-[10px]" />
-            <span>
+            <span className="max-[480px]:hidden">
               <span className="block leading-[1.1] font-bold">{name(member.agent)}</span>
               <span className="block text-[11px] leading-[1.2]">{roleOf(group, member.agent) || 'In this chat'}</span>
             </span>
@@ -387,28 +391,39 @@ function HandoffPanel({ group, delegation }: { group: GroupState; delegation?: D
   )
 }
 
-function Queue({ group }: { group: GroupState }) {
-  const next = group.queue.filter((message) => !message.internal)
+/** Who is working, what is waiting, who leads, and Stop: shown under the roster, so the composer stays the composer. */
+function Status({ group }: { group: GroupState }) {
+  const waiting = group.queue.filter((message) => !message.internal)
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-      <strong>Now</strong>
+    <div className="flex flex-wrap items-center gap-2 border-b border-control px-4 py-2 text-xs max-[480px]:gap-1.5 max-[480px]:px-3">
+      <strong className="max-[480px]:hidden">Now</strong>
       <span className="rounded-[5px] bg-primary px-2 py-[3px] font-semibold text-primary-foreground">{group.running ? name(group.running) : 'Waiting for you'}</span>
-      <strong className="ml-2">Next</strong>
-      {next.length === 0 ? <span className="rounded-[5px] bg-control px-2 py-[3px]">{group.running ? name(group.queue[0]?.target ?? group.lead) : 'You'}</span> : null}
-      {next.map((message) => (
+      {waiting.length > 0 ? <strong className="ml-2 max-[480px]:ml-0">Next</strong> : null}
+      {waiting.map((message) => (
         <span key={message.id} className="flex items-center gap-1 rounded-[5px] bg-control px-2 py-[3px]">
           {name(message.target)}
-          {message.target === group.running ? (
-            <button type="button" className="underline" onClick={() => send({ type: 'stopAndSend', queuedId: message.id })}>
-              send now
-            </button>
-          ) : null}
-          <button type="button" aria-label="Remove from queue" onClick={() => send({ type: 'cancelQueued', queuedId: message.id })}>
+          <button type="button" aria-label={`Remove the message for ${name(message.target)}`} onClick={() => send({ type: 'cancelQueued', queuedId: message.id })}>
             <Codicon name="close" size={12} />
           </button>
         </span>
       ))}
-      <button type="button" disabled={!group.running} className="ml-auto h-7 rounded-md bg-control px-2.5 disabled:opacity-40" onClick={() => send({ type: 'groupStop' })}>
+      <span className="ml-auto" />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="h-7 rounded-md bg-control px-2.5">
+            Lead: {name(group.lead)}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {group.members.map((member) => (
+            <DropdownMenuItem key={member.agent} disabled={member.agent === group.lead} onSelect={() => send({ type: 'groupSetLead', agent: member.agent })}>
+              <ProviderAvatar providerId={member.agent} className="size-5 rounded-md text-[10px]" />
+              Make {name(member.agent)} the lead
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <button type="button" disabled={!group.running} className="h-7 rounded-md bg-control px-2.5 disabled:opacity-40" onClick={() => send({ type: 'groupStop' })}>
         Stop
       </button>
     </div>
@@ -417,94 +432,26 @@ function Queue({ group }: { group: GroupState }) {
 
 /** Puts text in the composer, ready to finish and send. */
 function compose(text: string): void {
-  window.dispatchEvent(new CustomEvent('agentdeck:compose', { detail: text }))
+  editInComposer([{ type: 'text', text }])
 }
 
-function Composer({ group }: { group: GroupState }) {
-  const [text, setText] = useState('')
-  const input = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    const fill = (event: Event) => {
-      setText((event as CustomEvent<string>).detail)
-      input.current?.focus()
-    }
-    window.addEventListener('agentdeck:compose', fill)
-    return () => window.removeEventListener('agentdeck:compose', fill)
-  }, [])
-  const target = /^@(\w+)/.exec(text.trim())?.[1] ?? group.target
-  const submit = () => {
-    if (!text.trim()) return
-    send({ type: 'groupSend', text })
-    setText('')
+/** The full composer, showing the session of the agent the next message goes to. */
+function GroupComposer({ state, group }: { state: ChatState; group: GroupState }) {
+  const member = state.groupComposer
+  const target = group.target
+  const composerState: ChatState = {
+    ...state,
+    sessionId: member?.sessionId ?? group.id,
+    status: group.running ? 'running' : 'idle',
+    facts: member?.facts ?? {},
+    ...(member ? { provider: member.provider } : {}),
+    // The mode and lane pickers read the record; the group's lane applies to every agent in it.
+    ...(member && state.record === undefined ? { record: { mode: member.mode, ...(group.laneId ? { laneId: group.laneId } : {}) } as ChatState['record'] } : {}),
+    items: state.groupItems.flatMap(({ item }) => (item.kind === 'message' && item.role === 'user' && !marker({ agent: '', item }) ? [item] : []))
   }
-  const others = group.members.map((member) => member.agent).filter((agent) => agent !== group.target)
-  return (
-    <div>
-      <textarea
-        ref={input}
-        aria-label="Message"
-        rows={1}
-        className="field-sizing-content max-h-48 min-h-11 w-full resize-none rounded-[10px] bg-surface px-3 py-3"
-        placeholder={`Message ${name(group.target)}${others.length > 0 ? `, or @${others[0]}` : ''}`}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault()
-            submit()
-          }
-        }}
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="h-8 rounded-[7px] bg-control px-2.5 font-semibold">
-              @ Mention
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {group.members.map((member) => (
-              <DropdownMenuItem key={member.agent} onSelect={() => setText(`@${member.agent} ${text.replace(/^@\w+\s*/, '')}`)}>
-                <ProviderAvatar providerId={member.agent} className="size-5 rounded-md text-[10px]" />
-                {name(member.agent)}
-                <span className="text-xs text-muted-foreground">{roleOf(group, member.agent)}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="h-8 rounded-[7px] bg-control px-2.5">
-              Lead: {name(group.lead)}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {group.members.map((member) => (
-              <DropdownMenuItem key={member.agent} disabled={member.agent === group.lead} onSelect={() => send({ type: 'groupSetLead', agent: member.agent })}>
-                <ProviderAvatar providerId={member.agent} className="size-5 rounded-md text-[10px]" />
-                Make {name(member.agent)} the lead
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {name(target)} gets this {group.running === target ? 'when it finishes' : group.running ? 'when it is up' : 'now'}
-        </span>
-        {group.running === target && text.trim() ? (
-          <button
-            type="button"
-            className="h-8 rounded-[7px] bg-primary px-2.5 text-xs font-semibold text-primary-foreground"
-            onClick={() => {
-              send({ type: 'groupSendNow', text })
-              setText('')
-            }}
-          >
-            Stop and send now
-          </button>
-        ) : null}
-      </div>
-    </div>
-  )
+  const agents = group.members.map((entry) => ({ id: entry.agent, label: name(entry.agent), detail: roleOf(group, entry.agent) || 'In this chat' }))
+  const hint = group.running && group.running !== target ? `${name(target)} gets this when ${name(group.running)} finishes · @ to message another agent` : `${name(target)} gets this now · @ to message another agent`
+  return <Composer state={composerState} group={{ agents, placeholder: `Message ${name(target)}, or @ an agent or file`, hint }} />
 }
 
 export function GroupView({ state }: { state: ChatState }) {
@@ -550,6 +497,7 @@ export function GroupView({ state }: { state: ChatState }) {
         <div className="flex h-screen bg-page">
           <div className="flex min-w-0 flex-1 flex-col">
             <Header group={group} />
+            <Status group={group} />
             <Conversation className="min-h-0 flex-1">
               <ConversationContent className="gap-3 px-5 py-4">
                 {items.map((entry) => {
@@ -568,8 +516,9 @@ export function GroupView({ state }: { state: ChatState }) {
                   if (isUser) {
                     previous = 'user'
                     return (
-                      <div key={`${entry.agent}:${entry.item.id}`} className="ml-auto max-w-[min(100%,52rem)] min-w-0 rounded-[10px] bg-control px-3 py-2.5 whitespace-pre-wrap">
-                        {userText(entry)}
+                      <div key={`${entry.agent}:${entry.item.id}`} className="ml-auto max-w-[min(100%,52rem)] min-w-0">
+                        {entry.agent !== group.lead ? <div className="mb-1 text-right text-xs text-muted-foreground">To {name(entry.agent)}</div> : null}
+                        <div className="rounded-[10px] bg-control px-3 py-2.5 whitespace-pre-wrap">{userText(entry)}</div>
                       </div>
                     )
                   }
@@ -615,6 +564,16 @@ export function GroupView({ state }: { state: ChatState }) {
                       <AnswerForm label="Reply" onAnswer={(text) => send({ type: 'answerQuestion', id: question.id, text })} />
                     </div>
                   ))}
+                {group.queue
+                  .filter((message) => !message.internal)
+                  .map((message) => (
+                    <div key={message.id} className="ml-auto max-w-[min(100%,52rem)] min-w-0 opacity-70">
+                      <div className="mb-1 text-right text-xs text-muted-foreground">
+                        To {name(message.target)} · waiting for {group.running ? name(group.running) : 'its turn'}
+                      </div>
+                      <div className="rounded-[10px] border border-dashed border-control px-3 py-2.5 whitespace-pre-wrap">{message.text}</div>
+                    </div>
+                  ))}
                 {finished ? (
                   <button type="button" className="ml-8 min-h-11 rounded-lg bg-primary font-bold text-primary-foreground" onClick={() => send({ type: 'openReview' })}>
                     Review the work
@@ -630,8 +589,7 @@ export function GroupView({ state }: { state: ChatState }) {
                   <BandButton onClick={() => send({ type: 'groupRetry' })}>Retry</BandButton>
                 </div>
               ) : null}
-              <Queue group={group} />
-              <Composer group={group} />
+              <GroupComposer state={state} group={group} />
             </div>
           </div>
           <HandoffPanel group={group} delegation={shown} />

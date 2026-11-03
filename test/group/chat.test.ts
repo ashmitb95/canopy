@@ -160,13 +160,18 @@ describe('GroupChat', () => {
     expect(chat.ledger.all().at(-1)).toMatchObject({ from: 'user', to: 'codex', text: 'use a cursor' })
   })
 
-  it('delivers at the end of the turn where it cannot, ahead of other agents', async () => {
+  it('interrupts an agent that cannot be steered so a message to it goes now, ahead of other agents', async () => {
     await chat.send('@grok long task @codex after')
     await tick()
+    let cancelled = false
+    grok[0].cancel = async () => {
+      cancelled = true
+      grok[0].endTurn()
+    }
     const [result] = await chat.send('@grok use a cursor')
-    expect(result.delivery).toBe('end-of-turn')
-    expect(chat.state().queue.map((message) => message.target)).toEqual(['grok', 'codex'])
-    await finish(grok[0], 'done')
+    await tick()
+    expect(result.delivery).toBe('now')
+    expect(cancelled).toBe(true)
     expect(texts(grok[0]).at(-1)).toContain('use a cursor')
     expect(codex).toHaveLength(0)
   })

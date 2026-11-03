@@ -45,7 +45,10 @@ function AttachMenu({ editor }: { editor: RefObject<PromptEditorHandle | null> }
   )
 }
 
-export function Composer({ state }: { state: ChatState }) {
+/** In a group chat: the agents for the @ menu, the placeholder, and whether a message can go while an agent works. */
+type GroupOptions = { agents: { id: string; label: string; detail?: string }[]; placeholder: string; hint: string }
+
+export function Composer({ state, group }: { state: ChatState; group?: GroupOptions }) {
   const editor = useRef<PromptEditorHandle>(null)
   const [empty, setEmpty] = useState(true)
   const [includeContext, setIncludeContext] = useState(true)
@@ -91,7 +94,8 @@ export function Composer({ state }: { state: ChatState }) {
       )}
       <PromptEditor
         ref={editor}
-        placeholder={busy ? 'Queue a follow-up…' : `Ask ${state.provider?.label ?? 'the agent'}… @ for files, / for commands`}
+        placeholder={group?.placeholder ?? (busy ? 'Queue a follow-up…' : `Ask ${state.provider?.label ?? 'the agent'}… @ for files, / for commands`)}
+        agents={group?.agents}
         commands={commands}
         onSubmit={submit}
         onEmptyChange={setEmpty}
@@ -114,7 +118,7 @@ export function Composer({ state }: { state: ChatState }) {
           fact={state.facts.context?.kind === 'context' ? state.facts.context : undefined}
           canCompact={state.provider?.capabilities.includes('compact') ?? false}
         />
-        {busy ? (
+        {busy && !(group && !empty) ? (
           <Button key="stop" size="icon-sm" variant="secondary" className="shrink-0" aria-label="Stop" onClick={() => send({ type: 'cancel' })}>
             <Codicon name="debug-stop" />
           </Button>
@@ -124,6 +128,7 @@ export function Composer({ state }: { state: ChatState }) {
           </Button>
         )}
       </div>
+      {group ? <div className="px-3 pb-2 text-xs text-muted-foreground">{group.hint}</div> : null}
     </div>
   )
 }

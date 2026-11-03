@@ -3,7 +3,7 @@ import type { GroupState, TimelineItem } from '../group/chat'
 import type { IssueRef } from '../integrations/issues'
 import type { SessionItem } from '../core/types'
 import type { SessionEvent } from '../sessions/manager'
-import type { SessionStatus } from '../sessions/store'
+import type { SessionRecord, SessionStatus } from '../sessions/store'
 
 export type EditorContext = { path: string; label: string; range?: [number, number] }
 
@@ -85,6 +85,9 @@ export type NewLaneData = {
   notes: string[]
 }
 
+/** What the group chat's composer shows: the session of the agent the next message goes to. */
+export type GroupComposer = { agent: string; sessionId: string; provider: ProviderInfo; facts: SessionRecord['facts']; mode: PermissionMode }
+
 export type SessionSummary = {
   id: string
   title: string
@@ -135,6 +138,7 @@ export type HostMessage =
   | { type: 'groupItem'; agent: string; item: SessionItem }
   | { type: 'side'; side: SideData }
   | { type: 'laneCards'; lanes: LaneCard[] }
+  | { type: 'groupComposer'; composer: GroupComposer }
   | { type: 'setup'; setup: SetupData }
   | { type: 'review'; review: ReviewData }
   | { type: 'newLane'; data: NewLaneData }

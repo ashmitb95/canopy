@@ -2,7 +2,7 @@ import type { Quota, SessionItem } from '../../src/core/types'
 import type { QueuedPrompt, SessionEvent } from '../../src/sessions/manager'
 import type { SessionRecord, SessionStatus } from '../../src/sessions/store'
 import type { GroupState, TimelineItem } from '../../src/group/chat'
-import type { EditorContext, HostMessage, LaneInfo, ProviderInfo, SessionSummary, SignInProgress } from '../../src/ui/protocol'
+import type { EditorContext, GroupComposer, HostMessage, LaneInfo, ProviderInfo, SessionSummary, SignInProgress } from '../../src/ui/protocol'
 
 export type ChatState = {
   sessionId?: string
@@ -25,6 +25,8 @@ export type ChatState = {
   /** A group chat, shown instead of a single session. */
   group?: GroupState
   groupItems: TimelineItem[]
+  /** The session of the agent a group chat's next message goes to. */
+  groupComposer?: GroupComposer
 }
 
 export const initialState: ChatState = {
@@ -75,7 +77,9 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
     case 'newLaneError':
       return state
     case 'groupSnapshot':
-      return { ...state, empty: false, group: message.state, groupItems: message.items }
+      return { ...state, empty: false, group: message.state, groupItems: message.items, ...(state.group?.id === message.state.id ? {} : { groupComposer: undefined }) }
+    case 'groupComposer':
+      return { ...state, groupComposer: message.composer }
     case 'groupState':
       return { ...state, group: message.state }
     case 'groupItem':
@@ -103,7 +107,7 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
       return { ...state, signIns }
     }
     case 'session':
-      return { ...sessionEvent(state, message.sessionId, message.event), group: undefined, groupItems: [] }
+      return { ...sessionEvent(state, message.sessionId, message.event), group: undefined, groupItems: [], groupComposer: undefined }
   }
 }
 

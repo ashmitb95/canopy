@@ -9,7 +9,7 @@ import type { Attachment, FileMatch } from '../../../src/ui/protocol'
 import { ask } from '../host'
 import { commandMenu, fileMenu, ImageAttachment, PASTE_LINES, PastedText, SubmitOnEnter } from './nodes'
 import { History } from './history'
-import { toDocument, toParts } from './prompt-document'
+import { AGENT, toDocument, toParts } from './prompt-document'
 import { renderMenu } from './suggestion-menu'
 
 export type PromptEditorHandle = {
@@ -28,6 +28,8 @@ type Props = {
   onEmptyChange: (empty: boolean) => void
   history: PromptPart[][]
   onChange?: (doc: JSONContent) => void
+  /** Agents offered first in the @ menu, in a group chat. */
+  agents?: { id: string; label: string; detail?: string }[]
 }
 
 function attachmentNode(attachment: Attachment): JSONContent {
@@ -46,13 +48,15 @@ function toBase64(buffer: ArrayBuffer): string {
 }
 
 export const PromptEditor = forwardRef<PromptEditorHandle, Props>(function PromptEditor(
-  { placeholder, commands, onSubmit, onEmptyChange, history, onChange },
+  { placeholder, commands, onSubmit, onEmptyChange, history, onChange, agents },
   ref
 ) {
   const placeholderRef = useRef(placeholder)
   placeholderRef.current = placeholder
   const commandsRef = useRef(commands)
   commandsRef.current = commands
+  const agentsRef = useRef(agents)
+  agentsRef.current = agents
   const submitRef = useRef(() => {})
   const historyRef = useRef(history)
   historyRef.current = history
@@ -96,9 +100,13 @@ export const PromptEditor = forwardRef<PromptEditorHandle, Props>(function Promp
           {
             char: '@',
             pluginKey: fileMenu,
-            items: async ({ query }) =>
-              (await ask<FileMatch[]>({ type: 'searchFiles', query })).map((file) => ({ id: file.path, label: file.label })),
-            render: renderMenu('Files')
+            items: async ({ query }) => [
+              ...(agentsRef.current ?? [])
+                .filter((agent) => agent.id.startsWith(query.toLowerCase()) || agent.label.toLowerCase().startsWith(query.toLowerCase()))
+                .map((agent) => ({ id: `${AGENT}${agent.id}`, label: agent.id, description: agent.detail ?? agent.label })),
+              ...(await ask<FileMatch[]>({ type: 'searchFiles', query })).map((file) => ({ id: file.path, label: file.label }))
+            ],
+            render: renderMenu(() => (agentsRef.current?.length ? 'Agents and files' : 'Files'))
           },
           {
             char: '/',

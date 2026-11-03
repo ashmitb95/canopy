@@ -1,6 +1,9 @@
 import type { JSONContent } from '@tiptap/core'
 import type { PromptPart } from '../../../src/core/types'
 
+/** Mention ids for agents carry this prefix, so they are told apart from file paths. */
+export const AGENT = 'agent:'
+
 /** The composer's document as prompt parts: mentions and pills become their own parts, text between them merges. */
 export function toParts(doc: JSONContent): PromptPart[] {
   const parts: PromptPart[] = []
@@ -15,6 +18,8 @@ export function toParts(doc: JSONContent): PromptPart[] {
       const attrs = node.attrs ?? {}
       if (node.type === 'text') text += node.text ?? ''
       else if (node.type === 'hardBreak') text += '\n'
+      // An agent mention is plain text, which the group chat routes by.
+      else if (node.type === 'mention' && String(attrs.id).startsWith(AGENT)) text += `@${String(attrs.id).slice(AGENT.length)}`
       else {
         flush()
         if (node.type === 'mention' && attrs.mentionSuggestionChar === '/') parts.push({ type: 'command', name: String(attrs.id) })

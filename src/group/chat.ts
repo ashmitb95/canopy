@@ -269,9 +269,11 @@ export class GroupChat implements Disposable {
       return 'now'
     }
     if (running) {
-      // Ahead of anyone else's turn: the agent being spoken to hears it as soon as it stops.
+      // It cannot take a message mid-turn: stop it, and the message starts its next turn at once.
       this.record.queue.unshift(message)
-      return 'end-of-turn'
+      this.save()
+      await this.deps.manager.cancel(this.record.members[message.target])
+      return 'now'
     }
     this.record.queue.push(message)
     return busy ? 'queued' : 'now'
@@ -656,6 +658,11 @@ export class GroupChat implements Disposable {
     this.save()
     this.changed()
     await this.deps.manager.prompt(sessionId, [{ type: 'text', text: next.text }])
+  }
+
+  /** The agent's session in this chat, created if it has none yet, so its model and mode can be set before it works. */
+  ensureMember(agent: string): Promise<string> {
+    return this.member(agent)
   }
 
   private async member(agent: string): Promise<string> {

@@ -260,6 +260,7 @@ const groupItems: TimelineItem[] = [
   { agent: 'claude', item: { kind: 'message', id: 'ga2', role: 'assistant', text: 'Codex is done and the tests pass. Sending it to Grok for review.', streaming: false } },
   { agent: 'grok', item: { kind: 'message', id: 'gg0', role: 'user', parts: [{ type: 'text', text: brief('grok', 'review', 'Check the change against the plan.') }] } },
   { agent: 'grok', item: { kind: 'message', id: 'gg1', role: 'assistant', text: 'Reading the plan, then the diff.', streaming: false } },
+  { agent: 'grok', item: { kind: 'message', id: 'gg1u', role: 'user', parts: [{ type: 'text', text: 'Commit as you go, please.' }] } },
   { agent: 'grok', item: { kind: 'tool', id: 'gg2', title: 'Read export.ts', toolKind: 'read', status: 'done' } },
   { agent: 'grok', item: { kind: 'tool', id: 'gg3', title: 'Run git diff main -- api/', toolKind: 'execute', status: 'running' } }
 ]
@@ -405,7 +406,11 @@ const messages: HostMessage[] =
     : scenario === 'states'
       ? [providers, { type: 'groupSnapshot', state: statesGroup, items: [] }]
     : scenario === 'group'
-      ? [providers, { type: 'groupSnapshot', state: groupState, items: groupItems }]
+      ? [
+          providers,
+          { type: 'groupSnapshot', state: { ...groupState, queue: [{ id: 'q9', target: 'codex', text: 'Once Grok is done, tighten the retry test.' }] }, items: groupItems },
+          { type: 'groupComposer', composer: { agent: 'claude', sessionId: 'm1', provider: claude, facts: record.facts, mode: 'accept-edits' } }
+        ]
     : scenario === 'prompts'
       ? [
           providers,

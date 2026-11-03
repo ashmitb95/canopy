@@ -54,19 +54,21 @@ const SuggestionMenu = forwardRef<MenuHandle, MenuProps>(function SuggestionMenu
 })
 
 /** Renders a TipTap suggestion as a floating menu; TipTap's mount() keeps it anchored to the cursor. */
-export function renderMenu(heading: string): SuggestionOptions<MenuItem>['render'] {
+/** The heading may change as the menu opens, such as when agents join the file list. */
+export function renderMenu(heading: string | (() => string)): SuggestionOptions<MenuItem>['render'] {
+  const title = () => (typeof heading === 'function' ? heading() : heading)
   return () => {
     let renderer: ReactRenderer<MenuHandle, MenuProps> | undefined
     let unmount: (() => void) | undefined
     return {
       onStart: (props) => {
         renderer = new ReactRenderer(SuggestionMenu, {
-          props: { items: props.items, command: props.command, heading, loading: props.loading },
+          props: { items: props.items, command: props.command, heading: title(), loading: props.loading },
           editor: props.editor
         })
         unmount = props.mount(renderer.element as HTMLElement)
       },
-      onUpdate: (props) => renderer?.updateProps({ items: props.items, command: props.command, heading, loading: props.loading }),
+      onUpdate: (props) => renderer?.updateProps({ items: props.items, command: props.command, heading: title(), loading: props.loading }),
       onKeyDown: ({ event }) => renderer?.ref?.onKeyDown(event) ?? false,
       onExit: () => {
         unmount?.()

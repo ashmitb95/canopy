@@ -4,7 +4,7 @@ import * as vscode from 'vscode'
 import type { Disposable, Event } from '../core/emitter'
 import type { PromptPart, ProviderDefinition, ProviderState, Quota, SignInFlow } from '../core/types'
 import type { Env } from '../env'
-import type { GroupChats } from '../group/chat'
+import type { GroupChat, GroupChats } from '../group/chat'
 import type { Attention, SessionManager } from '../sessions/manager'
 import { attachFile, saveImage } from './attachments'
 import type { DiffDocuments } from './diff-documents'
@@ -37,6 +37,8 @@ type Surface = {
   groupId?: string
   subscription?: Disposable
   listener?: vscode.Disposable
+  /** In a group chat, the session of the agent the next message goes to, which the composer shows. */
+  member?: { agent: string; sessionId: string; subscription: Disposable }
 }
 
 /** Editor tabs and the sidebar chat. Each subscribes to a session and relays its events. */
@@ -216,9 +218,37 @@ export class ChatSurfaces
     surface.sessionId = undefined
     surface.groupId = chatId
     this.post(surface, { type: 'groupSnapshot', state: chat.state(), items: chat.items() })
-    surface.subscription = chat.onEvent((event) =>
+    surface.subscription = chat.onEvent((event) => {
       this.post(surface, event.type === 'state' ? { type: 'groupState', state: event.state } : { type: 'groupItem', agent: event.agent, item: event.item })
-    )
+      if (event.type === 'state' && event.state.target !== surface.member?.agent) void this.followTarget(surface, chat)
+    })
+    void this.followTarget(surface, chat)
+  }
+
+  /** Points the composer at the agent the next message goes to: its model, effort, mode, and context. */
+  private async followTarget(surface: Surface, chat: GroupChat): Promise<void> {
+    const agent = chat.record.target
+    const sessionId = await chat.ensureMember(agent)
+    if (surface.groupId !== chat.record.id || chat.record.target !== agent) return
+    surface.member?.subscription.dispose()
+    const post = async () => {
+      const record = this.manager.list().find((candidate) => candidate.record.id === sessionId)?.record
+      const provider = this.providers.get(agent)
+      if (record && provider) this.post(surface, { type: 'groupComposer', composer: { agent, sessionId, provider: await this.info(provider), facts: record.facts, mode: record.mode } })
+    }
+    surface.member = { agent, sessionId, subscription: this.manager.subscribe(sessionId, () => void post()) }
+    void this.manager.warm(sessionId)
+    await post()
+  }
+
+  /** A composer prompt as group chat text: files and images become paths the agent can open. */
+  private groupText(parts: PromptPart[], includeContext: boolean): string {
+    const file = includeContext ? this.editor.part() : null
+    return [...parts, ...(file ? [file] : [])]
+      .map((part) => (part.type === 'text' || part.type === 'pasted' ? part.text : part.type === 'file' ? `\`${part.path}\`` : part.type === 'image' ? `(image: ${part.path})` : part.type === 'command' ? `/${part.name}` : ''))
+      .filter(Boolean)
+      .join(' ')
+      .trim()
   }
 
   /** Handles a message from a webview showing a group chat; false for messages that are not about the group. */
@@ -233,7 +263,22 @@ export class ChatSurfaces
         await chat.send(message.text)
         return true
       case 'prompt':
-        await chat.send(message.parts.map((part) => (part.type === 'text' || part.type === 'pasted' ? part.text : '')).join(' ').trim())
+        await chat.send(this.groupText(message.parts, message.includeContext))
+        return true
+      case 'setModel':
+        if (surface.member) await this.manager.setModel(surface.member.sessionId, message.model)
+        return true
+      case 'setMode':
+        if (surface.member) await this.manager.setMode(surface.member.sessionId, message.mode)
+        return true
+      case 'setEffort':
+        if (surface.member) await this.manager.setEffort(surface.member.sessionId, message.effort)
+        return true
+      case 'compact':
+        if (surface.member) await this.manager.compact(surface.member.sessionId)
+        return true
+      case 'setLane':
+        await chat.setLane(message.laneId)
         return true
       case 'groupAnswer':
         chat.answer(message.agent, message.itemId, message.response)
@@ -365,6 +410,8 @@ export class ChatSurfaces
   }
 
   private release(surface: Surface): void {
+    surface.member?.subscription.dispose()
+    surface.member = undefined
     surface.subscription?.dispose()
     surface.listener?.dispose()
   }
@@ -538,6 +585,8 @@ export class ChatSurfaces
 
   private show(surface: Surface, sessionId: string): void {
     surface.subscription?.dispose()
+    surface.member?.subscription.dispose()
+    surface.member = undefined
     surface.groupId = undefined
     surface.sessionId = sessionId
     surface.subscription = this.manager.subscribe(sessionId, (event) =>

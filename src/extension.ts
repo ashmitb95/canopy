@@ -8,7 +8,7 @@ import { customAgent } from './providers/acp/agents'
 import { buildProviders } from './providers/registry'
 import type { SessionManager } from './sessions/manager'
 import { type Core, createCore } from './group/host'
-import { githubIssue, type Issue, laneName, linearIssue, seedLane } from './integrations/issues'
+import { seedLane } from './integrations/issues'
 import { attachFile } from './ui/attachments'
 import { ChatSurfaces, type LaneSource, PANEL_TYPE, SIDEBAR_VIEW } from './ui/chat-surfaces'
 import { configFiles } from './ui/config-files'
@@ -17,6 +17,7 @@ import { EditorContextTracker } from './ui/editor-context'
 import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { Notifier } from './ui/notifier'
 import type { LaneNode, SessionNode } from './ui/sessions-tree'
+import { NewLaneView } from './ui/new-lane-view'
 import { ReviewView } from './ui/review-view'
 import { SetupView } from './ui/setup-view'
 import { SIDE_VIEW, SideView } from './ui/side-view'
@@ -88,33 +89,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (chat) await surfaces.showGroupInSidebar(chat.record.id)
   }
 
-  /** An issue to start a lane from: undefined for a blank lane, null if the user backed out. */
-  const pickIssue = async (): Promise<Issue | undefined | null> => {
-    const source = await vscode.window.showQuickPick(
-      [
-        { label: 'Blank', description: 'Name the lane yourself', id: 'blank' },
-        { label: 'From a GitHub issue', description: 'Uses your gh login', id: 'github' },
-        { label: 'From a Linear issue', description: 'Uses your Linear API key', id: 'linear' }
-      ],
-      { placeHolder: 'Start the lane from…' }
-    )
-    if (!source) return null
-    if (source.id === 'blank') return undefined
-    const ref = await vscode.window.showInputBox({ prompt: source.id === 'github' ? 'Issue number or URL' : 'Issue identifier, such as ENG-214' })
-    if (!ref?.trim()) return null
-    try {
-      if (source.id === 'github') return await githubIssue(tracker?.repos[0]?.path ?? root ?? storage, ref.trim())
-      let key = await context.secrets.get(LINEAR_SECRET)
-      if (!key) {
-        await vscode.commands.executeCommand('agentdeck.setLinearKey')
-        key = await context.secrets.get(LINEAR_SECRET)
-      }
-      return key ? await linearIssue(ref.trim(), key) : null
-    } catch (error) {
-      void vscode.window.showErrorMessage(`Couldn't read that issue: ${(error as Error).message}`)
-      return null
+  const newLane = new NewLaneView({
+    html: (webview) => surfaces.html(webview, 'new-lane'),
+    roots: () => surfaces.roots(),
+    repos: () => tracker?.repos.map((repo) => repo.name) ?? [],
+    githubCwd: () => tracker?.repos[0]?.path,
+    linearKey: async () => context.secrets.get(LINEAR_SECRET),
+    agents: async () => (await surfaces.providerInfos()).map((agent) => ({ id: agent.id, label: agent.label, ready: agent.state.status === 'signed-in' })),
+    roster: () => {
+      const config = vscode.workspace.getConfiguration('agentdeck.roster')
+      return { lead: config.get('lead', 'claude'), research: config.get('research', ''), implement: config.get('implement', ''), review: config.get('review', '') }
+    },
+    create: async ({ name, repos, lead, issue }) => {
+      if (!lanes) throw new Error('Open a folder to use lanes.')
+      if (issue && memory) seedLane(memory, name, issue)
+      await lanes.newLane(name, repos, { worktrees: true, ...(issue ? { goal: `${issue.title} (${issue.id})` } : {}) })
+      await newGroup({ lead, laneId: name, title: issue?.title ?? name })
     }
-  }
+  })
+
   void surfaces.markInstalled()
   const notifier = new Notifier(
     sessionManager,
@@ -210,40 +203,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       memory.ensure(node.lane.name)
       await vscode.window.showTextDocument(vscode.Uri.file(memory.planPath(node.lane.name)))
     }),
-    vscode.commands.registerCommand('agentdeck.newLane', async () => {
-      if (!lanes || !tracker) return void vscode.window.showInformationMessage('Open a folder to use lanes.')
-      const issue = await pickIssue()
-      if (issue === null) return
-      const name = await vscode.window.showInputBox({
-        prompt: 'Lane name (the branch name)',
-        ...(issue ? { value: laneName(issue) } : {}),
-        validateInput: (value) => (/^[\w][\w./-]*$/.test(value.trim()) ? undefined : 'Letters, digits, and . _ / - only')
-      })
-      if (!name?.trim()) return
-      const goal = issue ? `${issue.title} (${issue.id})` : await vscode.window.showInputBox({ prompt: `Goal for ${name.trim()} (optional)` })
-      const repos = await vscode.window.showQuickPick(
-        tracker.repos.map((repo) => ({ label: repo.name })),
-        { canPickMany: true, placeHolder: 'Repos the lane starts in' }
-      )
-      if (!repos || repos.length === 0) return
-      const where = await vscode.window.showQuickPick(
-        [
-          { label: 'Worktrees', description: 'Separate checkouts, warmed up; the primary checkout stays as it is', worktrees: true },
-          { label: 'Primary checkout', description: 'Work where the code runs (it must be free)', worktrees: false }
-        ],
-        { placeHolder: 'Where does the lane start?' }
-      )
-      if (!where) return
-      const lead = await vscode.window.showQuickPick(
-        [...providers.values()].map((provider) => ({ label: provider.label, id: provider.id })),
-        { placeHolder: 'Which agent leads? The roster in settings assigns the other roles.' }
-      )
-      const created = await runLane(`Creating ${name.trim()}…`, async () => {
-        if (issue && memory) seedLane(memory, name.trim(), issue)
-        await lanes.newLane(name.trim(), repos.map((repo) => repo.label), { worktrees: where.worktrees, goal: goal?.trim() || undefined })
-      })
-      if (created && lead) await newGroup({ lead: lead.id, laneId: name.trim(), title: issue?.title ?? name.trim() })
-    }),
+    vscode.commands.registerCommand('agentdeck.newLane', () => (lanes ? newLane.open() : vscode.window.showInformationMessage('Open a folder to use lanes.'))),
+    newLane,
     vscode.commands.registerCommand('agentdeck.laneIntoPrimary', (node: LaneNode) =>
       lanes ? runLane(`Moving ${node.lane.name} to the primary checkout…`, () => lanes.moveIntoPrimary(node.lane.name)) : undefined
     ),

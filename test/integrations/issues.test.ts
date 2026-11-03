@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createPullRequest, githubIssue, laneName, linearIssue, seedLane } from '../../src/integrations/issues'
+import { createPullRequest, githubIssue, githubIssues, laneName, linearIssue, linearIssues, seedLane } from '../../src/integrations/issues'
 import { LaneMemory } from '../../src/lanes/memory'
 
 describe('issues', () => {
@@ -28,6 +28,25 @@ describe('issues', () => {
     expect(sent).toEqual({ url: 'https://api.linear.app/graphql', auth: 'lin_key' })
     const missing = (async () => new Response(JSON.stringify({ errors: [{ message: 'Entity not found' }] }))) as unknown as typeof fetch
     await expect(linearIssue('ENG-1', 'k', missing)).rejects.toThrow('Entity not found')
+  })
+
+  it('lists open GitHub issues assigned to the user, then the newest', async () => {
+    const calls: string[][] = []
+    const runner = async (_file: string, args: string[]) => {
+      calls.push(args)
+      return JSON.stringify(args.includes('@me') ? [{ number: 482, title: 'Dark mode', url: 'u482' }] : [{ number: 482, title: 'Dark mode', url: 'u482' }, { number: 7, title: 'Old bug', url: 'u7' }])
+    }
+    expect(await githubIssues('/w', runner)).toEqual([
+      { source: 'github', id: '#482', title: 'Dark mode', url: 'u482' },
+      { source: 'github', id: '#7', title: 'Old bug', url: 'u7' }
+    ])
+    expect(calls[0]).toEqual(['issue', 'list', '--state', 'open', '--assignee', '@me', '--limit', '10', '--json', 'number,title,url'])
+  })
+
+  it('lists open Linear issues assigned to the user', async () => {
+    const fetcher = (async () =>
+      new Response(JSON.stringify({ data: { viewer: { assignedIssues: { nodes: [{ identifier: 'ENG-214', title: 'Exports time out', url: 'u' }] } } } }))) as unknown as typeof fetch
+    expect(await linearIssues('k', fetcher)).toEqual([{ source: 'linear', id: 'ENG-214', title: 'Exports time out', url: 'u' }])
   })
 
   it('names the lane from the issue, and seeds its goal and notes', () => {

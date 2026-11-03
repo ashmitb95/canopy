@@ -253,6 +253,33 @@ const messages: HostMessage[] =
         { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
         { type: 'empty' }
       ]
+    : scenario === 'new-lane'
+      ? [
+          {
+            type: 'newLane',
+            data: {
+              repos: ['api', 'ui'],
+              agents: [
+                { id: 'claude', label: 'Claude', ready: true },
+                { id: 'codex', label: 'Codex', ready: true },
+                { id: 'grok', label: 'Grok', ready: true }
+              ],
+              roster: { lead: 'claude', research: 'grok', implement: 'grok', review: 'codex' },
+              issues: [],
+              notes: []
+            }
+          },
+          {
+            type: 'newLaneIssues',
+            issues: [
+              { source: 'linear', id: 'ENG-214', title: 'Exports time out on large invoices', url: '' },
+              { source: 'github', id: '#482', title: 'Dark mode loses contrast in tables', url: '' },
+              { source: 'linear', id: 'ENG-198', title: 'Add audit log for admin actions', url: '' }
+            ],
+            notes: [],
+            pick: 'ENG-214'
+          }
+        ]
     : scenario === 'review'
       ? [
           {

@@ -1,5 +1,6 @@
 import type { Capability, PermissionMode, PromptPart, PromptResponse, ProviderState, Quota } from '../core/types'
 import type { GroupState, TimelineItem } from '../group/chat'
+import type { IssueRef } from '../integrations/issues'
 import type { SessionItem } from '../core/types'
 import type { SessionEvent } from '../sessions/manager'
 import type { SessionStatus } from '../sessions/store'
@@ -75,6 +76,15 @@ export type ReviewData = {
   }[]
 }
 
+/** The New Worktree form. */
+export type NewLaneData = {
+  repos: string[]
+  agents: { id: string; label: string; ready: boolean }[]
+  roster: { lead: string; research: string; implement: string; review: string }
+  issues: IssueRef[]
+  notes: string[]
+}
+
 export type SessionSummary = {
   id: string
   title: string
@@ -127,6 +137,9 @@ export type HostMessage =
   | { type: 'laneCards'; lanes: LaneCard[] }
   | { type: 'setup'; setup: SetupData }
   | { type: 'review'; review: ReviewData }
+  | { type: 'newLane'; data: NewLaneData }
+  | { type: 'newLaneIssues'; issues: IssueRef[]; notes: string[]; pick?: string }
+  | { type: 'newLaneError'; message: string }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -183,6 +196,9 @@ export type WebviewMessage =
   | { type: 'setRepoSetup'; repo: string; command: string }
   | { type: 'setEnvFiles'; value: string }
   | { type: 'finishSetup' }
+  | { type: 'openSetup' }
+  | { type: 'newLaneFindIssue'; ref: string }
+  | { type: 'newLaneCreate'; name: string; repos: string[]; lead: string; issue?: Pick<IssueRef, 'source' | 'id'> }
   | { type: 'viewHandoff'; id: string }
   | { type: 'openLaneDiff' }
   | { type: 'createPullRequest' }

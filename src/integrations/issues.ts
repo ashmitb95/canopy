@@ -1,6 +1,9 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { LaneMemory } from '../lanes/memory'
+import { laneName } from './lane-name'
+
+export { laneName }
 
 const exec = promisify(execFile)
 
@@ -20,6 +23,35 @@ export async function githubIssue(cwd: string, ref: string, runner: Runner = run
   return { source: 'github', id: `#${data.number}`, title: data.title, url: data.url, body: data.body ?? '', comments: data.comments.map((comment) => `${comment.author?.login ?? 'someone'}: ${comment.body}`) }
 }
 
+/** An issue in a list, before its text is fetched. */
+export type IssueRef = Pick<Issue, 'source' | 'id' | 'title' | 'url'>
+
+/** Open GitHub issues for the repo: the user's own first, then the newest. */
+export async function githubIssues(cwd: string, runner: Runner = run): Promise<IssueRef[]> {
+  const list = async (extra: string[]) =>
+    (JSON.parse(await runner('gh', ['issue', 'list', '--state', 'open', ...extra, '--limit', '10', '--json', 'number,title,url'], cwd)) as { number: number; title: string; url: string }[]).map(
+      (issue): IssueRef => ({ source: 'github', id: `#${issue.number}`, title: issue.title, url: issue.url })
+    )
+  const mine = await list(['--assignee', '@me'])
+  const newest = await list([])
+  return [...mine, ...newest.filter((issue) => !mine.some((own) => own.id === issue.id))].slice(0, 10)
+}
+
+/** Open Linear issues assigned to the user. */
+export async function linearIssues(apiKey: string, fetcher: typeof fetch = fetch): Promise<IssueRef[]> {
+  const query = 'query { viewer { assignedIssues(first: 10, filter: { state: { type: { nin: ["completed", "canceled"] } } }) { nodes { identifier title url } } } }'
+  const response = await fetcher('https://api.linear.app/graphql', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: apiKey },
+    body: JSON.stringify({ query })
+  })
+  if (!response.ok) throw new Error(`Linear answered ${response.status}.`)
+  const data = (await response.json()) as { data?: { viewer?: { assignedIssues?: { nodes: { identifier: string; title: string; url: string }[] } } }; errors?: { message: string }[] }
+  const nodes = data.data?.viewer?.assignedIssues?.nodes
+  if (!nodes) throw new Error(data.errors?.[0]?.message ?? 'Linear sent no issues.')
+  return nodes.map((issue) => ({ source: 'linear', id: issue.identifier, title: issue.title, url: issue.url }))
+}
+
 /** A Linear issue, with an API key the user added. The key goes only to Linear's API. */
 export async function linearIssue(identifier: string, apiKey: string, fetcher: typeof fetch = fetch): Promise<Issue> {
   const query = 'query($id: String!) { issue(id: $id) { identifier title url description comments { nodes { body user { name } } } } }'
@@ -35,17 +67,6 @@ export async function linearIssue(identifier: string, apiKey: string, fetcher: t
   return { source: 'linear', id: issue.identifier, title: issue.title, url: issue.url, body: issue.description ?? '', comments: (issue.comments?.nodes ?? []).map((comment) => `${comment.user?.name ?? 'someone'}: ${comment.body}`) }
 }
 
-/** A branch name from an issue: `eng-214-export-timeouts`. */
-export function laneName(issue: Issue): string {
-  const slug = issue.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .split('-')
-    .slice(0, 5)
-    .join('-')
-  return `${issue.id.replace('#', '').toLowerCase()}-${slug}`.replace(/-+$/, '')
-}
 
 /** Fetched once by the app, so agents spend no context on it: the lane's goal, and the issue in its notes for every brief to point at. */
 export function seedLane(memory: LaneMemory, lane: string, issue: Issue): void {

@@ -112,6 +112,7 @@ function restoreTree(path: string, tree: string): void {
 
 const MAX_QUESTION_ROUNDS = 5
 const DEFAULT_SETTLE_MS = 120_000
+const BACKGROUND_GRACE_MS = 2_000
 
 const NARRATE = 'Before each step, say in one short line what you are doing or what you just found.'
 const SAID_DELEGATE = /\b(hand(ing)?( it| this| that)? (off|over)|delegat(e|ing)|pass(ing)? (it|this) to)\b/i
@@ -174,7 +175,7 @@ export class GroupChat implements Disposable {
   private readonly seenItems = new Set<string>()
   private readonly timeline: { agent: string; id: string }[] = []
   private readonly latest = new Map<string, SessionItem[]>()
-  private current: { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string }[]; processes: Set<number> } | undefined
+  private current: { agent: string; entry: number; started: boolean; delegation?: string; itemsAtStart: number; before: { path: string; tree: string; outsideLane?: boolean }[]; processes: Set<number> } | undefined
   private limited: string | undefined
   private starting = false
   private pendingFacts: Pick<Facts, 'stillRunning' | 'servicesLeft'> = {}
@@ -659,9 +660,11 @@ export class GroupChat implements Disposable {
   private async settle(delegation: Delegation, status: SessionStatus, current: NonNullable<GroupChat['current']>): Promise<boolean> {
     if (status === 'error' || !this.watchesProcesses || !this.deps.root) return false
     const root = this.deps.root
-    const first = await activity(root, current.processes)
     delegation.status = 'settling'
     this.changed()
+    // Shells and helpers wind down as a turn ends; only what outlives this pause counts as background work.
+    await new Promise((resolve) => setTimeout(resolve, BACKGROUND_GRACE_MS))
+    const first = await activity(root, current.processes)
     const outcome = await waitForSettled(root, current.processes, this.deps.settleLimitMs ?? DEFAULT_SETTLE_MS)
     const describe = (proc: { pid: number; command: string }) => `${proc.pid} ${proc.command.slice(0, 80)}`
     const services = outcome.activity.services.map((proc) => `${proc.pid} ${proc.command.slice(0, 80)} (port ${proc.ports.join(',')})`)
@@ -692,7 +695,7 @@ export class GroupChat implements Disposable {
   private async finishDelegation(delegation: Delegation, agent: string, status: SessionStatus, reply: string, current: NonNullable<GroupChat['current']>, violation: Violation | undefined): Promise<void> {
     const items = (this.latest.get(agent) ?? []).slice(current.itemsAtStart)
     const commands = items.flatMap((item) => (item.kind === 'tool' && (item.toolKind === 'execute' || item.title.startsWith('Run ') || item.title.startsWith('Bash ')) ? [{ command: item.title.replace(/^(Bash|Run|Command Execute)\s+/, '').split('\n')[0].slice(0, 160), failed: item.status === 'failed' }] : []))
-    const files = current.before.flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
+    const files = current.before.filter((entry) => !entry.outsideLane).flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
     const facts: Facts = { files, commands, violations: violation ? violation.files : [], ...this.pendingFacts }
     this.pendingFacts = {}
     if (this.record.verify && agent === this.record.roster.implement && files.length > 0) facts.verify = await this.runVerify(this.record.verify)
@@ -723,7 +726,7 @@ export class GroupChat implements Disposable {
       `Files changed: ${facts?.files.join('; ') || 'none'}`,
       `Commands run: ${facts?.commands.map((command) => `${command.command}${command.failed ? ' (failed)' : ''}`).join('; ') || 'none'}`,
       ...(facts?.verify ? [`AgentDeck ran ${facts.verify.command}: ${facts.verify.ok ? 'passed' : `FAILED\n${facts.verify.output}`}`] : []),
-      ...(facts?.violations.length ? [`Writes its role does not allow: ${facts.violations.join('; ')}`] : []),
+      ...(facts?.violations.length ? [`Writes it should not have made: ${facts.violations.join('; ')}`] : []),
       ...(facts?.stillRunning?.length ? [`Still running after AgentDeck stopped waiting: ${facts.stillRunning.join('; ')}. Decide whether to keep waiting or call stop_work.`] : []),
       ...(facts?.servicesLeft?.length ? [`Servers left running: ${facts.servicesLeft.join('; ')}. Stop them with stop_work when nothing needs them.`] : []),
       ...(delegation.status === 'question' ? [`${delegation.agent} is asking the question above and waiting. If this conversation already settles it, call answer_delegate and cite where. If not, or if it is a product decision, call ask_user. Never guess.`] : []),
@@ -753,10 +756,13 @@ export class GroupChat implements Disposable {
     })
   }
 
-  private snapshot(): { path: string; tree: string }[] {
-    return (this.deps.checkouts?.(this.record.laneId) ?? []).flatMap((path) => {
+  /** The lane's checkouts, plus the primary checkouts, where a stray command run from the workspace root lands. */
+  private snapshot(): { path: string; tree: string; outsideLane?: boolean }[] {
+    const lane = this.deps.checkouts?.(this.record.laneId) ?? []
+    const others = this.record.laneId ? (this.deps.checkouts?.(undefined) ?? []).filter((path) => !lane.includes(path)) : []
+    return [...lane, ...others].flatMap((path) => {
       try {
-        return [{ path, tree: snapshotTree(path) }]
+        return [{ path, tree: snapshotTree(path), ...(others.includes(path) ? { outsideLane: true } : {}) }]
       } catch {
         return []
       }
@@ -764,13 +770,14 @@ export class GroupChat implements Disposable {
   }
 
   /** The backstop: edit tools are blocked for read-only roles, but a shell command can still write. */
-  private checkViolation(agent: string, before: { path: string; tree: string }[]): Violation | undefined {
-    if (!this.record.enforce || !this.record.roster.implement || agent === this.record.roster.implement) return undefined
-    const files = before.flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
+  private checkViolation(agent: string, before: { path: string; tree: string; outsideLane?: boolean }[]): Violation | undefined {
+    const writer = !this.record.enforce || !this.record.roster.implement || agent === this.record.roster.implement
+    const watched = writer ? before.filter((entry) => entry.outsideLane) : before
+    const files = watched.flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
     if (files.length === 0) return undefined
-    const violation: Violation = { id: randomUUID(), agent, files, before }
+    const violation: Violation = { id: randomUUID(), agent, files, before: watched }
     this.record.violations.push(violation)
-    this.ledger.append({ from: 'agentdeck', text: `${agent} changed files its role does not allow: ${files.join('; ')}. The user can undo this.` })
+    this.ledger.append({ from: 'agentdeck', text: `${agent} changed files it should not have: ${files.join('; ')}${writer ? ', outside its lane' : ''}. The user can undo this.` })
     return violation
   }
 

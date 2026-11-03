@@ -354,6 +354,28 @@ describe('delegation', () => {
     expect(readFileSync(join(repo, 'a.txt'), 'utf8')).toBe('a\n')
   })
 
+  it('flags a stray write outside the lane, even by the agent allowed to write', async () => {
+    const lane = mkdtempSync(join(tmpdir(), 'agentdeck-lane-'))
+    execFileSync('git', ['init', '-q', '-b', 'lane'], { cwd: lane })
+    const primary = repo
+    const providers = fakeProvider('codex', ['steer'])
+    const map = new Map([[providers.provider.id, providers.provider]])
+    let group: GroupChats | undefined
+    const manager = new SessionManager({ providers: map, store: new SessionStore(new MemoryMemento()), journalDir: join(dir, 'j2'), cwd: dir, env: async () => ({}), decorate: (record, parts) => group?.decorate(record, parts) ?? Promise.resolve(parts) })
+    group = new GroupChats({ manager, providers: map, dir: join(dir, 'g2'), root: primary, watchProcesses: false, checkouts: (name) => (name ? [lane] : [primary]) })
+    const stray = group.create({ lead: 'codex', roster: { implement: 'codex' }, laneId: 'lane' })
+    await stray.send('work')
+    await tick()
+    writeFileSync(join(lane, 'fine.txt'), 'x\n')
+    writeFileSync(join(primary, 'stray.txt'), 'x\n')
+    await finish(providers.sessions[0], 'done')
+    await tick()
+    expect(stray.state().violations[0].files).toEqual(['A\tstray.txt'])
+    stray.undoViolation(stray.state().violations[0].id)
+    expect(existsSync(join(primary, 'stray.txt'))).toBe(false)
+    expect(existsSync(join(lane, 'fine.txt'))).toBe(true)
+  })
+
   it('reports a failed delegate without waking the lead, and stops the queue', async () => {
     await chat.send('build')
     await tick()

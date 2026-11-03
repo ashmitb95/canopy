@@ -49,8 +49,9 @@ async function scenario(env: Env, worker: string, name: string, body: (chat: Gro
 
 async function main(): Promise<void> {
   const env = await captureEnv()
+  const only = process.env.ONLY
   for (const worker of process.argv.slice(2).length > 0 ? process.argv.slice(2) : ['grok', 'codex']) {
-    await scenario(env, worker, 'reports done with background work running', async (chat, slot) => {
+    if (!only) await scenario(env, worker, 'reports done with background work running', async (chat, slot) => {
       await chat.send(`Delegate this exact task to implement: "Start this in the background and do not wait: (sleep 20; echo '1 test failed: export.test.js' > result.log) &   Then end your turn immediately with STATUS: done." When its report comes back, tell me in one sentence whether the task succeeded.`)
       await quiet(chat)
       const delegation = chat.state().delegations[0]
@@ -60,11 +61,12 @@ async function main(): Promise<void> {
       const last = chat.ledger.all().at(-1)?.text ?? ''
       check('the lead did not call it a success', /(fail|did not succeed|didn.t succeed|not succeed|not confirmed|missing|blocked|never)/i.test(last), last)
     })
-    await scenario(env, worker, 'asks what the chat already settles', async (chat) => {
+    if (!only) await scenario(env, worker, 'asks what the chat already settles', async (chat) => {
       await chat.send(`Exports must stay in CSV format. Now delegate this exact task to implement: "Do not edit anything. Ask what format exports should use, as your line STATUS: question What format should exports use?" When it asks, answer from this conversation. When it is done, tell me its final answer.`)
       await quiet(chat)
       const asked = chat.state().userQuestions
       const said = chat.ledger.all().map((entry) => entry.text).join('\n')
+      for (const entry of chat.ledger.all()) console.log(`      [${entry.from}${entry.to ? `>${entry.to}` : ''}] ${entry.text.replace(/\s+/g, ' ').slice(0, 200)}`)
       check('the lead answered, without bothering the user', asked.length === 0 && /Answer: .*csv/i.test(said), JSON.stringify(asked))
     })
     await scenario(env, worker, 'asks a product decision', async (chat) => {
@@ -82,7 +84,8 @@ async function main(): Promise<void> {
       await quiet(chat)
       const delegation = chat.state().delegations[0]
       console.log(`      status ${delegation?.status}; last: ${chat.ledger.all().at(-1)?.text.replace(/\s+/g, ' ').slice(0, 140)}`)
-      check('nothing hung, and nothing is left running', !delegation?.facts?.servicesLeft && delegation?.status !== 'settling')
+      const left = execFileSync('sh', ['-c', "pgrep -f 'createServer' || true"], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).length
+      check('the lead stopped the server, and it is really gone', chat.ledger.all().some((entry) => entry.text.startsWith('Stopped what')) && left <= 1 && !delegation?.facts?.servicesLeft, `${left} matching`)
     })
   }
   process.exit(0)

@@ -2,4 +2,5 @@
 !dist/extension.js
 !dist/webview/**
 !media/agentdeck.svg
+!media/lanes.svg
 !package.json

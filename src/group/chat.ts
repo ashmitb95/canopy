@@ -289,7 +289,8 @@ export class GroupChat implements Disposable {
     const results: { id: string; target: string; delivery: Delivery }[] = []
     for (const segment of parseMentions(text, this.agents)) {
       const target = segment.target ?? this.record.lead
-      const queued: QueuedMessage = { id: randomUUID(), target, text: segment.text }
+      // The mention stays in the text, so the message reads as written in the chat and in everyone's catch-up.
+      const queued: QueuedMessage = { id: randomUUID(), target, text: segment.target ? `@${segment.target} ${segment.text}` : segment.text }
       results.push({ id: queued.id, target, delivery: await this.deliver(queued) })
     }
     this.save()

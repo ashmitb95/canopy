@@ -105,6 +105,7 @@ describe('GroupChat', () => {
     await finish(claude[0], 'hi')
     await chat.send('@codex build it')
     await tick()
+    expect(texts(codex[0])[0]).toContain('@codex build it')
     await finish(codex[0], 'built')
     await chat.send('and test it')
     await tick()
@@ -132,7 +133,7 @@ describe('GroupChat', () => {
     await chat.send('@grok what did codex say')
     await tick()
     expect(texts(grok[0])[0]).toContain('[codex] noted apple')
-    expect(texts(grok[0])[0]).toContain('[user to codex] note the word apple')
+    expect(texts(grok[0])[0]).toContain('[user to codex] @codex note the word apple')
     expect(texts(grok[0])[0].match(/what did codex say/g)).toHaveLength(1)
     await finish(grok[0], 'it said apple')
     await chat.send('@codex and now')
@@ -159,7 +160,7 @@ describe('GroupChat', () => {
     expect(result.delivery).toBe('now')
     expect(codex[0].steers).toHaveLength(1)
     expect(chat.state().queue).toEqual([])
-    expect(chat.ledger.all().at(-1)).toMatchObject({ from: 'user', to: 'codex', text: 'use a cursor' })
+    expect(chat.ledger.all().at(-1)).toMatchObject({ from: 'user', to: 'codex', text: '@codex use a cursor' })
   })
 
   it('interrupts an agent that cannot be steered so a message to it goes now, ahead of other agents', async () => {

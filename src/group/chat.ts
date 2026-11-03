@@ -22,7 +22,7 @@ export type Roster = Partial<Record<Role, string>>
 
 export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted'
 export type Facts = { files: string[]; commands: { command: string; failed: boolean }[]; verify?: { command: string; ok: boolean; output: string }; violations: string[]; stillRunning?: string[]; servicesLeft?: string[] }
-export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean }
+export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean; added?: string[]; answers?: { question: string; answer: string; by: string }[] }
 export type UserQuestion = { id: string; from: string; delegation?: string; question: string; itemId?: string }
 export type Violation = { id: string; agent: string; files: string[]; before: { path: string; tree: string }[]; undone?: boolean }
 
@@ -386,8 +386,14 @@ export class GroupChat implements Disposable {
     const delegation = this.waitingOn(agent)
     if (!delegation) return `${agent} is not waiting on a question.`
     this.ledger.append({ from: this.record.lead, to: agent, text: `Answer: ${answer}` })
+    this.recordAnswer(delegation, answer, this.record.lead)
     this.resumeDelegate(delegation, `The lead answered your question: ${answer}\nCarry on. End with a STATUS line as before.`)
     return 'Sent. End your turn now.'
+  }
+
+  private recordAnswer(delegation: Delegation, answer: string, by: string): void {
+    const question = /STATUS:\s*question\W*(.*)/i.exec(delegation.report ?? '')?.[1]?.trim() || delegation.report || ''
+    delegation.answers = [...(delegation.answers ?? []), { question, answer, by }]
   }
 
   private askUser(agent: string, question: string): string {
@@ -409,6 +415,7 @@ export class GroupChat implements Disposable {
       if (item?.kind === 'question') this.answer(question.from, question.itemId, { kind: 'answers', answers: item.questions.map((asked) => ({ questionId: asked.id, optionIds: [], other: answer })) })
     } else {
       const delegation = this.record.delegations.find((candidate) => candidate.id === question.delegation)
+      if (delegation) this.recordAnswer(delegation, answer, 'user')
       if (delegation) this.resumeDelegate(delegation, `The user answered your question: ${answer}\nCarry on. End with a STATUS line as before.`)
       else this.record.queue.unshift({ id: randomUUID(), target: question.from, text: answer })
     }
@@ -547,7 +554,16 @@ export class GroupChat implements Disposable {
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */
   catchUp(agent: string, parts: PromptPart[]): PromptPart[] {
     const cursor = this.record.cursors[agent] ?? 0
-    const text = catchUpText(this.ledger.missed(cursor, agent, this.current?.agent === agent ? this.current.entry : undefined), join(this.deps.dir, this.record.id, 'ledger.jsonl'))
+    const missed = this.ledger.missed(cursor, agent, this.current?.agent === agent ? this.current.entry : undefined)
+    const text = catchUpText(missed, join(this.deps.dir, this.record.id, 'ledger.jsonl'))
+    // What AgentDeck put in a delegate's first prompt, for the handoff panel.
+    const starting = this.record.delegations.find((delegation) => delegation.agent === agent && delegation.status === 'running' && !delegation.added)
+    if (starting) {
+      starting.added = [
+        ...(missed.length > 0 ? [`${missed.length} ${missed.length === 1 ? 'message' : 'messages'} from the chat, word for word`] : []),
+        ...(this.record.laneId ? [`The ${this.record.laneId} lane: goal, plan, notes, and what changed`] : [])
+      ]
+    }
     this.record.cursors[agent] = this.ledger.length
     const brief = agent === this.record.lead && Object.keys(this.record.roster).length > 0 && this.record.briefed !== agent
     if (brief) this.record.briefed = agent

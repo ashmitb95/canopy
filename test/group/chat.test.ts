@@ -313,6 +313,7 @@ describe('delegation', () => {
     expect(report).toContain('touch built.txt')
     expect(report).toContain('AgentDeck ran test -f built.txt: passed')
     expect(chat.state().delegations[0]).toMatchObject({ status: 'done' })
+    expect(chat.state().delegations[0].added?.[0]).toMatch(/^\d+ messages? from the chat, word for word$/)
     expect(readFileSync(chat.state().delegations[0].handoff ?? '', 'utf8')).toContain('Built it.')
   })
 
@@ -465,6 +466,7 @@ describe('delegation', () => {
     await settled()
     expect(texts(codex[0]).at(-1)).toContain('CSV, from the first message')
     expect(codex).toHaveLength(1)
+    expect(chat.state().delegations[0].answers).toEqual([{ question: 'what format?', answer: 'CSV, from the first message', by: 'claude' }])
   })
 
   it('brings a question the lead cannot settle to the user, then back to the agent', async () => {

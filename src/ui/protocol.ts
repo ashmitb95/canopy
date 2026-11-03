@@ -203,6 +203,7 @@ export type WebviewMessage =
   | { type: 'openLaneDiff' }
   | { type: 'createPullRequest' }
   | { type: 'openReview' }
+  | { type: 'groupSetLead'; agent: string }
   | { type: 'connectLinear' }
   | { type: 'disconnectLinear' }
   | { type: 'groupAnswer'; agent: string; itemId: string; response: PromptResponse }

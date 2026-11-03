@@ -251,6 +251,14 @@ export class ChatSurfaces
       case 'openReview':
         await vscode.commands.executeCommand('agentdeck.reviewGroup', chat.record.id)
         return true
+      case 'groupSetLead':
+        chat.setLead(message.agent)
+        return true
+      case 'viewHandoff': {
+        const handoff = chat.record.delegations.find((delegation) => delegation.id === message.id)?.handoff
+        if (handoff) await vscode.window.showTextDocument(vscode.Uri.file(handoff), { preview: true })
+        return true
+      }
       case 'cancel':
       case 'groupStop':
         await chat.stop()

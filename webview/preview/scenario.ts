@@ -211,12 +211,12 @@ const groupState: GroupState = {
   title: 'Export timeouts',
   lead: 'claude',
   target: 'claude',
-  running: 'codex',
-  queue: [{ id: 'q1', target: 'grok', text: 'review it' }],
+  running: 'grok',
+  queue: [],
   members: [
     { agent: 'claude', status: 'idle', activity: '' },
-    { agent: 'codex', status: 'running', activity: '$ node --test' },
-    { agent: 'grok', status: 'idle', activity: '' }
+    { agent: 'codex', status: 'idle', activity: '' },
+    { agent: 'grok', status: 'running', activity: 'Reading export.ts' }
   ],
   roster: { plan: 'claude', implement: 'codex', review: 'grok' },
   delegations: [
@@ -225,23 +225,43 @@ const groupState: GroupState = {
       lead: 'claude',
       agent: 'codex',
       role: 'implement',
-      task: 'Stream invoice rows and fix retries',
-      doneWhen: 'the 50,000-row test passes',
-      status: 'running'
+      task: 'Stream invoice rows and fix retries, per the plan.',
+      doneWhen: 'The 50,000-row test passes.',
+      status: 'done',
+      report: 'Done. Old endpoint kept. Exports over 1M rows warn first, as you chose.\nSTATUS: done',
+      facts: { files: ['M\tapi/export.ts', 'M\tapi/queue.ts'], commands: [{ command: 'pnpm test', failed: false }], verify: { command: 'pnpm test', ok: true, output: '215 passed' }, violations: [] },
+      added: ['3 messages from the chat, word for word', 'The export-timeouts lane: goal, plan, notes, and what changed'],
+      answers: [{ question: 'Keep the old /export endpoint?', answer: 'Yes, from your first message.', by: 'claude' }],
+      handoff: '/tmp/handoff.md',
+      snapshots: []
+    },
+    {
+      id: 'd2',
+      lead: 'claude',
+      agent: 'grok',
+      role: 'review',
+      task: 'Check the change against the plan.',
+      doneWhen: '',
+      status: 'running',
+      added: ['2 messages from the chat, word for word', "Codex's handoff and the lane plan"]
     }
   ],
-  violations: [{ id: 'v1', agent: 'grok', files: ['A\tnotes.txt'], before: [] }],
-  userQuestions: [{ id: 'uq1', from: 'codex', question: 'Exports over 1 million rows could take minutes. Block them, or warn and continue?' }],
+  violations: [{ id: 'v1', agent: 'grok', files: ['M\tapi/export.ts'], before: [] }],
+  userQuestions: [],
   quotas: {}
 }
+const brief = (agent: string, role: string, task: string) => `You are ${agent}, delegated this by claude in a group chat run by AgentDeck, in the ${role} role.\nTask: ${task}`
 const groupItems: TimelineItem[] = [
-  { agent: 'claude', item: { kind: 'message', id: 'gu1', role: 'user', parts: [{ type: 'text', text: 'Exports time out on large invoices. Keep the CSV format.' }] } },
-  { agent: 'claude', item: { kind: 'message', id: 'ga1', role: 'assistant', text: 'export.ts loads every row into memory. I will stream rows instead, and hand the build to Codex.', streaming: false } },
-  { agent: 'codex', item: { kind: 'message', id: 'gc0', role: 'user', parts: [{ type: 'text', text: 'You are codex, delegated this by claude in a group chat run by AgentDeck, in the implement role.\nTask: Stream invoice rows and fix retries' }] } },
+  { agent: 'claude', item: { kind: 'message', id: 'gu1', role: 'user', parts: [{ type: 'text', text: 'Exports time out on large invoices (ENG-214). Keep the CSV format and the old endpoint.' }] } },
+  { agent: 'claude', item: { kind: 'message', id: 'ga1', role: 'assistant', text: "export.ts loads every row into memory. I'd stream rows and restart retries from an empty file. Plan saved to the lane.", streaming: false } },
+  { agent: 'codex', item: { kind: 'message', id: 'gc0', role: 'user', parts: [{ type: 'text', text: brief('codex', 'implement', 'Stream invoice rows and fix retries, per the plan.') }] } },
   { agent: 'codex', item: { kind: 'message', id: 'gc1', role: 'assistant', text: 'Reading export.ts first.', streaming: false } },
-  { agent: 'codex', item: { kind: 'tool', id: 'gt1', title: 'Run cat export.ts queue.ts', toolKind: 'execute', status: 'done', output: 'export const limit = 10' } },
-  { agent: 'codex', item: { kind: 'message', id: 'gc2', role: 'assistant', text: 'Found that retries append to the partial file; fixing that too.', streaming: false } },
-  { agent: 'codex', item: { kind: 'tool', id: 'gt2', title: 'Run node --test', toolKind: 'execute', status: 'running' } }
+  { agent: 'codex', item: { kind: 'tool', id: 'gt1', title: 'Run pnpm test', toolKind: 'execute', status: 'done', output: '215 passed' } },
+  { agent: 'claude', item: { kind: 'message', id: 'ga2', role: 'assistant', text: 'Codex is done and the tests pass. Sending it to Grok for review.', streaming: false } },
+  { agent: 'grok', item: { kind: 'message', id: 'gg0', role: 'user', parts: [{ type: 'text', text: brief('grok', 'review', 'Check the change against the plan.') }] } },
+  { agent: 'grok', item: { kind: 'message', id: 'gg1', role: 'assistant', text: 'Reading the plan, then the diff.', streaming: false } },
+  { agent: 'grok', item: { kind: 'tool', id: 'gg2', title: 'Read export.ts', toolKind: 'read', status: 'done' } },
+  { agent: 'grok', item: { kind: 'tool', id: 'gg3', title: 'Run git diff main -- api/', toolKind: 'execute', status: 'running' } }
 ]
 
 // `?scenario=new` shows the provider chooser instead of a chat.

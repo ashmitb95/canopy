@@ -64,8 +64,13 @@ body.vscode-high-contrast {
   --control: color-mix(in srgb, var(--vscode-foreground) 14%, var(--vscode-editor-background));
 }
 
-/* In a light sidebar there is nothing lighter than the editor color, so raised rows are a tint instead. */
-body.vscode-light[data-surface="side"] {
+/* Sidebar webviews sit on the sidebar's color. In a light sidebar nothing is lighter than the editor color, so raised rows are a tint instead. */
+body[data-surface="side"],
+body[data-surface="view"] {
+  --page: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+body.vscode-light[data-surface="side"],
+body.vscode-light[data-surface="view"] {
   --surface: color-mix(in srgb, var(--vscode-foreground) 6%, var(--vscode-sideBar-background, var(--vscode-editor-background)));
   --control: color-mix(in srgb, var(--vscode-foreground) 12%, var(--vscode-sideBar-background, var(--vscode-editor-background)));
 }
@@ -92,8 +97,8 @@ body.vscode-high-contrast [data-card="primary"] {
   outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
   color: var(--vscode-foreground);
 }
-body.vscode-high-contrast [data-card="primary"] * {
-  color: inherit;
+body.vscode-high-contrast button:is([class~="bg-primary"], [class~="bg-primary-foreground"], [class~="bg-control"], [class~="bg-band"], [class~="bg-surface"], [class~="bg-page"]) {
+  outline: 1px solid var(--vscode-contrastBorder);
 }
 
 @theme inline {

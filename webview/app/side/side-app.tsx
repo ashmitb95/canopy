@@ -46,7 +46,7 @@ function Lanes({ lanes }: { lanes: NonNullable<SideData['lanes']> }) {
         <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">The primary checkout is on its base branch.</div>
       )}
       {warm.map((lane) => (
-        <div key={lane.name} data-card="" className="flex items-center gap-2 rounded-md bg-card py-1 pr-1 pl-3">
+        <div key={lane.name} data-card="" data-vscode-context={JSON.stringify({ webviewSection: 'lane', lane: { name: lane.name }, preventDefaultContextMenuItems: true })} className="flex items-center gap-2 rounded-md bg-card py-1 pr-1 pl-3">
           <span className="min-w-0 flex-1">
             <span className="block truncate font-mono text-xs font-medium">{lane.name}</span>
             <span className="block truncate text-[11px] text-muted-foreground">{lane.where}</span>
@@ -128,7 +128,12 @@ export function SideApp() {
           {data.sessions.map((session) => {
             const status = STATUS[session.status] ?? STATUS.idle
             return (
-              <button key={session.id} type="button" className="flex w-full gap-2 rounded-md px-2 py-2 text-left hover:bg-accent" onClick={() => send({ type: 'openSession', sessionId: session.id })}>
+              <button
+                key={session.id}
+                type="button"
+                data-vscode-context={JSON.stringify({ webviewSection: 'session', id: session.id, title: session.title, preventDefaultContextMenuItems: true })}
+                className="flex w-full gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
+                onClick={() => send({ type: 'openSession', sessionId: session.id })}>
                 <ProviderAvatar providerId={session.providerId} className="size-5 text-[10px]" />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">

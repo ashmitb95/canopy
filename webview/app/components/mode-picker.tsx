@@ -10,7 +10,7 @@ import type { PermissionMode } from '../../../src/core/types'
 import { send } from '../host'
 import { Codicon } from './codicon'
 
-const MODES: Record<PermissionMode, { label: string; icon: string }> = {
+export const MODES: Record<PermissionMode, { label: string; icon: string }> = {
   ask: { label: 'Ask before edits', icon: 'shield' },
   'accept-edits': { label: 'Accept edits', icon: 'edit' },
   auto: { label: 'Auto', icon: 'sparkle' },

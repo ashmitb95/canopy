@@ -462,8 +462,7 @@ function GroupComposer({ state, group }: { state: ChatState; group: GroupState }
     items: state.groupItems.flatMap(({ item }) => (item.kind === 'message' && item.role === 'user' && !marker({ agent: '', item }) ? [item] : []))
   }
   const agents = group.members.map((entry) => ({ id: entry.agent, label: name(entry.agent), detail: roleOf(group, entry.agent) || 'In this chat' }))
-  const hint = `${name(target)} gets this now · @ to message another agent`
-  return <Composer state={composerState} group={{ agents, placeholder: `Message ${name(target)}, or @ an agent or file`, hint }} />
+  return <Composer state={composerState} group={{ agents, placeholder: `Message ${name(target)}, or @ an agent or file` }} />
 }
 
 export function GroupView({ state }: { state: ChatState }) {

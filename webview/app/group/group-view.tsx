@@ -65,6 +65,11 @@ function Header({ group }: { group: GroupState }) {
           </span>
         )
       })}
+      {group.delegations.length > 0 ? (
+        <Button size="sm" variant="ghost" onClick={() => send({ type: 'openReview' })}>
+          Review
+        </Button>
+      ) : null}
     </header>
   )
 }

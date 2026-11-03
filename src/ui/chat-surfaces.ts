@@ -248,6 +248,9 @@ export class ChatSurfaces
       case 'cancelQueued':
         chat.cancelQueued(message.queuedId)
         return true
+      case 'openReview':
+        await vscode.commands.executeCommand('agentdeck.reviewGroup', chat.record.id)
+        return true
       case 'cancel':
       case 'groupStop':
         await chat.stop()
@@ -727,7 +730,7 @@ export class ChatSurfaces
     return PALETTES.includes(palette) ? palette : 'paper'
   }
 
-  html(webview: vscode.Webview, kind: SurfaceKind | 'side' | 'lanes' | 'setup'): string {
+  html(webview: vscode.Webview, kind: SurfaceKind | 'side' | 'lanes' | 'setup' | 'review'): string {
     const nonce = randomBytes(16).toString('base64')
     const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.assets(), name))
     // Scripts run by nonce; the entry module imports its code-split chunks from the webview origin.

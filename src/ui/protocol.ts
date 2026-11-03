@@ -44,6 +44,28 @@ export type SetupData = {
   linear: boolean
 }
 
+/** The review screen for one group chat: who did what, with what AgentDeck recorded and each delegate's diff. */
+export type ReviewData = {
+  title: string
+  laneId?: string
+  inPrimary: boolean
+  delegations: {
+    id: string
+    agent: string
+    role?: string
+    task: string
+    status: string
+    report?: string
+    verify?: { command: string; ok: boolean }
+    violations: string[]
+    commands: number
+    failedCommands: number
+    undone: boolean
+    handoff: boolean
+    files: { path: string; added: number; removed: number; lines: string[] }[]
+  }[]
+}
+
 export type SessionSummary = {
   id: string
   title: string
@@ -95,6 +117,7 @@ export type HostMessage =
   | { type: 'side'; side: SideData }
   | { type: 'laneCards'; lanes: LaneCard[] }
   | { type: 'setup'; setup: SetupData }
+  | { type: 'review'; review: ReviewData }
 
 /** Webview → extension host. */
 export type WebviewMessage =
@@ -142,6 +165,10 @@ export type WebviewMessage =
   | { type: 'setEnforce'; value: boolean }
   | { type: 'editWorkspaceConfig' }
   | { type: 'manageAgents' }
+  | { type: 'viewHandoff'; id: string }
+  | { type: 'openLaneDiff' }
+  | { type: 'createPullRequest' }
+  | { type: 'openReview' }
   | { type: 'connectLinear' }
   | { type: 'disconnectLinear' }
   | { type: 'groupAnswer'; agent: string; itemId: string; response: PromptResponse }

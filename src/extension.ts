@@ -17,6 +17,7 @@ import { EditorContextTracker } from './ui/editor-context'
 import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { Notifier } from './ui/notifier'
 import type { LaneNode, SessionNode } from './ui/sessions-tree'
+import { ReviewView } from './ui/review-view'
 import { SetupView } from './ui/setup-view'
 import { SIDE_VIEW, SideView } from './ui/side-view'
 import { SessionsStatusBar } from './ui/status-bar'
@@ -56,6 +57,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   side = new SideView((webview, kind) => surfaces.html(webview, kind), () => surfaces.roots(), sessionManager, core.chats, unread, tracker, lanes)
 
   const setup = new SetupView((webview) => surfaces.html(webview, 'setup'), () => surfaces.roots(), () => surfaces.providerInfos(), context.secrets, LINEAR_SECRET, tracker, root ?? storage)
+
+  const review = new ReviewView({
+    html: (webview) => surfaces.html(webview, 'review'),
+    roots: () => surfaces.roots(),
+    chats: core.chats,
+    lanes: () => side.allLanes(),
+    repos: () => tracker?.repos ?? [],
+    switchLane: (lane) => side.switchLane(lane)
+  })
 
   /** A group chat with the roster from settings; the lead can be overridden. */
   const newGroup = async (options: { lead?: string; laneId?: string; title?: string }) => {
@@ -138,6 +148,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('agentdeck.openGroup', (groupId: string) => surfaces.showGroupInSidebar(groupId)),
     vscode.commands.registerCommand('agentdeck.openLanes', () => side.openLanes()),
     vscode.commands.registerCommand('agentdeck.openSetup', () => setup.open()),
+    vscode.commands.registerCommand('agentdeck.reviewGroup', (groupId: string) => review.open(groupId)),
+    review,
     setup,
     new SessionsStatusBar(sessionManager),
     vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),

@@ -69,6 +69,7 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
     case 'side':
     case 'laneCards':
     case 'setup':
+    case 'review':
       return state
     case 'groupSnapshot':
       return { ...state, empty: false, group: message.state, groupItems: message.items }

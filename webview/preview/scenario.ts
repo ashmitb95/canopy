@@ -253,6 +253,28 @@ const messages: HostMessage[] =
         { type: 'signInProgress', providerId: 'codex', progress: { step: 'link', url: 'https://auth.openai.com/oauth/authorize?x=1' } },
         { type: 'empty' }
       ]
+    : scenario === 'review'
+      ? [
+          {
+            type: 'review',
+            review: {
+              title: 'Export timeouts',
+              laneId: 'export-timeouts',
+              inPrimary: false,
+              delegations: [
+                { id: 'd1', agent: 'claude', role: 'research', task: 'Find why large exports time out', status: 'done', report: 'export.ts loads every row into memory. Streaming fixes it without changing the response.', violations: [], commands: 4, failedCommands: 0, undone: false, handoff: true, files: [] },
+                {
+                  id: 'd2', agent: 'codex', role: 'implement', task: 'Stream rows in the export and fix retries', status: 'done', report: 'Done. The old endpoint is kept. Exports over 1M rows warn first.', verify: { command: 'pnpm test', ok: true }, violations: [], commands: 9, failedCommands: 1, undone: false, handoff: true,
+                  files: [
+                    { path: 'api/export.ts', added: 3, removed: 2, lines: ['@@ -10,6 +10,7 @@ export async function exportCsv(invoice, res) {', '-  const rows = await loadAll(invoice)', '-  return toCsv(rows)', '+  const cursor = openCursor(invoice)', "+  if ((await cursor.count()) > 1_000_000) warnLarge(res)", '+  return streamCsv(cursor, res)', ' }'] },
+                    { path: 'api/queue.ts', added: 1, removed: 1, lines: ['@@ -3,3 +3,3 @@', '-const RETRIES = 0', '+const RETRIES = 3'] }
+                  ]
+                },
+                { id: 'd3', agent: 'grok', role: 'review', task: 'Review the export change', status: 'done', report: 'Passes. One note: exports have no progress indicator.', violations: ['wrote api/export.ts'], commands: 2, failedCommands: 0, undone: false, handoff: true, files: [] }
+              ]
+            }
+          }
+        ]
     : scenario === 'setup'
       ? [
           {

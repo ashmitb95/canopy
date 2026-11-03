@@ -165,7 +165,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   /** Moves a lane into the primary checkout, asking the questions preflight raises. */
-  private async switchLane(lane: string, answers: { makeLane?: string; takeForeign?: boolean } = {}): Promise<void> {
+  async switchLane(lane: string, answers: { makeLane?: string; takeForeign?: boolean } = {}): Promise<void> {
     if (!this.lanes) return
     try {
       const lines = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Switching to ${lane}…` }, () => this.lanes?.moveIntoPrimary(lane, answers) ?? Promise.resolve([]))

@@ -358,6 +358,7 @@ function HandoffPanel({ group, delegation }: { group: GroupState; delegation?: D
         <>
           {delegation.task}
           {delegation.doneWhen ? ` Done when ${delegation.doneWhen.replace(/^./, (first) => first.toLowerCase())}` : ''}
+          {delegation.context ? <div className="mt-2 max-h-72 overflow-auto border-t border-band pt-2 whitespace-pre-wrap text-muted-foreground">{delegation.context}</div> : null}
         </>
       )}
       {section('Added by AgentDeck', undefined, delegation.added ? (delegation.added.length > 0 ? delegation.added.map((line) => <div key={line}>{line}</div>) : 'Nothing: it had seen the whole chat.') : <span className="text-muted-foreground">Added when it starts.</span>)}

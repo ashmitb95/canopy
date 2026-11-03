@@ -11,6 +11,8 @@ import { SessionStore } from '../../src/sessions/store'
 import { FakeSession, fakeProvider } from '../fake-provider'
 import { MemoryMemento } from '../memory-memento'
 
+// The lead's findings and plan; delegations without enough context are refused.
+const CONTEXT = 'Findings: export.ts loads every row. Plan: stream rows with a cursor in export.ts, keep the CSV format, add a test for 50,000 rows.'
 const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
 const texts = (session: FakeSession | undefined) => session?.prompts.map((parts) => parts.flatMap((part) => (part.type === 'text' ? part.text : '')).join('\n')) ?? []
 
@@ -302,7 +304,7 @@ describe('delegation', () => {
   it('runs a delegate only after the lead ends its turn, then wakes the lead with the report and facts', async () => {
     await chat.send('build it')
     await tick()
-    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Make built.txt', doneWhen: 'it exists' })).toContain('Accepted')
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Make built.txt', doneWhen: 'it exists', context: CONTEXT })).toContain('Accepted')
     await tick()
     expect(codex).toHaveLength(0)
     await finish(claude[0], 'handing over')
@@ -325,7 +327,7 @@ describe('delegation', () => {
   it('reports what a failed verify really says, whatever the agent claims', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'Make it' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'Make it', context: CONTEXT })
     await finish(claude[0], 'ok')
     writeFileSync(join(repo, 'other.txt'), 'x\n')
     await finish(codex[0], 'All good.\nSTATUS: done')
@@ -336,7 +338,7 @@ describe('delegation', () => {
   it('shows when an agent ran nothing, and when it gave no status', async () => {
     await chat.send('review')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'review', task: 'Run the tests' })
+    chat.handleTool('claude', 'delegate', { to: 'review', task: 'Run the tests', context: CONTEXT })
     await finish(claude[0], 'ok')
     await finish(grok[0], 'The tests pass.')
     await tick()
@@ -346,10 +348,22 @@ describe('delegation', () => {
     expect(chat.state().delegations[0].status).toBe('unknown')
   })
 
+  it('refuses a delegation without the context its role needs, and gives the delegate that context and its role', async () => {
+    await chat.send('build')
+    await tick()
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Fix it' })).toContain('Not sent')
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Fix it', context: 'see above' })).toContain('implementation plan')
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Fix it', context: CONTEXT })).toContain('Accepted')
+    await finish(claude[0], 'handing over')
+    expect(texts(codex[0])[0]).toContain(CONTEXT)
+    expect(texts(codex[0])[0]).toContain('do not re-research')
+    expect(texts(claude[0])[0]).toContain('You own the research and the plan')
+  })
+
   it('refuses delegation from anyone but the lead, to nobody, or to itself', async () => {
-    expect(chat.handleTool('codex', 'delegate', { to: 'review', task: 'x' })).toContain('Only the lead')
-    expect(chat.handleTool('claude', 'delegate', { to: 'research', task: 'x' })).toContain('Nobody holds')
-    expect(chat.handleTool('claude', 'delegate', { to: 'plan', task: 'x' })).toContain('That is you')
+    expect(chat.handleTool('codex', 'delegate', { to: 'review', task: 'x', context: CONTEXT })).toContain('Only the lead')
+    expect(chat.handleTool('claude', 'delegate', { to: 'research', task: 'x', context: CONTEXT })).toContain('Nobody holds')
+    expect(chat.handleTool('claude', 'delegate', { to: 'plan', task: 'x', context: CONTEXT })).toContain('That is you')
   })
 
   it('reminds a lead once if it says it will delegate but does not', async () => {
@@ -407,12 +421,12 @@ describe('delegation', () => {
     git('config', 'commit.gpgsign', 'false')
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'first' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'first', context: CONTEXT })
     await finish(claude[0], 'ok')
     writeFileSync(join(repo, 'first.txt'), 'one\n')
     await finish(codex[0], 'STATUS: done')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'second' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'second', context: CONTEXT })
     await finish(claude[0], 'next')
     writeFileSync(join(repo, 'second.txt'), 'two\n')
     await finish(codex[0], 'STATUS: done')
@@ -429,7 +443,7 @@ describe('delegation', () => {
   it('refuses to undo when later edits overlap, changing nothing', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'edit a' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'edit a', context: CONTEXT })
     await finish(claude[0], 'ok')
     writeFileSync(join(repo, 'a.txt'), 'by codex\n')
     await finish(codex[0], 'STATUS: done')
@@ -442,7 +456,7 @@ describe('delegation', () => {
   it('reports a failed delegate without waking the lead, and stops the queue', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     codex[0].exit('boom')
     await tick()
@@ -464,7 +478,7 @@ describe('delegation', () => {
   it('marks a delegate the user stopped, keeps its changes, does not wake the lead, and resumes it on request', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     expect(chat.state().delegations[0].startedAt).toBeTruthy()
     codex[0].cancel = async () => codex[0].endTurn()
@@ -482,7 +496,7 @@ describe('delegation', () => {
   it('keeps a delegation going when the user redirects the delegate mid-turn', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'grok', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'grok', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     await chat.send('@grok commit as you go')
     await finish(grok[0], 'working on it')
@@ -498,7 +512,7 @@ describe('delegation', () => {
   it('reopens the delegation when the lead sends its delegate more instructions', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'grok', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'grok', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     await finish(grok[0], 'read the issue')
     await tick()
@@ -515,7 +529,7 @@ describe('delegation', () => {
   it('cancels a delegate that has not started', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     chat.cancelDelegation(chat.state().delegations[0].id)
     await finish(claude[0], 'ok')
     expect(chat.state().delegations[0].status).toBe('stopped')
@@ -525,7 +539,7 @@ describe('delegation', () => {
   it('lets the user answer a delegate in place of the lead', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     await finish(codex[0], 'STATUS: question what format?')
     chat.answerDelegate(chat.state().delegations[0].id, 'CSV')
@@ -549,7 +563,7 @@ describe('delegation', () => {
   it('sends a question to the lead, and its answer back to the same delegate', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     await finish(codex[0], 'STATUS: question what format?')
     await settled()
@@ -565,7 +579,7 @@ describe('delegation', () => {
   it('brings a question the lead cannot settle to the user, then back to the agent', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     await finish(codex[0], 'STATUS: question block or warn?')
     await settled()
@@ -584,7 +598,7 @@ describe('delegation', () => {
     const direct = chats.create({ lead: 'claude', roster: { implement: 'codex' }, questionsTo: 'user' })
     await direct.send('build')
     await tick()
-    direct.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    direct.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude.at(-1), 'ok')
     await finish(codex.at(-1), 'STATUS: question which?')
     await settled()
@@ -594,7 +608,7 @@ describe('delegation', () => {
   it('stops looping and asks the user after too many rounds', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     for (let round = 0; round < 6; round += 1) {
       await finish(codex[0], `STATUS: question round ${round}`)
@@ -625,7 +639,7 @@ describe('delegation', () => {
   it('resumes an interrupted delegate after a restart and tells it to ask again', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     expect(chat.state().delegations[0].status).toBe('running')
     const { id } = chat.record
@@ -642,7 +656,7 @@ describe('delegation', () => {
     chat = lead()
     await chat.send('build')
     await until(() => (claude[0]?.prompts.length ?? 0) > 0)
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     await until(() => (codex[0]?.prompts.length ?? 0) > 0)
     const child = spawn('sh', ['-c', 'sleep 3; echo failed > log.txt'], { cwd: repo, stdio: 'ignore' })
@@ -666,7 +680,7 @@ describe('delegation', () => {
     chat = lead()
     await chat.send('build')
     await until(() => (claude.at(-1)?.prompts.length ?? 0) > 0)
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude.at(-1), 'ok')
     await until(() => (codex.at(-1)?.prompts.length ?? 0) > 0)
     const child = spawn('sh', ['-c', 'exec sleep 60'], { cwd: repo, stdio: 'ignore' })
@@ -684,7 +698,7 @@ describe('delegation', () => {
   it('lets a mention reach a delegate while it works', async () => {
     await chat.send('build')
     await tick()
-    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x' })
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude[0], 'ok')
     expect((await chat.send('@codex use a cursor'))[0].delivery).toBe('now')
     expect(codex[0].steers).toHaveLength(1)

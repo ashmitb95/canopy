@@ -22,7 +22,7 @@ export type Roster = Partial<Record<Role, string>>
 
 export type DelegationStatus = 'queued' | 'running' | 'settling' | 'done' | 'blocked' | 'question' | 'overdue' | 'unknown' | 'failed' | 'interrupted' | 'stopped'
 export type Facts = { files: string[]; commands: { command: string; failed: boolean }[]; verify?: { command: string; ok: boolean; output: string }; violations: string[]; stillRunning?: string[]; servicesLeft?: string[] }
-export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean; startedAt?: string; resuming?: boolean; added?: string[]; answers?: { question: string; answer: string; by: string }[] }
+export type Delegation = { id: string; lead: string; agent: string; role?: Role; task: string; doneWhen: string; context?: string; status: DelegationStatus; report?: string; facts?: Facts; handoff?: string; rounds?: number; verified?: boolean; snapshots?: { path: string; before: string; after: string }[]; undone?: boolean; startedAt?: string; resuming?: boolean; added?: string[]; answers?: { question: string; answer: string; by: string }[] }
 export type UserQuestion = { id: string; from: string; delegation?: string; question: string; itemId?: string }
 export type Violation = { id: string; agent: string; files: string[]; before: { path: string; tree: string }[]; undone?: boolean; allowed?: boolean }
 
@@ -113,6 +113,27 @@ function restoreTree(path: string, tree: string): void {
   }
 }
 
+/** Shorter than this, a delegation's context cannot hold findings or a plan. */
+const MIN_CONTEXT = 80
+
+/** What the lead must give each role. */
+const NEEDS: Record<Role | 'other', string> = {
+  research: 'the questions to answer and what is already known',
+  plan: 'the goal, the constraints, and what is already known',
+  implement: 'your findings and the implementation plan: files to change, the approach, the steps, and facts you verified',
+  review: 'what changed, where, and the plan or requirements to check it against',
+  other: 'the goal, what is already known, and what to do'
+}
+
+/** How each role works from the lead's context. */
+const GUIDE: Record<Role | 'other', string> = {
+  research: 'Answer the questions in the context. Report findings with file paths and evidence. Do not edit files.',
+  plan: 'Write a concrete plan from the context: files, approach, steps, and risks. Do not edit code.',
+  implement: 'The lead has done the research and written the plan above. Go straight to the change: read only the files the plan names or the change needs, and do not re-research the codebase. If the plan is wrong or something you need is missing, stop with STATUS: question and say what.',
+  review: 'Check the change against the plan above. Read the diff and the files it touches. Report problems with file and line, and say plainly when it passes. Do not edit files.',
+  other: 'Work from the context above. If something you need is missing, stop with STATUS: question and say what.'
+}
+
 const MAX_QUESTION_ROUNDS = 5
 const DEFAULT_SETTLE_MS = 120_000
 const BACKGROUND_GRACE_MS = 2_000
@@ -128,7 +149,16 @@ export function groupTools(handle: (caller: string, name: string, args: Record<s
     {
       name: 'delegate',
       description: 'Hands work to another agent in this chat, by role or by name. It returns at once. End your turn right after; the report starts your next turn.',
-      inputSchema: { type: 'object', properties: { to: { type: 'string', description: 'A role (research, plan, implement, review) or an agent name.' }, task: { type: 'string' }, doneWhen: { type: 'string' } }, required: ['to', 'task'] },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          to: { type: 'string', description: 'A role (research, plan, implement, review) or an agent name.' },
+          task: { type: 'string' },
+          doneWhen: { type: 'string' },
+          context: { type: 'string', description: 'Everything the delegate needs for its role, so it can start at once. Implement: your findings and the plan (files, approach, steps, facts you verified). Review: what changed and what to check it against. Research: the questions and what is already known.' }
+        },
+        required: ['to', 'task', 'context']
+      },
       call: (args, caller) => handle(caller, 'delegate', args)
     },
     {
@@ -410,7 +440,10 @@ export class GroupChat implements Disposable {
     if (target === agent) return `That is you: do this work yourself, without delegating.`
     const limit = this.quotaWarning(target)
     const held = role ?? ROLES.find((candidate) => this.record.roster[candidate] === target)
-    const delegation: Delegation = { id: randomUUID(), lead: agent, agent: target, ...(held ? { role: held } : {}), task: String(args.task ?? ''), doneWhen: String(args.doneWhen ?? ''), status: 'queued' }
+    const context = String(args.context ?? '').trim()
+    // A delegate should start on its work, not rediscover what the lead already knows.
+    if (context.length < MIN_CONTEXT) return `Not sent: give ${target} what it needs as \`context\`: ${NEEDS[held ?? 'other']}. Research it yourself first, or delegate the research.`
+    const delegation: Delegation = { id: randomUUID(), lead: agent, agent: target, ...(held ? { role: held } : {}), task: String(args.task ?? ''), doneWhen: String(args.doneWhen ?? ''), context, status: 'queued' }
     this.record.delegations.push(delegation)
     this.save()
     this.changed()
@@ -599,11 +632,11 @@ export class GroupChat implements Disposable {
 
   private leadBrief(agent: string): string {
     const writer = this.record.roster.implement
-    return `You lead a group chat of coding agents run by AgentDeck, and you own the work you hand out. Roster: ${this.rosterText()}.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only.` : ''} When work belongs to another agent, call the delegate tool from the agentdeck MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what AgentDeck recorded, and decide what happens next.`
+    return `You lead a group chat of coding agents run by AgentDeck, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only.` : ''} When work belongs to another agent, call the delegate tool from the agentdeck MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what AgentDeck recorded, and decide what happens next.`
   }
 
   private delegationText(delegation: Delegation): string {
-    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by AgentDeck${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.task}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the agentdeck MCP server.`
+    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by AgentDeck${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.task}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}${delegation.context ? `\n\nContext from ${delegation.lead}:\n${delegation.context}` : ''}\n\n${GUIDE[delegation.role ?? 'other']}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the agentdeck MCP server.`
   }
 
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */

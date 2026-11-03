@@ -37,7 +37,7 @@ function Lanes({ lanes }: { lanes: NonNullable<SideData['lanes']> }) {
     <div className="space-y-1 p-2">
       {primary.length > 0 ? (
         primary.map((lane) => (
-          <div key={lane.name} className="rounded-md bg-primary px-3 py-2 text-primary-foreground">
+          <div key={lane.name} data-card="primary" className="rounded-md bg-primary px-3 py-2 text-primary-foreground">
             <div className="text-[10px] font-bold tracking-wider">PRIMARY CHECKOUT · RUNS HERE</div>
             <div className="truncate font-mono font-semibold">{lane.name}</div>
           </div>
@@ -46,7 +46,7 @@ function Lanes({ lanes }: { lanes: NonNullable<SideData['lanes']> }) {
         <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">The primary checkout is on its base branch.</div>
       )}
       {warm.map((lane) => (
-        <div key={lane.name} className="flex items-center gap-2 rounded-md bg-card py-1 pr-1 pl-3">
+        <div key={lane.name} data-card="" className="flex items-center gap-2 rounded-md bg-card py-1 pr-1 pl-3">
           <span className="min-w-0 flex-1">
             <span className="block truncate font-mono text-xs font-medium">{lane.name}</span>
             <span className="block truncate text-[11px] text-muted-foreground">{lane.where}</span>

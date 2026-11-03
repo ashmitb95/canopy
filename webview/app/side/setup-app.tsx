@@ -79,7 +79,7 @@ export function SetupApp() {
         <p className="mb-3 text-xs text-muted-foreground">New group chats start with this roster. The lead hands each kind of work to the agent you set, without being asked.</p>
         <div className="space-y-2">
           {ROLES.map(({ role, label, hint }) => (
-            <label key={role} className="flex items-center gap-3">
+            <label key={role} className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="w-24 shrink-0 font-medium">{label}</span>
               <select
                 className="h-8 w-40 rounded-md border bg-background px-2"
@@ -93,16 +93,16 @@ export function SetupApp() {
                   </option>
                 ))}
               </select>
-              <span className="min-w-0 flex-1 text-xs text-muted-foreground">{hint}</span>
+              <span className="min-w-[12rem] flex-1 text-xs text-muted-foreground">{hint}</span>
             </label>
           ))}
           <label className="flex items-center gap-3 pt-1">
             <input type="checkbox" checked={data.roster.enforce} onChange={(event) => send({ type: 'setEnforce', value: event.target.checked })} />
             <span>Enforce roles: AgentDeck blocks edits from every agent but Implement, and flags any that slip through.</span>
           </label>
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
             <span className="w-24 shrink-0 font-medium">Verify</span>
-            <span className="min-w-0 flex-1">
+            <span className="min-w-[12rem] flex-1">
               <Verify value={data.roster.verify} />
               <span className="mt-1 block text-xs text-muted-foreground">AgentDeck runs this itself after Implement changes files, and reports the result to the lead.</span>
             </span>

@@ -8,7 +8,7 @@ import { onHostMessage, send } from '../host'
 function Card({ lane }: { lane: LaneCard }) {
   const primary = lane.repos.some((repo) => repo.location === 'primary')
   return (
-    <section aria-label={lane.name} className={`flex flex-col gap-3 rounded-lg p-4 ${primary ? 'bg-primary/10 ring-2 ring-primary' : 'bg-muted'}`}>
+    <section aria-label={lane.name} data-card={primary ? 'primary' : ''} className={`flex flex-col gap-3 rounded-lg p-4 ${primary ? 'bg-primary/10 ring-2 ring-primary' : 'bg-muted'}`}>
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           {primary ? <div className="text-[10px] font-bold tracking-wider text-primary">PRIMARY CHECKOUT · RUNS HERE</div> : null}

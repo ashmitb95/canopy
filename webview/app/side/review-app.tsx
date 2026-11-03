@@ -27,9 +27,9 @@ function lineTone(line: string): string {
 function Detail({ run }: { run: Run }) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <header className="flex items-start gap-3">
+      <header className="flex flex-wrap items-start gap-3">
         <ProviderAvatar providerId={run.agent} className="size-8 text-sm" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[10rem] flex-1">
           <h2 className="font-semibold capitalize">
             {run.agent}
             {run.role ? <span className="font-normal text-muted-foreground"> · {run.role}</span> : null}
@@ -99,7 +99,7 @@ export function ReviewApp() {
   return (
     <div className="flex min-h-screen flex-col text-[13px]">
       <header className="flex flex-wrap items-center gap-2 border-b px-6 py-3">
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">Review: {data.title}</h1>
+        <h1 className="min-w-[12rem] flex-1 truncate text-base font-semibold">Review: {data.title}</h1>
         {data.laneId ? (
           <>
             <Button size="sm" variant="ghost" onClick={() => send({ type: 'openLaneDiff' })}>

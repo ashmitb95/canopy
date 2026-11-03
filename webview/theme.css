@@ -58,6 +58,17 @@ body.vscode-high-contrast {
 body.vscode-high-contrast [data-slot="button"]:is([data-variant="default"], [data-variant="secondary"], [data-variant="outline"]) {
   outline: 1px solid var(--vscode-contrastBorder);
 }
+/* Cards are told apart by fill elsewhere; here the fill matches the page, so they get outlines. */
+body.vscode-high-contrast [data-card] {
+  outline: 1px solid var(--vscode-contrastBorder);
+}
+body.vscode-high-contrast [data-card="primary"] {
+  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+  color: var(--vscode-foreground);
+}
+body.vscode-high-contrast [data-card="primary"] * {
+  color: inherit;
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -99,6 +110,11 @@ body.vscode-high-contrast [data-slot="button"]:is([data-variant="default"], [dat
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  /* Plain buttons and controls; components that draw their own focus ring override this with outline-none. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
   }
   html,
   body {

@@ -1,20 +1,27 @@
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import type { ReviewData } from '../../../src/ui/protocol'
-import { Codicon } from '../components/codicon'
 import { ProviderAvatar } from '../components/provider-avatar'
 import { onHostMessage, send } from '../host'
 
 type Run = ReviewData['delegations'][number]
 
+const label = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
+
+/** The first sentence of the report, or where the delegate is. */
 function summary(run: Run): string {
   if (run.undone) return 'Undone'
-  const parts = [
-    run.files.length > 0 ? `${run.files.length} ${run.files.length === 1 ? 'file' : 'files'} changed` : 'No file changes',
-    ...(run.verify ? [run.verify.ok ? 'checks pass' : 'checks fail'] : []),
-    ...(run.violations.length > 0 ? [`${run.violations.length} blocked`] : [])
-  ]
-  return parts.join(' · ')
+  const first = run.report?.split('\n').find((line) => line.trim())?.trim()
+  const sentence = first ? (/^(.+?[.!?])(\s|$)/.exec(first)?.[1] ?? first) : run.status === 'running' ? 'Working' : run.task
+  const extra = [...(run.verify ? [run.verify.ok ? 'checks pass' : 'checks fail'] : []), ...(run.violations.length > 0 ? [`${run.violations.length} write${run.violations.length === 1 ? '' : 's'} blocked`] : [])]
+  return extra.length > 0 ? `${sentence} ${label(extra.join(', '))}.` : sentence
+}
+
+function facts(run: Run): string {
+  return [
+    `${run.commands} ${run.commands === 1 ? 'command' : 'commands'}${run.failedCommands > 0 ? `, ${run.failedCommands} failed` : ''}`,
+    ...(run.verify ? [`${run.verify.command} ${run.verify.ok ? 'passed' : 'failed'}`] : []),
+    ...run.violations.map((violation) => `blocked: ${violation}`)
+  ].join(' · ')
 }
 
 function lineTone(line: string): string {
@@ -24,63 +31,50 @@ function lineTone(line: string): string {
   return ''
 }
 
-function Detail({ run }: { run: Run }) {
+function Changes({ run }: { run: Run }) {
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <header className="flex flex-wrap items-start gap-3">
-        <ProviderAvatar providerId={run.agent} className="size-8 text-sm" />
-        <div className="min-w-[10rem] flex-1">
-          <h2 className="font-semibold capitalize">
-            {run.agent}
-            {run.role ? <span className="font-normal text-muted-foreground"> · {run.role}</span> : null}
-          </h2>
-          <p className="text-xs text-muted-foreground">{run.task}</p>
-        </div>
+    <section aria-label="Changes" data-card="" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-surface">
+      <div className="flex flex-wrap items-center gap-2 border-b border-band px-3.5 py-3">
+        <strong className="min-w-[10rem] flex-1 text-sm">
+          {label(run.agent)}
+          {run.role ? ` · ${label(run.role)}` : ''}
+        </strong>
         {run.handoff ? (
-          <Button size="sm" variant="ghost" onClick={() => send({ type: 'viewHandoff', id: run.id })}>
+          <button type="button" className="h-9 rounded-[7px] bg-band px-2.5 font-semibold" onClick={() => send({ type: 'viewHandoff', id: run.id })}>
             View handoff
-          </Button>
+          </button>
         ) : null}
         {run.files.length > 0 && !run.undone ? (
-          <Button size="sm" variant="secondary" onClick={() => send({ type: 'undoDelegation', id: run.id })}>
+          <button type="button" className="h-9 rounded-[7px] bg-band px-2.5 font-semibold" onClick={() => send({ type: 'undoDelegation', id: run.id })}>
             Undo these changes
-          </Button>
+          </button>
         ) : null}
-      </header>
-      {run.report ? <p className="whitespace-pre-wrap rounded-md bg-muted p-3 leading-relaxed">{run.report}</p> : null}
-      <div className="rounded-md bg-muted p-3 text-xs">
-        <div className="mb-1 font-bold tracking-wider text-muted-foreground">RECORDED BY AGENTDECK</div>
-        <ul className="space-y-0.5">
-          <li>{run.commands} commands run{run.failedCommands > 0 ? `, ${run.failedCommands} failed` : ''}</li>
-          {run.verify ? (
-            <li className={run.verify.ok ? 'text-success' : 'text-destructive'}>
-              <span className="font-mono">{run.verify.command}</span> {run.verify.ok ? 'passed' : 'failed'}
-            </li>
-          ) : null}
-          {run.violations.map((violation) => (
-            <li key={violation} className="text-warning">
-              Blocked: {violation}
-            </li>
-          ))}
-        </ul>
       </div>
-      {run.files.map((file) => (
-        <section key={file.path} className="overflow-hidden rounded-md border">
-          <header className="flex items-center gap-2 bg-muted px-3 py-1.5 text-xs">
-            <span className="min-w-0 flex-1 truncate font-mono font-medium">{file.path}</span>
-            <span className="text-success">+{file.added}</span>
-            <span className="text-destructive">−{file.removed}</span>
-          </header>
-          <pre className="overflow-x-auto py-1 font-mono text-xs leading-5">
-            {file.lines.map((line, index) => (
-              <div key={index} className={`px-3 ${lineTone(line)}`}>
-                {line || ' '}
-              </div>
-            ))}
-          </pre>
-        </section>
-      ))}
-    </div>
+      <div className="bg-page px-3.5 py-2.5 leading-[1.45]">
+        <div className="whitespace-pre-wrap">{run.report ?? run.task}</div>
+        <div className="mt-1 text-xs text-muted-foreground">Recorded by AgentDeck: {facts(run)}</div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto px-3.5 py-3 font-mono text-xs leading-[1.7]">
+        {run.files.length === 0 ? <p className="font-sans text-muted-foreground">{run.undone ? 'These changes were undone.' : 'No file changes.'}</p> : null}
+        {run.files.map((file) => (
+          <div key={file.path} className="mb-3">
+            <div className="mb-1 flex justify-between gap-3 rounded-md bg-band px-2 py-1.5 font-semibold">
+              <span className="truncate">{file.path}</span>
+              <span className="shrink-0">
+                +{file.added} −{file.removed}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              {file.lines.map((line, index) => (
+                <div key={index} className={`px-2 whitespace-pre ${lineTone(line)}`}>
+                  {line || ' '}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -96,54 +90,62 @@ export function ReviewApp() {
   }, [])
   if (!data) return null
   const run = data.delegations.find((candidate) => candidate.id === selected) ?? data.delegations.findLast((candidate) => candidate.files.length > 0) ?? data.delegations[0]
+  const files = new Set(data.delegations.filter((candidate) => !candidate.undone).flatMap((candidate) => candidate.files.map((file) => file.path))).size
+  const verify = data.delegations.findLast((candidate) => candidate.verify && !candidate.undone)?.verify
   return (
-    <div className="flex min-h-screen flex-col text-[13px]">
-      <header className="flex flex-wrap items-center gap-2 border-b px-6 py-3">
-        <h1 className="min-w-[12rem] flex-1 truncate text-base font-semibold">Review: {data.title}</h1>
+    <main className="flex h-screen flex-col bg-page text-[13px]">
+      <div className="flex shrink-0 flex-wrap items-center gap-2.5 px-6 py-[18px]">
+        <div className="min-w-[14rem] flex-1">
+          <h1 className="truncate text-2xl font-extrabold tracking-[-0.02em]">Review: {data.title}</h1>
+          <div className="mt-[3px] text-muted-foreground">
+            {data.laneId ? <span className="font-mono">{data.laneId}</span> : 'No lane'} · {files} {files === 1 ? 'file' : 'files'}
+            {verify ? ` · ${verify.command} ${verify.ok ? 'passed' : 'failed'}` : ''}
+          </div>
+        </div>
+        {data.laneId && !data.inPrimary ? (
+          <button type="button" className="h-11 rounded-[9px] bg-primary px-3.5 font-bold text-primary-foreground" onClick={() => send({ type: 'switchLane', laneId: data.laneId ?? '' })}>
+            Run in primary checkout
+          </button>
+        ) : null}
         {data.laneId ? (
           <>
-            <Button size="sm" variant="ghost" onClick={() => send({ type: 'openLaneDiff' })}>
-              <Codicon name="diff" /> All changes
-            </Button>
-            {data.inPrimary ? null : (
-              <Button size="sm" variant="secondary" onClick={() => send({ type: 'switchLane', laneId: data.laneId ?? '' })}>
-                Run in primary checkout
-              </Button>
-            )}
-            <Button size="sm" onClick={() => send({ type: 'createPullRequest' })}>
+            <button type="button" className="h-11 rounded-[9px] bg-control px-3.5 font-semibold" onClick={() => send({ type: 'openLaneDiff' })}>
+              All changes
+            </button>
+            <button type="button" className="h-11 rounded-[9px] bg-control px-3.5 font-semibold" onClick={() => send({ type: 'createPullRequest' })}>
               Create pull request
-            </Button>
+            </button>
           </>
         ) : null}
-      </header>
+      </div>
       {data.delegations.length === 0 ? (
-        <p className="p-6 text-muted-foreground">Nothing was handed out in this chat yet.</p>
+        <p className="px-6 text-muted-foreground">Nothing was handed out in this chat yet.</p>
       ) : (
-        <div className="grid flex-1 grid-cols-[minmax(220px,280px)_1fr] gap-6 p-6 max-[640px]:grid-cols-1">
-          <nav aria-label="Who did what" className="flex flex-col gap-1">
-            <div className="mb-1 text-[11px] font-bold tracking-wider text-muted-foreground">WHO DID WHAT</div>
+        <div className="flex min-h-0 flex-1 gap-3 px-6 pb-6 max-[700px]:flex-col max-[700px]:overflow-auto">
+          <section aria-label="Who did what" data-card="" className="w-[280px] shrink-0 overflow-auto rounded-xl bg-surface p-3.5 max-[700px]:w-full">
+            <div className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground">WHO DID WHAT</div>
             {data.delegations.map((candidate) => (
               <button
                 key={candidate.id}
                 type="button"
-                aria-current={candidate.id === run?.id}
-                className={`flex gap-2 rounded-md px-2 py-2 text-left hover:bg-accent ${candidate.id === run?.id ? 'bg-muted' : ''}`}
+                aria-pressed={candidate.id === run?.id}
+                className={`mt-2 flex w-full gap-2.5 rounded-[9px] border-2 bg-page p-2.5 text-left ${candidate.id === run?.id ? 'border-foreground' : 'border-transparent'}`}
                 onClick={() => setSelected(candidate.id)}
               >
-                <ProviderAvatar providerId={candidate.agent} className="size-6 text-[11px]" />
+                <ProviderAvatar providerId={candidate.agent} className="size-6 rounded-[7px] text-[11px]" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium capitalize">
-                    {candidate.agent}
-                    {candidate.role ? <span className="font-normal text-muted-foreground"> · {candidate.role}</span> : null}
+                  <span className="block font-bold">
+                    {label(candidate.agent)}
+                    {candidate.role ? ` · ${label(candidate.role)}` : ''}
                   </span>
-                  <span className={`block truncate text-xs ${candidate.undone ? 'text-muted-foreground line-through' : candidate.verify && !candidate.verify.ok ? 'text-destructive' : 'text-muted-foreground'}`}>{summary(candidate)}</span>
+                  <span className={`mt-0.5 block leading-[1.35] ${candidate.verify && !candidate.verify.ok ? 'text-destructive' : 'text-muted-foreground'} ${candidate.undone ? 'line-through' : ''}`}>{summary(candidate)}</span>
                 </span>
               </button>
             ))}
-          </nav>
-          {run ? <Detail run={run} /> : null}
+          </section>
+          {run ? <Changes run={run} /> : null}
         </div>
       )}
-    </div>
+    </main>
   )
 }

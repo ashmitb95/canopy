@@ -240,7 +240,7 @@ export class ChatSurfaces
     if (surface === this.sidebar && this.sidebarView) this.sidebarView.title = chat.record.title
     this.post(surface, { type: 'groupSnapshot', state: chat.state(), items: chat.items() })
     surface.subscription = chat.onEvent((event) => {
-      this.post(surface, event.type === 'state' ? { type: 'groupState', state: event.state } : { type: 'groupItem', agent: event.agent, item: event.item })
+      this.post(surface, event.type === 'state' ? { type: 'groupState', state: event.state } : { type: 'groupItem', agent: event.agent, item: event.item, ...(event.delegation ? { delegation: event.delegation } : {}) })
       if (event.type === 'state' && event.state.target !== surface.member?.agent) void this.followTarget(surface, chat)
     })
     void this.followTarget(surface, chat)

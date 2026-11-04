@@ -52,4 +52,9 @@ describe('rolling view', () => {
     expect(frameAt(events, 50)[0]).toMatchObject({ text: 'Hello', live: true })
     expect(frameAt(events, 150)[0]).toMatchObject({ text: 'Hello there', live: false })
   })
+
+  it('shows an answered approval as one line with the choice', () => {
+    const lines = rollingLines([{ kind: 'approval', id: 'a', title: 'Allow Grok to run this command?', options: [{ id: 'always', label: 'Always allow' }], resolved: 'always' }])
+    expect(lines.map((line) => line.text)).toEqual(['Allow Grok to run this command? · Always allow'])
+  })
 })

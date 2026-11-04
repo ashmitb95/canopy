@@ -86,7 +86,7 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
     case 'groupState':
       return { ...state, group: message.state }
     case 'groupItem':
-      return { ...state, groupItems: upsertGroupItem(state.groupItems, { agent: message.agent, item: message.item }) }
+      return { ...state, groupItems: upsertGroupItem(state.groupItems, { agent: message.agent, item: message.item, ...(message.delegation ? { delegation: message.delegation } : {}) }) }
     case 'empty':
       return { ...initialState, provider: state.provider, providers: state.providers, editorContext: state.editorContext, sessions: state.sessions, lanes: state.lanes, quotas: state.quotas, signIns: state.signIns, empty: true }
     case 'title':

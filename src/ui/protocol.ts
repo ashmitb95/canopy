@@ -136,7 +136,7 @@ export type HostMessage =
   /** A group chat: everything so far, then live state and items. */
   | { type: 'groupSnapshot'; state: GroupState; items: TimelineItem[] }
   | { type: 'groupState'; state: GroupState }
-  | { type: 'groupItem'; agent: string; item: SessionItem }
+  | { type: 'groupItem'; agent: string; item: SessionItem; delegation?: string }
   | { type: 'side'; side: SideData }
   | { type: 'laneCards'; lanes: LaneCard[] }
   | { type: 'groupComposer'; composer: GroupComposer }

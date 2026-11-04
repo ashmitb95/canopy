@@ -62,9 +62,10 @@ export type GroupRecord = {
 
 export type MemberState = { agent: string; status: SessionStatus; activity: string }
 export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; active: string[]; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
-export type TimelineItem = { agent: string; item: SessionItem }
+/** `delegation` is the delegation the agent was working on when the item first arrived. */
+export type TimelineItem = { agent: string; item: SessionItem; delegation?: string }
 
-export type GroupEvent = { type: 'item'; agent: string; item: SessionItem } | { type: 'state'; state: GroupState }
+export type GroupEvent = { type: 'item'; agent: string; item: SessionItem; delegation?: string } | { type: 'state'; state: GroupState }
 
 export type GroupDeps = {
   manager: SessionManager
@@ -215,7 +216,9 @@ export class GroupChat implements Disposable {
   private readonly statuses = new Map<string, SessionStatus>()
   private readonly sessionQueues = new Map<string, { id: string }[]>()
   private readonly seenItems = new Set<string>()
-  private readonly timeline: { agent: string; id: string }[] = []
+  private readonly timeline: { agent: string; id: string; delegation?: string }[] = []
+  /** Which delegation each `agent:item` belongs to. */
+  private readonly owners = new Map<string, string>()
   private readonly latest = new Map<string, SessionItem[]>()
   /** Agents working now, each on its own turn. Read-only agents run alongside others; two writers never do. */
   private readonly running = new Map<string, Turn>()
@@ -232,9 +235,10 @@ export class GroupChat implements Disposable {
     const timeline = join(deps.dir, record.id, 'timeline.jsonl')
     if (existsSync(timeline)) {
       for (const line of readFileSync(timeline, 'utf8').split('\n').filter(Boolean)) {
-        const entry = JSON.parse(line) as { agent: string; id: string }
+        const entry = JSON.parse(line) as { agent: string; id: string; delegation?: string }
         this.timeline.push(entry)
         this.seenItems.add(`${entry.agent}:${entry.id}`)
+        if (entry.delegation) this.owners.set(`${entry.agent}:${entry.id}`, entry.delegation)
       }
     }
     for (const agent of Object.keys(record.members)) this.watch(agent)
@@ -276,10 +280,10 @@ export class GroupChat implements Disposable {
 
   /** Everything said and done, in the order it happened, across agents. */
   items(): TimelineItem[] {
-    return this.timeline.flatMap(({ agent, id }) => {
+    return this.timeline.flatMap(({ agent, id, delegation }) => {
       const sessionId = this.record.members[agent]
       const item = sessionId ? this.deps.manager.item(sessionId, id) : undefined
-      return item ? [{ agent, item }] : []
+      return item ? [{ agent, item, ...(delegation ? { delegation } : {}) }] : []
     })
   }
 
@@ -662,7 +666,7 @@ export class GroupChat implements Disposable {
   }
 
   private delegationText(delegation: Delegation): string {
-    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by Canopy${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.phase ? `Phase ${delegation.phase} of ${delegation.phases}: ` : ''}${delegation.task}${delegation.phase ? `\nDo only this phase. The whole plan, for reference: ${this.seriesOf(delegation).map((phase) => `${phase.phase}. ${phase.task}`).join(' ')}` : ''}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}${delegation.context ? `\n\nContext from ${delegation.lead}:\n${delegation.context}` : ''}\n\n${GUIDE[delegation.role ?? 'other']}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the canopy MCP server.`
+    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by Canopy${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.phase ? `Phase ${delegation.phase} of ${delegation.phases}: ` : ''}${delegation.task}${delegation.phase ? `\nDo only this phase. The whole plan, for reference: ${this.seriesOf(delegation).map((phase) => `${phase.phase}. ${phase.task}`).join(' ')}` : ''}${this.previousPhase(delegation)}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}${delegation.context ? `\n\nContext from ${delegation.lead}:\n${delegation.context}` : ''}\n\n${GUIDE[delegation.role ?? 'other']}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the canopy MCP server.`
   }
 
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */
@@ -777,12 +781,16 @@ export class GroupChat implements Disposable {
     const key = `${agent}:${item.id}`
     if (!this.seenItems.has(key)) {
       this.seenItems.add(key)
-      this.timeline.push({ agent, id: item.id })
+      const delegation = this.running.get(agent)?.delegation
+      if (delegation) this.owners.set(key, delegation)
+      const entry = { agent, id: item.id, ...(delegation ? { delegation } : {}) }
+      this.timeline.push(entry)
       const dir = join(this.deps.dir, this.record.id)
       mkdirSync(dir, { recursive: true })
-      writeFileSync(join(dir, 'timeline.jsonl'), `${JSON.stringify({ agent, id: item.id })}\n`, { flag: 'a' })
+      writeFileSync(join(dir, 'timeline.jsonl'), `${JSON.stringify(entry)}\n`, { flag: 'a' })
     }
-    this.events.fire({ type: 'item', agent, item })
+    const delegation = this.owners.get(key)
+    this.events.fire({ type: 'item', agent, item, ...(delegation ? { delegation } : {}) })
   }
 
   /** A provider's own question tool leaves the agent paused. The lead may answer from the chat; otherwise it comes to the user. */
@@ -921,6 +929,13 @@ export class GroupChat implements Disposable {
       return
     }
     this.record.queue.unshift({ id: randomUUID(), target: delegation.lead, internal: true, text: this.reportText(delegation), reportOf: delegation.id })
+  }
+
+  /** What the phase before this one reported and changed, so the next phase starts from it. */
+  private previousPhase(delegation: Delegation): string {
+    const before = this.seriesOf(delegation).find((phase) => phase.phase === (delegation.phase ?? 0) - 1)
+    if (!before?.report) return ''
+    return `\n\nPhase ${before.phase} report from ${before.agent}:\n${before.report}\nFiles it changed: ${before.facts?.files.join('; ') || 'none'}`
   }
 
   /** The phases of the plan a delegation belongs to, in order. */

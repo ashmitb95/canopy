@@ -55,6 +55,10 @@ export function rollingLines(stream: SessionItem[], root?: string): RollingLine[
       lines.push({ id: item.id, kind: 'plan', text: `step ${Math.min(done + 1, item.entries.length)} of ${item.entries.length}`, live: false })
     }
     if (item.kind === 'notice') lines.push({ id: item.id, kind: 'notice', text: item.text, live: false })
+    if (item.kind === 'approval' && item.resolved) {
+      const choice = item.options.find((option) => option.id === item.resolved)?.label ?? item.resolved
+      lines.push({ id: item.id, kind: 'notice', text: `${item.title} · ${choice}`, live: false })
+    }
     if (item.kind === 'tool') {
       const diff = item.toolKind === 'edit' && item.paths?.length === 1 ? diffs.find((candidate) => candidate.kind === 'diff' && candidate.path === item.paths?.[0]) : undefined
       const stat = diff?.kind === 'diff' ? lineStat(diff.oldText, diff.newText) : undefined

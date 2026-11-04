@@ -12,6 +12,7 @@ import { Composer } from '../components/composer'
 import { editInComposer } from '../composer/edit-bus'
 import { useApprovalKeys } from '../items/approval-card'
 import { useNow } from '../use-now'
+import { inCard, placeCards } from './cards'
 import { ItemView } from '../items/item-view'
 import type { ChatState } from '../state'
 
@@ -44,14 +45,6 @@ const CHANGE: Record<string, string> = { A: 'new', M: 'changed', D: 'deleted', R
 function fileChange(row: string): string {
   const [status, ...paths] = row.split('\t')
   return `${paths.join(' → ')} (${CHANGE[status[0]] ?? status})`
-}
-
-/** A delegate's own work shows in its card; the conversation keeps only what needs the user. */
-function inCard(group: GroupState, entry: TimelineItem): boolean {
-  if (entry.agent === group.lead || entry.item.kind === 'approval' || entry.item.kind === 'question') return false
-  // The user's own messages always stay in the conversation, whoever they went to.
-  if (entry.item.kind === 'message' && entry.item.role === 'user') return false
-  return group.delegations.some((delegation) => delegation.agent === entry.agent)
 }
 
 function Band({ tone = 'band', action, children }: { tone?: 'band' | 'warning'; action?: ReactNode; children: ReactNode }) {
@@ -275,6 +268,13 @@ function DelegateCard({ group, delegation, items, selected, onSelect }: { group:
       {live || open ? (
         <>
           <Rolling items={items} full={full || (open && !live)} />
+          {items
+            .filter(({ item }) => item.kind === 'approval' && !item.resolved)
+            .map(({ item }) => (
+              <div key={item.id} className="mx-3 mt-2">
+                <ItemView item={item} />
+              </div>
+            ))}
           {live ? (
             <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
               <span>@{delegation.agent} to redirect</span>
@@ -470,18 +470,14 @@ export function GroupView({ state }: { state: ChatState }) {
   const items = state.groupItems
   const [selected, setSelected] = useState<string>()
   useApprovalKeys(items.map(({ item }) => item))
-  const byAgent = useMemo(() => {
-    const map = new Map<string, TimelineItem[]>()
-    for (const entry of items) map.set(entry.agent, [...(map.get(entry.agent) ?? []), entry])
-    return map
-  }, [items])
+  const { own, anchors } = useMemo(() => placeCards(items), [items])
   const shown = group.delegations.find((delegation) => delegation.id === selected) ?? group.delegations.find((delegation) => delegation.status === 'running' || delegation.status === 'settling') ?? group.delegations.at(-1)
   let previous: string | undefined
-  // Each card sits right after the handoff that started it; any whose handoff is not loaded go at the end.
+  // Cards not started yet go at the end.
   const placed = new Set<string>()
   const card = (delegation: Delegation) => (
     <Fragment key={delegation.id}>
-      <DelegateCard group={group} delegation={delegation} items={byAgent.get(delegation.agent) ?? []} selected={delegation.id === selected} onSelect={() => setSelected(delegation.id)} />
+      <DelegateCard group={group} delegation={delegation} items={own.get(delegation.id) ?? []} selected={delegation.id === selected} onSelect={() => setSelected(delegation.id)} />
       {(delegation.answers ?? []).map((answer) => (
         <Band key={answer.question + answer.answer} action={<BandButton onClick={() => compose(`@${delegation.agent} `)}>Change answer</BandButton>}>
           {name(delegation.agent)} asked: {answer.question} {answer.by === 'user' ? 'You' : name(answer.by)} answered: {answer.answer}
@@ -489,16 +485,50 @@ export function GroupView({ state }: { state: ChatState }) {
       ))}
     </Fragment>
   )
-  const cardFor = (entry: TimelineItem) => {
-    const task = /\nTask: (.*)/.exec(userText(entry))?.[1]
-    const delegation = task === undefined ? undefined : group.delegations.find((candidate) => !placed.has(candidate.id) && candidate.agent === entry.agent && candidate.task === task)
-    if (!delegation) return null
-    placed.add(delegation.id)
+  const cardsAt = (index: number) =>
+    (anchors.get(index) ?? []).map((id) => {
+      const delegation = group.delegations.find((candidate) => candidate.id === id)
+      if (!delegation) return null
+      placed.add(id)
+      return (
+        <Fragment key={`card:${id}`}>
+          <Band>{delegation.role ? `Roster: ${ROLE_LABEL[delegation.role]} belongs to ${name(delegation.agent)}. ${name(delegation.lead)} delegated it.` : `${name(delegation.lead)} handed this to ${name(delegation.agent)}.`}</Band>
+          {card(delegation)}
+        </Fragment>
+      )
+    })
+  const entryView = (entry: TimelineItem) => {
+    const kind = marker(entry)
+    if (kind === 'handoff' || kind === 'hidden') return null
+    if (kind === 'checkin') {
+      previous = undefined
+      return <Band>Canopy checked in with {name(entry.agent)}.</Band>
+    }
+    if (entry.item.kind === 'turn' || inCard(entry)) return null
+    const isUser = entry.item.kind === 'message' && entry.item.role === 'user'
+    if (isUser) {
+      previous = 'user'
+      return (
+        <div className="ml-auto max-w-[min(100%,52rem)] min-w-0">
+          {entry.agent !== group.lead ? <div className="mb-1 text-right text-xs text-muted-foreground">To {name(entry.agent)}</div> : null}
+          <div className="rounded-[10px] bg-control px-3 py-2.5 whitespace-pre-wrap">{userText(entry)}</div>
+        </div>
+      )
+    }
+    const label = entry.agent !== previous
+    previous = entry.agent
     return (
-      <>
-        <Band>{delegation.role ? `Roster: ${ROLE_LABEL[delegation.role]} belongs to ${name(delegation.agent)}. ${name(delegation.lead)} delegated it.` : `${name(delegation.lead)} handed this to ${name(delegation.agent)}.`}</Band>
-        {card(delegation)}
-      </>
+      <div className="flex gap-2.5">
+        <span className="w-[22px] shrink-0">{label ? <ProviderAvatar providerId={entry.agent} className="size-[22px] rounded-md text-[11px]" /> : null}</span>
+        <div className="min-w-0 flex-1 leading-normal">
+          {label ? (
+            <div>
+              <strong className="font-semibold">{name(entry.agent)}</strong> <span className="text-xs text-muted-foreground">{roleOf(group, entry.agent)}</span>
+            </div>
+          ) : null}
+          <ItemView item={entry.item} />
+        </div>
+      </div>
     )
   }
   const finished = group.delegations.length > 0 && !group.running && group.delegations.every((delegation) => !['queued', 'running', 'settling', 'question'].includes(delegation.status))
@@ -511,42 +541,15 @@ export function GroupView({ state }: { state: ChatState }) {
             <Status group={group} />
             <Conversation className="min-h-0 flex-1">
               <ConversationContent className="gap-3 px-5 py-4">
-                {items.map((entry) => {
-                  const kind = marker(entry)
-                  if (kind === 'handoff') {
-                    previous = undefined
-                    return <Fragment key={`${entry.agent}:${entry.item.id}`}>{cardFor(entry)}</Fragment>
-                  }
-                  if (kind === 'hidden') return null
-                  if (kind === 'checkin') {
-                    previous = undefined
-                    return <Band key={`${entry.agent}:${entry.item.id}`}>Canopy checked in with {name(entry.agent)}.</Band>
-                  }
-                  if (entry.item.kind === 'turn' || inCard(group, entry)) return null
-                  const isUser = entry.item.kind === 'message' && entry.item.role === 'user'
-                  if (isUser) {
-                    previous = 'user'
-                    return (
-                      <div key={`${entry.agent}:${entry.item.id}`} className="ml-auto max-w-[min(100%,52rem)] min-w-0">
-                        {entry.agent !== group.lead ? <div className="mb-1 text-right text-xs text-muted-foreground">To {name(entry.agent)}</div> : null}
-                        <div className="rounded-[10px] bg-control px-3 py-2.5 whitespace-pre-wrap">{userText(entry)}</div>
-                      </div>
-                    )
-                  }
-                  const label = entry.agent !== previous
-                  previous = entry.agent
+                {items.map((entry, index) => {
+                  const view = entryView(entry)
+                  const cards = cardsAt(index)
+                  if (cards.length > 0) previous = undefined
                   return (
-                    <div key={`${entry.agent}:${entry.item.id}`} className="flex gap-2.5">
-                      <span className="w-[22px] shrink-0">{label ? <ProviderAvatar providerId={entry.agent} className="size-[22px] rounded-md text-[11px]" /> : null}</span>
-                      <div className="min-w-0 flex-1 leading-normal">
-                        {label ? (
-                          <div>
-                            <strong className="font-semibold">{name(entry.agent)}</strong> <span className="text-xs text-muted-foreground">{roleOf(group, entry.agent)}</span>
-                          </div>
-                        ) : null}
-                        <ItemView item={entry.item} />
-                      </div>
-                    </div>
+                    <Fragment key={`${entry.agent}:${entry.item.id}`}>
+                      {view}
+                      {cards}
+                    </Fragment>
                   )
                 })}
                 {group.delegations.filter((delegation) => !placed.has(delegation.id)).map(card)}

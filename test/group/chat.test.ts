@@ -555,10 +555,17 @@ describe('delegation', () => {
     await finish(codex[0], 'Cursor added.\nSTATUS: done')
     await until(() => codex[0].prompts.length === 2)
     expect(texts(codex[0]).at(-1)).toContain('Phase 2 of 2: Stream the CSV')
+    expect(texts(codex[0]).at(-1)).toContain('Phase 1 report from codex:\nCursor added.')
     expect(texts(claude[0])).toHaveLength(1)
     await finish(codex[0], 'Streaming.\nSTATUS: done')
     await until(() => texts(claude[0]).length === 2)
     expect(texts(claude[0]).at(-1)).toContain('All 2 phases reported done')
+    // Each phase's work is tagged with its own delegation, so each card shows only its own items.
+    const [one, two] = chat.state().delegations.map((delegation) => delegation.id)
+    const owner = (id: string) => chat.items().find((entry) => entry.item.id === id)?.delegation
+    expect(owner('reply-Cursor added.\nSTATUS: done')).toBe(one)
+    expect(owner('reply-Streaming.\nSTATUS: done')).toBe(two)
+    expect(owner('reply-handing over')).toBeUndefined()
   })
 
   it('stops a plan at a phase that fails, and tells the lead what is left', async () => {

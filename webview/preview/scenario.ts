@@ -255,15 +255,15 @@ const brief = (agent: string, role: string, task: string) => `You are ${agent}, 
 const groupItems: TimelineItem[] = [
   { agent: 'claude', item: { kind: 'message', id: 'gu1', role: 'user', parts: [{ type: 'text', text: 'Exports time out on large invoices (ENG-214). Keep the CSV format and the old endpoint.' }] } },
   { agent: 'claude', item: { kind: 'message', id: 'ga1', role: 'assistant', text: "export.ts loads every row into memory. I'd stream rows and restart retries from an empty file. Plan saved to the lane.", streaming: false } },
-  { agent: 'codex', item: { kind: 'message', id: 'gc0', role: 'user', parts: [{ type: 'text', text: brief('codex', 'implement', 'Stream invoice rows and fix retries, per the plan.') }] } },
-  { agent: 'codex', item: { kind: 'message', id: 'gc1', role: 'assistant', text: 'Reading export.ts first.', streaming: false } },
-  { agent: 'codex', item: { kind: 'tool', id: 'gt1', title: 'Run pnpm test', toolKind: 'execute', status: 'done', output: '215 passed' } },
+  { agent: 'codex', item: { kind: 'message', id: 'gc0', role: 'user', parts: [{ type: 'text', text: brief('codex', 'implement', 'Stream invoice rows and fix retries, per the plan.') }] }, delegation: 'd1' },
+  { agent: 'codex', item: { kind: 'message', id: 'gc1', role: 'assistant', text: 'Reading export.ts first.', streaming: false }, delegation: 'd1' },
+  { agent: 'codex', item: { kind: 'tool', id: 'gt1', title: 'Run pnpm test', toolKind: 'execute', status: 'done', output: '215 passed' }, delegation: 'd1' },
   { agent: 'claude', item: { kind: 'message', id: 'ga2', role: 'assistant', text: 'Codex is done and the tests pass. Sending it to Grok for review.', streaming: false } },
-  { agent: 'grok', item: { kind: 'message', id: 'gg0', role: 'user', parts: [{ type: 'text', text: brief('grok', 'review', 'Check the change against the plan.') }] } },
-  { agent: 'grok', item: { kind: 'message', id: 'gg1', role: 'assistant', text: 'Reading the plan, then the diff.', streaming: false } },
-  { agent: 'grok', item: { kind: 'message', id: 'gg1u', role: 'user', parts: [{ type: 'text', text: 'Commit as you go, please.' }] } },
-  { agent: 'grok', item: { kind: 'tool', id: 'gg2', title: 'Read export.ts', toolKind: 'read', status: 'done' } },
-  { agent: 'grok', item: { kind: 'tool', id: 'gg3', title: 'Run git diff main -- api/', toolKind: 'execute', status: 'running' } }
+  { agent: 'grok', item: { kind: 'message', id: 'gg0', role: 'user', parts: [{ type: 'text', text: brief('grok', 'review', 'Check the change against the plan.') }] }, delegation: 'd2' },
+  { agent: 'grok', item: { kind: 'message', id: 'gg1', role: 'assistant', text: 'Reading the plan, then the diff.', streaming: false }, delegation: 'd2' },
+  { agent: 'grok', item: { kind: 'message', id: 'gg1u', role: 'user', parts: [{ type: 'text', text: 'Commit as you go, please.' }] }, delegation: 'd2' },
+  { agent: 'grok', item: { kind: 'tool', id: 'gg2', title: 'Read export.ts', toolKind: 'read', status: 'done' }, delegation: 'd2' },
+  { agent: 'grok', item: { kind: 'tool', id: 'gg3', title: 'Run git diff main -- api/', toolKind: 'execute', status: 'running' }, delegation: 'd2' }
 ]
 
 // Every delegate state, one card each.
@@ -431,7 +431,7 @@ function flowSteps(): [number, HostMessage][] {
   const brief = 'You are codex, delegated this by claude in a group chat run by Canopy, in the implement role.\nTask: Stream invoice rows and fix retries'
   const user: TimelineItem = { agent: 'claude', item: { kind: 'message', id: 'f-u1', role: 'user', parts: [{ type: 'text', text: 'Large invoice exports time out (ENG-214). Keep the CSV format and the old endpoint.' }] } }
   const lead = (id: string, text: string, streaming = false): TimelineItem => ({ agent: 'claude', item: { kind: 'message', id, role: 'assistant', text, streaming } })
-  const codex = (item: TimelineItem['item']): TimelineItem => ({ agent: 'codex', item })
+  const codex = (item: TimelineItem['item']): TimelineItem => ({ agent: 'codex', item, delegation: 'f-d1' })
   const base: GroupState = {
     id: 'flow', title: 'Export timeouts', lead: 'claude', target: 'claude', active: [], queue: [],
     members: [
@@ -453,7 +453,7 @@ function flowSteps(): [number, HostMessage][] {
     delegations: [{ ...task, status: 'running' }], ...extra
   })
   const steps: [number, HostMessage][] = [[0, { type: 'groupSnapshot', state: base, items: [user] }]]
-  const item = (at: number, entry: TimelineItem) => steps.push([at, { type: 'groupItem', agent: entry.agent, item: entry.item }])
+  const item = (at: number, entry: TimelineItem) => steps.push([at, { type: 'groupItem', agent: entry.agent, item: entry.item, ...(entry.delegation ? { delegation: entry.delegation } : {}) }])
   const state = (at: number, value: GroupState) => steps.push([at, { type: 'groupState', state: value }])
   state(500, { ...base, running: 'claude', active: ['claude'] })
   item(700, lead('f-l1', 'export.ts loads every row into memory', true))

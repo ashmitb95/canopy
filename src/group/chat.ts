@@ -598,11 +598,13 @@ export class GroupChat implements Disposable {
     return done.length > 0 ? `Committed ${done.join(', ')}.` : 'Nothing to commit.'
   }
 
-  /** Read-only for anyone but the Implement agent, when roles are enforced. */
+  /** Read-only for anyone but the Implement agent, when roles are enforced. The lane's plan and notes stay writable. */
   readOnlyBoundary(agent: string): WriteBoundary | undefined {
     if (!this.record.enforce || !this.record.roster.implement || agent === this.record.roster.implement) return undefined
     const writer = this.record.roster.implement
-    return { roots: [], except: [], outside: async () => `Your role is read-only here. ${agent === this.record.lead ? `Delegate this edit to ${writer}.` : `Report what should change; ${writer} edits code.`}` }
+    const memory = this.record.laneId ? this.deps.memoryDir?.(this.record.laneId) : undefined
+    const notes = memory ? ` You can still write the lane's plan.md and notes.md in ${memory}.` : ''
+    return { roots: memory ? [memory] : [], except: [], readOnly: true, outside: async () => `Your role is read-only here. ${agent === this.record.lead ? `Delegate this edit to ${writer}.` : `Report what should change; ${writer} edits code.`}${notes}` }
   }
 
   /** What each delegate changed, as a diff, with its report and the facts Canopy recorded. */
@@ -662,7 +664,7 @@ export class GroupChat implements Disposable {
 
   private leadBrief(agent: string): string {
     const writer = this.record.roster.implement
-    return `You lead a group chat of coding agents run by Canopy, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. For a plan with several phases, pass them as phases: they are handed over one at a time, which keeps each delegate on track. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only.` : ''} When work belongs to another agent, call the delegate tool from the canopy MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what Canopy recorded, and decide what happens next.`
+    return `You lead a group chat of coding agents run by Canopy, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. For a plan with several phases, pass them as phases: they are handed over one at a time, which keeps each delegate on track. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only${this.record.laneId ? ", except for the lane's plan.md and notes.md" : ''}.` : ''} When work belongs to another agent, call the delegate tool from the canopy MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what Canopy recorded, and decide what happens next.`
   }
 
   private delegationText(delegation: Delegation): string {

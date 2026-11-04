@@ -85,7 +85,8 @@ export type PromptResponse =
  * Where a chat may write for its coming turns: under `roots` but not under `except` (other lanes' checkouts nested
  * inside a root). `outside` explains a refused path, and may act first (e.g. join the lane to a new repo).
  */
-export type WriteBoundary = { roots: string[]; except: string[]; outside(path: string): Promise<string> }
+/** `readOnly`: the agent may not change code; `roots` are then only the notes it may keep, such as the lane's plan. */
+export type WriteBoundary = { roots: string[]; except: string[]; readOnly?: boolean; outside(path: string): Promise<string> }
 export type TurnItem = {
   kind: 'turn'
   id: string

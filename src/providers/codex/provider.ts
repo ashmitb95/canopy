@@ -92,7 +92,8 @@ function policy(mode: PermissionMode): { approvalPolicy: ApprovalPolicy; sandbox
 
 function sandboxPolicy(mode: PermissionMode, cwd: string, boundary?: WriteBoundary): SandboxPolicy {
   // On a lane, writes stay inside the lane in every mode; full access keeps its network.
-  if (boundary?.roots.length === 0) return { type: 'readOnly' } as unknown as SandboxPolicy
+  // Codex's sandbox always lets it write its working folder, so a read-only role stays fully read-only.
+  if (boundary?.readOnly || boundary?.roots.length === 0) return { type: 'readOnly' } as unknown as SandboxPolicy
   if (boundary) {
     return { type: 'workspaceWrite', writableRoots: boundary.roots, networkAccess: mode === 'full-access', excludeTmpdirEnvVar: false, excludeSlashTmp: false }
   }

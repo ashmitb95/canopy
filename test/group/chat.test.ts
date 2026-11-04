@@ -1,3 +1,4 @@
+import { writable } from '../../src/providers/boundary'
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -272,6 +273,22 @@ describe('GroupChat', () => {
     codex[0].emit({ kind: 'tool', id: 't', title: 'Bash pnpm test', toolKind: 'execute', status: 'running' })
     await tick()
     expect(chat.state().members[0].activity).toBe('$ pnpm test')
+  })
+})
+
+describe('read-only roles', () => {
+  it('may write only the lane plan and notes', async () => {
+    const providers = fakeProvider('claude')
+    const map = new Map([[providers.provider.id, providers.provider]])
+    const manager = new SessionManager({ providers: map, store: new SessionStore(new MemoryMemento()), journalDir: join(dir, 'j3'), cwd: dir, env: async () => ({}) })
+    const group = new GroupChats({ manager, providers: map, dir: join(dir, 'g3'), memoryDir: (lane) => join(dir, '.canopy', 'lanes', lane), watchProcesses: false })
+    const lead = group.create({ lead: 'claude', roster: { implement: 'codex' }, laneId: 'feat' })
+    const boundary = lead.readOnlyBoundary('claude')
+    expect(boundary?.readOnly).toBe(true)
+    expect(writable(boundary ?? { roots: [], except: [] }, join(dir, '.canopy', 'lanes', 'feat', 'plan.md'))).toBe(true)
+    expect(writable(boundary ?? { roots: [], except: [] }, join(dir, 'src', 'a.ts'))).toBe(false)
+    expect(await boundary?.outside(join(dir, 'src', 'a.ts'))).toContain('plan.md and notes.md')
+    expect(group.create({ lead: 'claude', roster: { implement: 'codex' } }).readOnlyBoundary('claude')?.roots).toEqual([])
   })
 })
 

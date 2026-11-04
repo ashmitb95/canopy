@@ -108,6 +108,11 @@ export function acpProvider(spec: AcpAgentSpec): ProviderDefinition {
   }
 }
 
+/** The files a tool call says it will write. */
+function editPaths(toolCall: PermissionRequest['toolCall']): string[] {
+  return [...(toolCall.locations ?? []).map((location) => location.path), ...(toolCall.content ?? []).flatMap((block) => (block.type === 'diff' && block.path ? [block.path] : []))]
+}
+
 class AcpSession implements ProviderSession {
   nativeId = ''
   private readonly items = new Emitter<SessionItem>()
@@ -304,9 +309,10 @@ class AcpSession implements ProviderSession {
   private permission({ toolCall, options }: PermissionRequest): Promise<unknown> {
     const outside = this.outsideBoundary(toolCall)
     if (outside) return outside
-    // A read-only role runs reads and checks without a person present. Edits are refused; a shell write is caught after the turn.
-    const readOnly = this.boundary?.roots.length === 0
-    if (readOnly && toolCall.kind === 'edit') return Promise.resolve(this.refuseEdit(options))
+    // A read-only role runs reads and checks without a person present. Edits are refused unless they are to its notes,
+    // which the boundary check above has already allowed; a shell write is caught after the turn.
+    const readOnly = this.boundary?.readOnly || this.boundary?.roots.length === 0
+    if (readOnly && toolCall.kind === 'edit' && editPaths(toolCall).length === 0) return Promise.resolve(this.refuseEdit(options))
     const allow = options.find((option) => option.kind === 'allow_once') ?? options.find((option) => option.kind === 'allow_always')
     const autoAllow = readOnly || this.mode === 'full-access' || (this.mode === 'accept-edits' && toolCall.kind === 'edit')
     if (autoAllow && allow) return Promise.resolve(selected(allow.optionId))
@@ -341,11 +347,7 @@ class AcpSession implements ProviderSession {
   private outsideBoundary(toolCall: PermissionRequest['toolCall']): Promise<unknown> | undefined {
     const boundary = this.boundary
     if (!boundary || !WRITES.has(toolCall.kind ?? '')) return undefined
-    const paths = [
-      ...(toolCall.locations ?? []).map((location) => location.path),
-      ...(toolCall.content ?? []).flatMap((block) => (block.type === 'diff' && block.path ? [block.path] : []))
-    ]
-    const refused = paths.find((path) => !writable(boundary, path))
+    const refused = editPaths(toolCall).find((path) => !writable(boundary, path))
     if (!refused) return undefined
     return boundary.outside(refused).then((reason) => {
       this.items.fire({ kind: 'notice', id: `notice:${toolCall.toolCallId}`, level: 'warning', text: reason })

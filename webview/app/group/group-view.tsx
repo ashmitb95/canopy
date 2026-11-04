@@ -164,7 +164,8 @@ function cardState(group: GroupState, delegation: Delegation, items: TimelineIte
       const asking = items.findLast(({ item }) => item.kind === 'approval' && !item.resolved)?.item
       if (asking?.kind === 'approval') return { text: `Needs permission: ${asking.title}`, tone: 'text-warning', mark: 'needs', actions: [] }
       if (delegation.resuming) return { text: 'Resuming after reload · session restored', tone: 'text-info', mark: 'spin', actions: [] }
-      const activity = delegation.status === 'settling' ? 'Reported done, waiting for its work to finish' : group.members.find((member) => member.agent === delegation.agent)?.activity || 'Working'
+      if (delegation.status === 'settling') return { text: 'Reported done, waiting for its background work to finish', tone: 'text-info', mark: 'spin', actions: [{ label: 'Stop waiting', run: () => send({ type: 'stopWaiting', id }) }] }
+      const activity = group.members.find((member) => member.agent === delegation.agent)?.activity || 'Working'
       return { text: activity, time: elapsed(delegation.startedAt, now), tone: 'text-info', mark: 'spin', actions: [] }
     }
     case 'planned':

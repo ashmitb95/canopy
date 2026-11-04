@@ -754,7 +754,7 @@ describe('delegation', () => {
     chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
     await finish(claude.at(-1), 'ok')
     await until(() => (codex.at(-1)?.prompts.length ?? 0) > 0)
-    const child = spawn('sh', ['-c', 'exec sleep 60'], { cwd: repo, stdio: 'ignore' })
+    const child = spawn('sh', ['-c', 'sleep 60; true'], { cwd: repo, stdio: 'ignore' })
     await finish(codex.at(-1), 'STATUS: done')
     await until(() => chat.state().delegations[0].status === 'overdue')
     await until(() => texts(claude.at(-1)).at(-1)?.includes('Still running') ?? false)
@@ -764,6 +764,24 @@ describe('delegation', () => {
     chat.handleTool('claude', 'stop_work', {})
     await exited
     expect(chat.state().delegations[0].facts?.stillRunning).toBeUndefined()
+  }, 20_000)
+
+  it('stops waiting for background work when the user says so, and keeps the agent status', async () => {
+    rebuild(repo, 30_000)
+    chat = lead()
+    await chat.send('build')
+    await until(() => (claude.at(-1)?.prompts.length ?? 0) > 0)
+    chat.handleTool('claude', 'delegate', { to: 'codex', task: 'x', context: CONTEXT })
+    await finish(claude.at(-1), 'ok')
+    await until(() => (codex.at(-1)?.prompts.length ?? 0) > 0)
+    const child = spawn('sh', ['-c', 'sleep 60; true'], { cwd: repo, stdio: 'ignore' })
+    await finish(codex.at(-1), 'STATUS: done')
+    await until(() => chat.state().delegations[0].status === 'settling')
+    await new Promise((resolve) => setTimeout(resolve, 1_500))
+    chat.stopWaiting(chat.state().delegations[0].id)
+    await until(() => texts(claude.at(-1)).at(-1)?.includes('Still running') ?? false)
+    expect(chat.state().delegations[0].status).toBe('done')
+    child.kill()
   }, 20_000)
 
   it('lets a mention reach a delegate while it works', async () => {

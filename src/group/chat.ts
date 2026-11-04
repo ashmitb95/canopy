@@ -226,6 +226,8 @@ export class GroupChat implements Disposable {
   private readonly starting = new Set<string>()
   /** Facts settling found, per delegation, for its report. */
   private readonly pendingFacts = new Map<string, Pick<Facts, 'stillRunning' | 'servicesLeft'>>()
+  /** Delegations waiting for background work, so the user can stop waiting. */
+  private readonly waits = new Map<string, AbortController>()
 
   constructor(
     private readonly deps: GroupDeps,
@@ -864,16 +866,19 @@ export class GroupChat implements Disposable {
     if (status === 'error' || !this.watchesProcesses || !this.deps.root) return false
     const root = this.deps.root
     delegation.status = 'settling'
+    const wait = new AbortController()
+    this.waits.set(delegation.id, wait)
     this.changed()
     // Shells and helpers wind down as a turn ends; only what outlives this pause counts as background work.
     await new Promise((resolve) => setTimeout(resolve, BACKGROUND_GRACE_MS))
     const first = await activity(root, current.processes)
-    const outcome = await waitForSettled(root, current.processes, this.deps.settleLimitMs ?? DEFAULT_SETTLE_MS)
+    const outcome = await waitForSettled(root, current.processes, this.deps.settleLimitMs ?? DEFAULT_SETTLE_MS, undefined, wait.signal).finally(() => this.waits.delete(delegation.id))
     const describe = (proc: { pid: number; command: string }) => `${proc.pid} ${proc.command.slice(0, 80)}`
     const services = outcome.activity.services.map((proc) => `${proc.pid} ${proc.command.slice(0, 80)} (port ${proc.ports.join(',')})`)
     current.processes = new Set([...current.processes])
     if (!outcome.settled) {
-      delegation.status = 'overdue'
+      // The user stopped waiting: the agent's own status stands, and the lead hears what is still running.
+      if (!wait.signal.aborted) delegation.status = 'overdue'
       this.pendingFacts.set(delegation.id, { stillRunning: outcome.activity.work.map(describe), servicesLeft: services })
       return false
     }
@@ -885,6 +890,11 @@ export class GroupChat implements Disposable {
       return true
     }
     return false
+  }
+
+  /** Ends the wait for a delegate's background work now, as if the limit had passed. */
+  stopWaiting(id: string): void {
+    this.waits.get(id)?.abort()
   }
 
   /** A lead that says it will delegate but has not called the tool gets one reminder. */

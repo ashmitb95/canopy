@@ -67,9 +67,19 @@ describe('settling', { timeout: 30_000 }, () => {
     expect((await activity(folder, base)).work.map((proc) => proc.pid)).not.toContain(helper.pid)
   })
 
+  it('ignores a helper a CLI starts mid-turn in the folder, such as an MCP server', async () => {
+    const base = await baseline(folder)
+    const helper = spawn('sleep', ['30'], { cwd: folder, stdio: 'ignore' })
+    children.push(helper)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect((await activity(folder, base)).work.map((proc) => proc.pid)).not.toContain(helper.pid)
+    expect((await waitForSettled(folder, base, 3_000)).settled).toBe(true)
+  })
+
   it('treats a process listening on a port as a service, not as work', async () => {
     const base = await baseline(folder)
-    sh(`exec node -e '${server}'`)
+    // Started in the background, so it leaves the shell's tree, as an agent's dev server does.
+    sh(`node -e '${server}' >/dev/null 2>&1 &`)
     await new Promise((resolve) => setTimeout(resolve, 700))
     const outcome = await waitForSettled(folder, base, 5_000)
     expect(outcome.settled).toBe(true)
@@ -78,7 +88,7 @@ describe('settling', { timeout: 30_000 }, () => {
 
   it('reports a timeout instead of waiting forever, and can stop the work', async () => {
     const base = await baseline(folder)
-    sh('exec sleep 60')
+    sh('sleep 60; true')
     await new Promise((resolve) => setTimeout(resolve, 300))
     const outcome = await waitForSettled(folder, base, 1_500)
     expect(outcome.settled).toBe(false)

@@ -333,6 +333,9 @@ export class ChatSurfaces
       case 'cancelDelegation':
         chat.cancelDelegation(message.id)
         return true
+      case 'stopWaiting':
+        chat.stopWaiting(message.id)
+        return true
       case 'answerDelegate':
         chat.answerDelegate(message.id, message.text)
         return true

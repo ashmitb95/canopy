@@ -82,12 +82,14 @@ function fromShell(all: Proc[], pid: number, root: number): boolean {
   return false
 }
 
-/** What is still running for this turn: agents' commands, and anything working in the folder, even detached. */
+/** What is still running for this turn: agents' shell commands, and anything detached that works in the folder. */
 export async function activity(folder: string, base: Set<number>, root = process.pid): Promise<Activity> {
   const all = await processes()
   const inFolder = await workingIn(folder)
   const below = descendants(all, root)
-  const candidates = new Set([...[...below].filter((pid) => fromShell(all, pid, root)), ...inFolder])
+  // Below us, only what came from a shell is work: a CLI's helpers run in the folder too, but outside any shell.
+  // In the folder, only detached processes count, which have left our tree.
+  const candidates = new Set([...[...below].filter((pid) => fromShell(all, pid, root)), ...[...inFolder].filter((pid) => !below.has(pid))])
   const live = all.filter((proc) => candidates.has(proc.pid) && !base.has(proc.pid) && !proc.state.startsWith('Z') && !OURS.test(proc.command))
   const ports = await listeners(live.map((proc) => proc.pid))
   const services = live.flatMap((proc) => (ports.has(proc.pid) ? [{ ...proc, ports: ports.get(proc.pid) ?? [] }] : []))
@@ -106,8 +108,8 @@ export function stop(pids: number[]): void {
 
 export type Outcome = { settled: boolean; activity: Activity; waitedMs: number }
 
-/** Waits until only services remain, or the limit passes. The caller decides what a timeout means. */
-export async function waitForSettled(folder: string, base: Set<number>, limitMs: number, pollMs = 500): Promise<Outcome> {
+/** Waits until only services remain, the limit passes, or the caller stops waiting. The caller decides what that means. */
+export async function waitForSettled(folder: string, base: Set<number>, limitMs: number, pollMs = 500, signal?: AbortSignal): Promise<Outcome> {
   const started = Date.now()
   let quiet = 0
   for (;;) {
@@ -115,7 +117,7 @@ export async function waitForSettled(folder: string, base: Set<number>, limitMs:
     quiet = now.work.length === 0 ? quiet + 1 : 0
     // Two quiet polls, so a command starting right after another is not missed.
     if (quiet >= 2) return { settled: true, activity: now, waitedMs: Date.now() - started }
-    if (Date.now() - started >= limitMs) return { settled: false, activity: now, waitedMs: Date.now() - started }
+    if (Date.now() - started >= limitMs || signal?.aborted) return { settled: false, activity: now, waitedMs: Date.now() - started }
     await new Promise((resolve) => setTimeout(resolve, pollMs))
   }
 }

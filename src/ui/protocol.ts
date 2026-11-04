@@ -212,6 +212,7 @@ export type WebviewMessage =
   | { type: 'groupSendNow'; text: string }
   | { type: 'resumeDelegation'; id: string }
   | { type: 'cancelDelegation'; id: string }
+  | { type: 'stopWaiting'; id: string }
   | { type: 'answerDelegate'; id: string; text: string }
   | { type: 'allowViolation'; id: string }
   | { type: 'connectLinear' }

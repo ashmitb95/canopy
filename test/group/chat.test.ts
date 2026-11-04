@@ -784,6 +784,23 @@ describe('delegation', () => {
     child.kill()
   }, 20_000)
 
+  it("keeps the permission mode the user picked for a delegate on later turns", async () => {
+    chat = chats.create({ lead: 'claude', roster: { implement: 'grok' } })
+    await chat.send('build')
+    await tick()
+    chat.handleTool('claude', 'delegate', { to: 'grok', task: 'Make it', context: CONTEXT })
+    await finish(claude.at(-1), 'handing over')
+    await until(() => (grok.at(-1)?.prompts.length ?? 0) > 0)
+    await chat.setMemberMode('grok', 'accept-edits')
+    expect(chat.state().members.find((member) => member.agent === 'grok')).toMatchObject({ mode: 'accept-edits', modes: ['ask', 'accept-edits'] })
+    await finish(grok.at(-1), 'STATUS: done')
+    await until(() => (claude.at(-1)?.prompts.length ?? 0) > 1)
+    chat.handleTool('claude', 'delegate', { to: 'grok', task: 'Again', context: CONTEXT })
+    await finish(claude.at(-1), 'again')
+    await until(() => (grok.at(-1)?.prompts.length ?? 0) > 1)
+    expect(grok.at(-1)?.modes.at(-1)).toBe('accept-edits')
+  })
+
   it('lets a mention reach a delegate while it works', async () => {
     await chat.send('build')
     await tick()

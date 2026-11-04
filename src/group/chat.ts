@@ -41,6 +41,8 @@ export type GroupRecord = {
   queue: QueuedMessage[]
   laneId?: string
   mode: PermissionMode
+  /** Permission modes the user chose for agents in this chat, kept across turns. */
+  modes?: Record<string, PermissionMode>
   roster: Roster
   /** Only the agent holding Implement may write; others are blocked and told to delegate. */
   enforce: boolean
@@ -60,7 +62,8 @@ export type GroupRecord = {
   blocked?: string
 }
 
-export type MemberState = { agent: string; status: SessionStatus; activity: string }
+/** `mode` is the agent's permission mode, and `modes` the ones its provider offers. */
+export type MemberState = { agent: string; status: SessionStatus; activity: string; mode?: PermissionMode; modes?: readonly PermissionMode[] }
 export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; active: string[]; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
 /** `delegation` is the delegation the agent was working on when the item first arrived. */
 export type TimelineItem = { agent: string; item: SessionItem; delegation?: string }
@@ -263,7 +266,7 @@ export class GroupChat implements Disposable {
       lead: record.lead,
       target: record.target,
       queue: [...record.queue],
-      members: Object.keys(record.members).map((agent) => ({ agent, status: this.statuses.get(agent) ?? 'idle', activity: this.activity(agent) })),
+      members: Object.keys(record.members).map((agent) => ({ agent, status: this.statuses.get(agent) ?? 'idle', activity: this.activity(agent), ...this.modeOf(agent) })),
       ...(this.running.size > 0 ? { running: [...this.running.keys()].at(-1) } : {}),
       active: [...this.running.keys()],
       ...(record.blocked ? { blocked: record.blocked } : {}),
@@ -1032,7 +1035,24 @@ export class GroupChat implements Disposable {
   /** ACP agents only stop at permission requests, which full access skips. */
   private async applyRole(agent: string, sessionId: string): Promise<void> {
     if (agent === 'claude' || agent === 'codex' || !this.record.roster.implement || !this.record.enforce) return
-    await this.deps.manager.setMode(sessionId, agent === this.record.roster.implement ? this.record.mode : 'ask').catch(() => undefined)
+    const mode = agent === this.record.roster.implement ? (this.record.modes?.[agent] ?? this.record.mode) : 'ask'
+    await this.deps.manager.setMode(sessionId, mode).catch(() => undefined)
+  }
+
+  private modeOf(agent: string): Pick<MemberState, 'mode' | 'modes'> {
+    const record = this.deps.manager.list().find((entry) => entry.record.id === this.record.members[agent])?.record
+    const modes = this.deps.providers.get(agent)?.modes
+    return { ...(record ? { mode: record.mode } : {}), ...(modes ? { modes } : {}) }
+  }
+
+  /** The user's choice of permission mode for one agent, which later turns keep. */
+  async setMemberMode(agent: string, mode: PermissionMode): Promise<void> {
+    const sessionId = this.record.members[agent]
+    if (!sessionId) return
+    this.record.modes = { ...this.record.modes, [agent]: mode }
+    await this.deps.manager.setMode(sessionId, mode)
+    this.save()
+    this.changed()
   }
 
   private activity(agent: string): string {

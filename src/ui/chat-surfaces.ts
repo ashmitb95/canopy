@@ -336,6 +336,9 @@ export class ChatSurfaces
       case 'stopWaiting':
         chat.stopWaiting(message.id)
         return true
+      case 'setMemberMode':
+        await chat.setMemberMode(message.agent, message.mode)
+        return true
       case 'answerDelegate':
         chat.answerDelegate(message.id, message.text)
         return true

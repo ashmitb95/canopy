@@ -275,7 +275,7 @@ const statesGroup: GroupState = {
   active: ['codex'],
   members: [
     { agent: 'claude', status: 'idle', activity: '' },
-    { agent: 'codex', status: 'running', activity: 'Editing export.ts' },
+    { agent: 'codex', status: 'running', activity: 'Editing export.ts', mode: 'ask', modes: ['ask', 'accept-edits', 'full-access'] },
     { agent: 'grok', status: 'idle', activity: '' }
   ],
   delegations: [

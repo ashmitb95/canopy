@@ -213,6 +213,7 @@ export type WebviewMessage =
   | { type: 'resumeDelegation'; id: string }
   | { type: 'cancelDelegation'; id: string }
   | { type: 'stopWaiting'; id: string }
+  | { type: 'setMemberMode'; agent: string; mode: PermissionMode }
   | { type: 'answerDelegate'; id: string; text: string }
   | { type: 'allowViolation'; id: string }
   | { type: 'connectLinear' }

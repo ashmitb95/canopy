@@ -9,6 +9,7 @@ import { Codicon } from '../components/codicon'
 import { ProviderAvatar } from '../components/provider-avatar'
 import { send } from '../host'
 import { Composer } from '../components/composer'
+import { MODES } from '../components/mode-picker'
 import { editInComposer } from '../composer/edit-bus'
 import { useApprovalKeys } from '../items/approval-card'
 import { useNow } from '../use-now'
@@ -232,6 +233,33 @@ function AnswerForm({ onAnswer, label = 'Answer' }: { onAnswer: (text: string) =
   )
 }
 
+/** The delegate's permission mode, changed from its card. Read-only roles never ask, so they get none. */
+function CardMode({ group, agent }: { group: GroupState; agent: string }) {
+  const member = group.members.find((candidate) => candidate.agent === agent)
+  const writes = !group.roster.implement || group.roster.implement === agent
+  if (!writes || !member?.mode || (member.modes?.length ?? 0) < 2) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className="flex h-[30px] items-center gap-1 rounded-md px-1.5 hover:bg-control hover:text-foreground" title={`${name(agent)}'s permissions`}>
+          <Codicon name={MODES[member.mode].icon} size={12} />
+          {MODES[member.mode].label}
+          <Codicon name="chevron-down" size={12} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {member.modes?.map((mode) => (
+          <DropdownMenuItem key={mode} onSelect={() => send({ type: 'setMemberMode', agent, mode })}>
+            <Codicon name={MODES[mode].icon} size={12} />
+            {MODES[mode].label}
+            {mode === member.mode ? <Codicon name="check" size={12} /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function DelegateCard({ group, delegation, items, selected, onSelect }: { group: GroupState; delegation: Delegation; items: TimelineItem[]; selected: boolean; onSelect: () => void }) {
   const [open, setOpen] = useState(false)
   const [full, setFull] = useState(false)
@@ -282,6 +310,7 @@ function DelegateCard({ group, delegation, items, selected, onSelect }: { group:
               <button type="button" className="hover:text-foreground hover:underline" onClick={() => send({ type: 'groupStop' })}>
                 · Stop
               </button>
+              <CardMode group={group} agent={delegation.agent} />
               <button type="button" className="ml-auto h-[30px] rounded-md bg-control px-2.5 font-semibold text-foreground" onClick={() => setFull(!full)}>
                 {full ? 'Show less' : 'Show everything'}
               </button>

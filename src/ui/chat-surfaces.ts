@@ -278,7 +278,7 @@ export class ChatSurfaces
     if (!chat) return false
     switch (message.type) {
       case 'ready':
-        this.post(surface, { type: 'groupSnapshot', state: chat.state(), items: chat.items() })
+        // The generic handler sends the shared data and then the group snapshot.
         return false
       case 'groupSend':
         await chat.send(message.text)
@@ -503,7 +503,9 @@ export class ChatSurfaces
         await this.postProviders(surface)
         for (const [providerId, quota] of Object.entries(this.quotas)) this.post(surface, { type: 'quota', providerId, quota })
         for (const [providerId, { progress }] of this.signIns) this.post(surface, { type: 'signInProgress', providerId, progress })
+        const group = surface.groupId ? this.chats?.get(surface.groupId) : undefined
         if (sessionId) this.show(surface, sessionId)
+        else if (group) this.post(surface, { type: 'groupSnapshot', state: group.state(), items: group.items() })
         else {
           this.post(surface, { type: 'empty' })
           await this.postLaneCards(surface)

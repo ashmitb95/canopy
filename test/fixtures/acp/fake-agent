@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+// A minimal ACP agent for tests: each prompt asks to run two commands, then reports what it was told.
+const { createInterface } = require('node:readline')
+let next = 1000
+const waiting = new Map()
+const send = (message) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
+const ask = (method, params) => new Promise((resolve) => {
+  const id = next++
+  waiting.set(id, resolve)
+  send({ id, method, params })
+})
+const options = [
+  { optionId: 'once', name: 'Allow once', kind: 'allow_once' },
+  { optionId: 'always', name: "Yes, and don't ask again for bash commands", kind: 'allow_always' },
+  { optionId: 'no', name: 'Deny', kind: 'reject_once' }
+]
+createInterface({ input: process.stdin }).on('line', async (line) => {
+  const message = JSON.parse(line)
+  if (message.id !== undefined && !message.method) return waiting.get(message.id)?.(message.result)
+  const reply = (result) => send({ id: message.id, result })
+  if (message.method === 'initialize') return reply({ protocolVersion: 1, authMethods: [], agentCapabilities: {} })
+  if (message.method === 'session/new') return reply({ sessionId: 's1' })
+  if (message.method !== 'session/prompt') return reply({})
+  const outcomes = []
+  for (const id of ['c1', 'c2']) {
+    const result = await ask('session/request_permission', { sessionId: 's1', toolCall: { toolCallId: id, kind: 'execute', title: `run ${id}` }, options })
+    outcomes.push(result?.outcome?.optionId ?? result?.outcome?.outcome)
+  }
+  send({ method: 'session/update', params: { sessionId: 's1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: outcomes.join(',') } } } })
+  reply({ stopReason: 'end_turn' })
+})

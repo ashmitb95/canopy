@@ -127,6 +127,8 @@ class AcpSession implements ProviderSession {
   private model = ''
   private mode: PermissionMode
   private boundary: WriteBoundary | undefined
+  /** Tool kinds the user said not to ask about again. Canopy answers these itself, since some agents ask again anyway. */
+  private readonly alwaysAllowed = new Set<string>()
   private replaying = false
   private imagesAccepted = false
   private commands: CommandOption[] = []
@@ -316,6 +318,9 @@ class AcpSession implements ProviderSession {
     const allow = options.find((option) => option.kind === 'allow_once') ?? options.find((option) => option.kind === 'allow_always')
     const autoAllow = readOnly || this.mode === 'full-access' || (this.mode === 'accept-edits' && toolCall.kind === 'edit')
     if (autoAllow && allow) return Promise.resolve(selected(allow.optionId))
+    const kind = toolCall.kind ?? ''
+    const always = options.find((option) => option.kind === 'allow_always') ?? allow
+    if (kind && this.alwaysAllowed.has(kind) && always) return Promise.resolve(selected(always.optionId))
     const optionIds = new Map<string, string>()
     const choices: ApprovalOption[] = []
     for (const [kind, id, label] of [
@@ -339,6 +344,7 @@ class AcpSession implements ProviderSession {
     return this.holder.hold(item, (response) => {
       const optionId = response.kind === 'option' ? response.optionId : 'dismissed'
       const chosen = optionIds.get(optionId)
+      if (chosen && optionId === 'allowForSession' && kind) this.alwaysAllowed.add(kind)
       return { resolved: optionId, result: chosen ? selected(chosen) : CANCELLED }
     })
   }

@@ -15,20 +15,33 @@ type NewLaneDeps = {
 }
 
 /** The New Worktree form in an editor tab: an issue to start from, the branch, and who leads. */
-export class NewLaneView implements vscode.Disposable {
+export const NEW_LANE_PANEL = 'canopy.newLane'
+
+/** The New Worktree form in an editor tab. */
+export class NewLaneView implements vscode.WebviewPanelSerializer, vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined
 
   constructor(private readonly deps: NewLaneDeps) {}
 
   open(): void {
     if (this.panel) return this.panel.reveal()
-    const panel = vscode.window.createWebviewPanel('canopy.newLane', 'New Worktree', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() })
+    this.adopt(vscode.window.createWebviewPanel(NEW_LANE_PANEL, 'New Worktree', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() }))
+  }
+
+  /** A New Worktree tab VS Code restored after a reload: it opens as a fresh form. */
+  async deserializeWebviewPanel(panel: vscode.WebviewPanel): Promise<void> {
+    if (this.panel) return panel.dispose()
+    this.adopt(panel)
+  }
+
+  private adopt(panel: vscode.WebviewPanel): void {
+    panel.webview.options = { enableScripts: true, localResourceRoots: this.deps.roots() }
     panel.webview.html = this.deps.html(panel.webview)
     panel.webview.onDidReceiveMessage((message: WebviewMessage) =>
       this.handle(message).catch((error: unknown) => this.post({ type: 'newLaneError', message: error instanceof Error ? error.message : String(error) }))
     )
     panel.onDidDispose(() => {
-      this.panel = undefined
+      if (this.panel === panel) this.panel = undefined
     })
     this.panel = panel
   }

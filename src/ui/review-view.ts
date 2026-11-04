@@ -19,7 +19,9 @@ type ReviewDeps = {
 }
 
 /** One editor tab per group chat, to review what each agent did before shipping it. */
-export class ReviewView implements vscode.Disposable {
+export const REVIEW_PANEL = 'canopy.review'
+
+export class ReviewView implements vscode.WebviewPanelSerializer, vscode.Disposable {
   private readonly panels = new Map<string, { panel: vscode.WebviewPanel; listener: { dispose(): void } }>()
 
   constructor(private readonly deps: ReviewDeps) {}
@@ -29,7 +31,20 @@ export class ReviewView implements vscode.Disposable {
     if (open) return open.panel.reveal()
     const chat = this.deps.chats.get(groupId)
     if (!chat) return
-    const panel = vscode.window.createWebviewPanel('canopy.review', `Review: ${chat.record.title}`, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() })
+    this.adopt(vscode.window.createWebviewPanel(REVIEW_PANEL, `Review: ${chat.record.title}`, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() }), chat)
+  }
+
+  /** A review tab VS Code restored after a reload; the webview saved which chat it reviews. */
+  async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: { groupId?: string } | undefined): Promise<void> {
+    const chat = state?.groupId ? this.deps.chats.get(state.groupId) : undefined
+    if (!chat || this.panels.has(chat.record.id)) return panel.dispose()
+    panel.title = `Review: ${chat.record.title}`
+    this.adopt(panel, chat)
+  }
+
+  private adopt(panel: vscode.WebviewPanel, chat: GroupChat): void {
+    const groupId = chat.record.id
+    panel.webview.options = { enableScripts: true, localResourceRoots: this.deps.roots() }
     panel.webview.html = this.deps.html(panel.webview)
     panel.webview.onDidReceiveMessage((message: WebviewMessage) =>
       this.handle(chat, message).catch((error: unknown) => vscode.window.showErrorMessage(`Canopy: ${error instanceof Error ? error.message : String(error)}`))
@@ -54,6 +69,7 @@ export class ReviewView implements vscode.Disposable {
     const diffs = new Map(chat.review().map(({ delegation, diff }) => [delegation.id, diff]))
     const lane = this.lane(chat)
     return {
+      groupId: chat.record.id,
       title: chat.record.title,
       ...(chat.record.laneId ? { laneId: chat.record.laneId } : {}),
       inPrimary: lane?.repos.some((repo) => repo.location === 'primary') ?? false,

@@ -13,10 +13,16 @@ import { relativeTime } from './time'
 import type { Unread } from './unread'
 
 export const SIDE_VIEW = 'canopy.sessions'
+/** Every conversation, in its own view in the secondary sidebar. */
+export const CONVERSATIONS_VIEW = 'canopy.conversations'
+export const LANES_PANEL = 'canopy.lanes'
 
-/** The primary sidebar (lanes above sessions and group chats) and the full lane view in an editor tab, fed from one place. */
-export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
-  private view: vscode.WebviewView | undefined
+/**
+ * The primary sidebar (lanes above sessions and group chats), the conversations list, and the full lane view in an
+ * editor tab, fed from one place.
+ */
+export class SideView implements vscode.WebviewViewProvider, vscode.WebviewPanelSerializer, vscode.Disposable {
+  private readonly views = new Set<vscode.WebviewView>()
   private panel: vscode.WebviewPanel | undefined
   private readonly subscriptions: vscode.Disposable[] = []
   private chatListeners: { dispose(): void }[] = []
@@ -24,7 +30,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly laneListeners = new Set<() => void>()
 
   constructor(
-    private readonly html: (webview: vscode.Webview, kind: 'side' | 'lanes') => string,
+    private readonly html: (webview: vscode.Webview, kind: 'side' | 'lanes' | 'conversations') => string,
     private readonly roots: () => vscode.Uri[],
     private readonly manager: SessionManager,
     private readonly chats: GroupChats,
@@ -41,23 +47,31 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
-    this.view = view
+    this.views.add(view)
     view.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
-    view.webview.html = this.html(view.webview, 'side')
+    view.webview.html = this.html(view.webview, view.viewType === CONVERSATIONS_VIEW ? 'conversations' : 'side')
     view.webview.onDidReceiveMessage((message: WebviewMessage) => this.receive(message))
-    view.onDidDispose(() => {
-      if (this.view === view) this.view = undefined
-    })
+    view.onDidDispose(() => this.views.delete(view))
   }
 
   /** Opens the full lane view, or reveals it if it is open. */
   openLanes(): void {
     if (this.panel) return this.panel.reveal()
-    const panel = vscode.window.createWebviewPanel('canopy.lanes', 'Lanes', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() })
+    this.adoptLanes(vscode.window.createWebviewPanel(LANES_PANEL, 'Lanes', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() }))
+  }
+
+  /** A lane tab VS Code restored after a reload. */
+  async deserializeWebviewPanel(panel: vscode.WebviewPanel): Promise<void> {
+    if (this.panel) return panel.dispose()
+    this.adoptLanes(panel)
+  }
+
+  private adoptLanes(panel: vscode.WebviewPanel): void {
+    panel.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
     panel.webview.html = this.html(panel.webview, 'lanes')
     panel.webview.onDidReceiveMessage((message: WebviewMessage) => this.receive(message))
     panel.onDidDispose(() => {
-      this.panel = undefined
+      if (this.panel === panel) this.panel = undefined
     })
     this.panel = panel
   }
@@ -266,6 +280,6 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   private post(message: HostMessage): void {
-    void this.view?.webview.postMessage(message)
+    for (const view of this.views) void view.webview.postMessage(message)
   }
 }

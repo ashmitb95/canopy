@@ -56,6 +56,7 @@ export type SetupData = {
 
 /** The review screen for one group chat: who did what, with what Canopy recorded and each delegate's diff. */
 export type ReviewData = {
+  groupId: string
   title: string
   laneId?: string
   inPrimary: boolean

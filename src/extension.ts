@@ -18,10 +18,10 @@ import { EditorContextTracker } from './ui/editor-context'
 import { GIT_SCHEME, LaneChanges } from './ui/lane-changes'
 import { Notifier } from './ui/notifier'
 import type { LaneNode, SessionNode } from './ui/sessions-tree'
-import { NewLaneView } from './ui/new-lane-view'
-import { ReviewView } from './ui/review-view'
-import { SetupView } from './ui/setup-view'
-import { SIDE_VIEW, SideView } from './ui/side-view'
+import { NEW_LANE_PANEL, NewLaneView } from './ui/new-lane-view'
+import { REVIEW_PANEL, ReviewView } from './ui/review-view'
+import { SETUP_PANEL, SetupView } from './ui/setup-view'
+import { CONVERSATIONS_VIEW, LANES_PANEL, SIDE_VIEW, SideView } from './ui/side-view'
 import { SessionsStatusBar } from './ui/status-bar'
 import { KeepAwake } from './ui/keep-awake'
 import { Unread } from './ui/unread'
@@ -162,7 +162,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     side,
     vscode.window.registerWebviewViewProvider(SIDE_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
+    vscode.window.registerWebviewViewProvider(CONVERSATIONS_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
+    // Tabs VS Code restores after a reload.
+    vscode.window.registerWebviewPanelSerializer(LANES_PANEL, side),
+    vscode.window.registerWebviewPanelSerializer(SETUP_PANEL, setup),
+    vscode.window.registerWebviewPanelSerializer(REVIEW_PANEL, review),
+    vscode.window.registerWebviewPanelSerializer(NEW_LANE_PANEL, newLane),
     vscode.commands.registerCommand('canopy.openGroup', (groupId: string) => surfaces.showGroupInSidebar(groupId)),
+    vscode.commands.registerCommand('canopy.openGroupInEditor', (target: string | { id: string }) => surfaces.openGroupPanel(typeof target === 'string' ? target : target.id)),
+    vscode.commands.registerCommand('canopy.showLanes', () => surfaces.showLanesInSidebar()),
     vscode.commands.registerCommand('canopy.openLanes', () => side.openLanes()),
     vscode.commands.registerCommand('canopy.openSetup', () => setup.open()),
     vscode.commands.registerCommand('canopy.reviewGroup', (groupId: string) => review.open(groupId)),

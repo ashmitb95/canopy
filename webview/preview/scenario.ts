@@ -337,6 +337,7 @@ const messages: HostMessage[] =
           {
             type: 'review',
             review: {
+              groupId: 'g1',
               title: 'Export timeouts',
               laneId: 'export-timeouts',
               inPrimary: false,

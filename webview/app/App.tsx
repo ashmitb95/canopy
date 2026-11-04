@@ -30,8 +30,9 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (state.sessionId) saveState({ sessionId: state.sessionId })
-  }, [state.sessionId])
+    if (state.group) saveState({ groupId: state.group.id, sessionId: undefined })
+    else if (state.sessionId) saveState({ sessionId: state.sessionId, groupId: undefined })
+  }, [state.sessionId, state.group?.id])
 
   useApprovalKeys(state.items)
 

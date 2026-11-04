@@ -10,8 +10,8 @@ export function send(message: WebviewMessage): void {
   api.postMessage(message)
 }
 
-/** Lets VS Code restore an editor tab's session after a reload. */
-export function saveState(state: { sessionId: string }): void {
+/** Lets VS Code restore an editor tab's chat after a reload: a session, or a group chat. */
+export function saveState(state: { sessionId?: string; groupId?: string }): void {
   api.setState({ ...(api.getState() as object | undefined), ...state })
 }
 

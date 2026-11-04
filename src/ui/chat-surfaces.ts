@@ -49,6 +49,7 @@ export class ChatSurfaces
   private sidebar: Surface | undefined
   /** Editor tabs showing the provider chooser, before a session exists. */
   private readonly blankPanels = new Set<Surface>()
+  private readonly groupPanels = new Map<string, { panel: vscode.WebviewPanel; surface: Surface }>()
   private sidebarView: vscode.WebviewView | undefined
   /** Latest usage per provider; kept across reloads and shown with its age. */
   private readonly quotas: Record<string, Quota>
@@ -370,7 +371,43 @@ export class ChatSurfaces
   }
 
   openSidebarInEditor(): void {
+    if (this.sidebar?.groupId) return this.openGroupPanel(this.sidebar.groupId)
     if (this.sidebar?.sessionId) this.openPanel(this.sidebar.sessionId)
+  }
+
+  /** The right sidebar's chat view goes back to the lanes; the chat it showed stays in Conversations. */
+  async showLanesInSidebar(): Promise<void> {
+    await this.context.workspaceState.update(SIDEBAR_SESSION_KEY, undefined)
+    await this.context.workspaceState.update(SIDEBAR_GROUP_KEY, undefined)
+    await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
+    if (this.sidebar) {
+      this.sidebar.member?.subscription.dispose()
+      this.sidebar.member = undefined
+      this.clear(this.sidebar)
+    }
+  }
+
+  /** A group chat in an editor tab, which comes back after a reload. */
+  openGroupPanel(groupId: string): void {
+    const open = this.groupPanels.get(groupId)
+    if (open) return open.panel.reveal()
+    if (!this.chats?.get(groupId)) return
+    const panel = vscode.window.createWebviewPanel(PANEL_TYPE, 'Chat', vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() })
+    this.attachGroupPanel(panel, groupId)
+  }
+
+  private attachGroupPanel(panel: vscode.WebviewPanel, groupId: string): void {
+    panel.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
+    panel.webview.html = this.html(panel.webview, 'panel')
+    panel.title = this.chats?.get(groupId)?.record.title ?? 'Chat'
+    const surface = this.surface(panel.webview, 'panel', undefined)
+    surface.panel = panel
+    this.showGroup(surface, groupId)
+    this.groupPanels.set(groupId, { panel, surface })
+    panel.onDidDispose(() => {
+      this.release(surface)
+      if (this.groupPanels.get(groupId)?.panel === panel) this.groupPanels.delete(groupId)
+    })
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -390,7 +427,11 @@ export class ChatSurfaces
     })
   }
 
-  async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: { sessionId?: string } | undefined): Promise<void> {
+  async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: { sessionId?: string; groupId?: string } | undefined): Promise<void> {
+    if (state?.groupId) {
+      if (!this.chats?.get(state.groupId) || this.groupPanels.has(state.groupId)) return panel.dispose()
+      return this.attachGroupPanel(panel, state.groupId)
+    }
     if (!state?.sessionId || !this.exists(state.sessionId)) return panel.dispose()
     this.attachPanel(panel, state.sessionId)
   }
@@ -401,6 +442,7 @@ export class ChatSurfaces
     for (const { flow } of this.signIns.values()) flow?.cancel()
     for (const { surface } of this.panels.values()) this.release(surface)
     for (const surface of this.blankPanels) this.release(surface)
+    for (const { surface } of this.groupPanels.values()) this.release(surface)
     if (this.sidebar) this.release(this.sidebar)
   }
 
@@ -838,7 +880,7 @@ export class ChatSurfaces
     return PALETTES.includes(palette) ? palette : 'paper'
   }
 
-  html(webview: vscode.Webview, kind: SurfaceKind | 'side' | 'lanes' | 'setup' | 'review' | 'new-lane'): string {
+  html(webview: vscode.Webview, kind: SurfaceKind | 'side' | 'lanes' | 'setup' | 'review' | 'new-lane' | 'conversations'): string {
     const nonce = randomBytes(16).toString('base64')
     const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(this.assets(), name))
     // Scripts run by nonce; the entry module imports its code-split chunks from the webview origin.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReviewData } from '../../../src/ui/protocol'
 import { ProviderAvatar } from '../components/provider-avatar'
-import { onHostMessage, send } from '../host'
+import { onHostMessage, persisted, send } from '../host'
 
 type Run = ReviewData['delegations'][number]
 
@@ -83,7 +83,11 @@ export function ReviewApp() {
   const [selected, setSelected] = useState<string>()
   useEffect(() => {
     const off = onHostMessage((message) => {
-      if (message.type === 'review') setData(message.review)
+      if (message.type === 'review') {
+        setData(message.review)
+        // VS Code restores this tab after a reload from the chat it reviews.
+        persisted.set({ ...(persisted.get() as object | undefined), groupId: message.review.groupId })
+      }
     })
     send({ type: 'ready' })
     return off

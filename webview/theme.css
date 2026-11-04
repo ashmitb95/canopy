@@ -70,14 +70,16 @@ body[data-surface="view"] {
   --page: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
 body.vscode-light[data-surface="side"],
-body.vscode-light[data-surface="view"] {
+body.vscode-light[data-surface="view"],
+body.vscode-light[data-surface="conversations"] {
   --surface: color-mix(in srgb, var(--vscode-foreground) 6%, var(--vscode-sideBar-background, var(--vscode-editor-background)));
   --control: color-mix(in srgb, var(--vscode-foreground) 12%, var(--vscode-sideBar-background, var(--vscode-editor-background)));
 }
 
 /* The sidebar chat sits on the sidebar's background. */
 body[data-surface="view"],
-body[data-surface="side"] {
+body[data-surface="side"],
+body[data-surface="conversations"] {
   --background: var(--vscode-sideBar-background);
 }
 

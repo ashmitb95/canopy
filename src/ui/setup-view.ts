@@ -22,6 +22,8 @@ const CONFIG_TEMPLATE = `# Canopy workspace settings. Every key is optional.
 # api = "pnpm install"
 `
 
+export const SETUP_PANEL = 'canopy.setup'
+
 /** Whether `gh` is installed and signed in; GitHub issues and pull requests go through it. */
 function githubStatus(cwd: string): Promise<SetupData['github']> {
   return new Promise((resolve) => {
@@ -33,7 +35,7 @@ function githubStatus(cwd: string): Promise<SetupData['github']> {
 }
 
 /** The setup page in an editor tab: agents, who does what, the workspace, and issue trackers. */
-export class SetupView implements vscode.Disposable {
+export class SetupView implements vscode.WebviewPanelSerializer, vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined
   private readonly subscription: vscode.Disposable
 
@@ -53,7 +55,17 @@ export class SetupView implements vscode.Disposable {
 
   open(): void {
     if (this.panel) return this.panel.reveal()
-    const panel = vscode.window.createWebviewPanel('canopy.setup', 'Canopy Setup', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() })
+    this.adopt(vscode.window.createWebviewPanel(SETUP_PANEL, 'Canopy Setup', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() }))
+  }
+
+  /** A setup tab VS Code restored after a reload. */
+  async deserializeWebviewPanel(panel: vscode.WebviewPanel): Promise<void> {
+    if (this.panel) return panel.dispose()
+    this.adopt(panel)
+  }
+
+  private adopt(panel: vscode.WebviewPanel): void {
+    panel.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
     panel.webview.html = this.html(panel.webview)
     panel.webview.onDidReceiveMessage((message: WebviewMessage) =>
       this.handle(message).catch((error: unknown) => vscode.window.showErrorMessage(`Canopy: ${error instanceof Error ? error.message : String(error)}`))
@@ -61,7 +73,7 @@ export class SetupView implements vscode.Disposable {
     // Agents may have been signed in elsewhere while the page was hidden.
     panel.onDidChangeViewState(() => panel.visible && void this.refresh())
     panel.onDidDispose(() => {
-      this.panel = undefined
+      if (this.panel === panel) this.panel = undefined
     })
     this.panel = panel
   }

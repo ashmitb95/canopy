@@ -8,4 +8,4 @@ import { SideApp } from './app/side/side-app'
 
 // The primary sidebar and the chat share one bundle; the host says which this webview is.
 const surface = document.body.dataset.surface
-createRoot(document.getElementById('root')!).render(surface === 'side' ? <SideApp /> : surface === 'lanes' ? <LanesApp /> : surface === 'setup' ? <SetupApp /> : surface === 'review' ? <ReviewApp /> : surface === 'new-lane' ? <NewLaneApp /> : <App />)
+createRoot(document.getElementById('root')!).render(surface === 'side' ? <SideApp /> : surface === 'conversations' ? <SideApp conversationsOnly /> : surface === 'lanes' ? <LanesApp /> : surface === 'setup' ? <SetupApp /> : surface === 'review' ? <ReviewApp /> : surface === 'new-lane' ? <NewLaneApp /> : <App />)

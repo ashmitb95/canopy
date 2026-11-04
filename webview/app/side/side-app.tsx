@@ -70,7 +70,8 @@ function Row({ attention, active, onOpen, context, children }: { attention: bool
   )
 }
 
-export function SideApp() {
+/** The primary sidebar, or with `conversationsOnly` the Conversations view in the secondary sidebar. */
+export function SideApp({ conversationsOnly = false }: { conversationsOnly?: boolean }) {
   const [data, setData] = useState<SideData>()
   const [lanesOpen, setLanesOpen] = useState(true)
   useEffect(() => {
@@ -83,7 +84,7 @@ export function SideApp() {
   if (!data) return null
   return (
     <div className="flex h-screen flex-col text-[13px]">
-      {data.lanes ? (
+      {data.lanes && !conversationsOnly ? (
         <>
           <div className="flex h-[38px] shrink-0 items-center">
             <button type="button" aria-expanded={lanesOpen} className="flex h-[38px] flex-1 items-center gap-1.5 px-2.5 text-left" onClick={() => setLanesOpen(!lanesOpen)}>
@@ -100,7 +101,7 @@ export function SideApp() {
           {lanesOpen ? <Lanes lanes={data.lanes} /> : null}
         </>
       ) : null}
-      <div className="flex h-[38px] shrink-0 items-center pl-2.5">
+      <div className={`flex h-[38px] shrink-0 items-center pl-2.5 ${conversationsOnly ? 'hidden' : ''}`}>
         <span className="flex-1">
           <Heading>SESSIONS</Heading>
         </span>
@@ -108,12 +109,18 @@ export function SideApp() {
           <Codicon name="add" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 space-y-0.5 overflow-auto px-1.5 pb-2">
+      <div className={`min-h-0 flex-1 space-y-0.5 overflow-auto px-1.5 pb-2 ${conversationsOnly ? 'pt-1.5' : ''}`}>
         {data.groups.map((group) => {
           const live = Boolean(group.running) || group.needsYou
           const who = group.running ?? group.lead
           return (
-            <Row key={group.id} attention={group.needsYou} active={live} onOpen={() => send({ type: 'openGroup', groupId: group.id })}>
+            <Row
+              key={group.id}
+              attention={group.needsYou}
+              active={live}
+              context={JSON.stringify({ webviewSection: 'group', id: group.id, preventDefaultContextMenuItems: true })}
+              onOpen={() => send({ type: 'openGroup', groupId: group.id })}
+            >
               <div className="flex items-center gap-[7px]">
                 {live ? <StatusMark needs={group.needsYou} /> : null}
                 <span className={`min-w-0 flex-1 truncate ${live ? 'font-semibold' : ''}`}>{group.title}</span>

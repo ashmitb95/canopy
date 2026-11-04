@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2
+
+- Marketplace readme shows its images and the chat recording.
+- Chats in editor tabs, group chats included, and the lane, setup, and review tabs come back after a reload.
+- Conversations in the secondary sidebar lists every chat.
+- The secondary sidebar's title button shows the lanes, in place of the provider list.
+
 ## 1.0.1
 
 - Marketplace readme images resolve to the files already on GitHub.

@@ -1,12 +1,11 @@
-# Canopy
+# Canopy - A Multi-provider, multi-repo orchestration tool
 
 <p align="center">
   <img src="media/canopy-logo.svg" alt="Canopy logo: a tree of worktrees with an agent at the hub" width="280">
 </p>
 
-**Multi-provider, multi-repo orchestration tool.**
+**Chat with coding agents — Claude, Codex, Grok, and any ACP agent — from one place in VS Code, on your own subscriptions.**
 
-Chat with coding agents — Claude, Codex, Grok, and any ACP agent — from one place in VS Code, on your own subscriptions.
 
 Canopy runs each provider through its official CLI. It never reads, stores, or forwards your credentials, and it never calls provider APIs itself. Sign-in stays with each CLI.
 

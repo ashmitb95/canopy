@@ -55,7 +55,7 @@ Canopy is not on the Marketplace yet. Build and sideload it:
 ```sh
 pnpm install
 pnpm run package
-code --install-extension canopy-0.1.0.vsix --force
+code --install-extension canopy-1.0.0.vsix --force
 ```
 
 Reload VS Code and open Canopy from the activity bar.

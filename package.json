@@ -3,7 +3,7 @@
   "displayName": "Canopy",
   "description": "Chat with coding agents on your own subscriptions.",
   "icon": "media/canopy-icon.png",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "license": "MIT",
   "private": true,
   "publisher": "ashmitb95",

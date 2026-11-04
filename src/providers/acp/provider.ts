@@ -250,7 +250,7 @@ class AcpSession implements ProviderSession {
       {
         protocolVersion: 1,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'canopy', version: '0.1.0' }
+        clientInfo: { name: 'canopy', version: '1.0.0' }
       }
     )
     this.imagesAccepted = init.agentCapabilities?.promptCapabilities?.image === true

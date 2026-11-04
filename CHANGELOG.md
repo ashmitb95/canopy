@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3
+
+- Open in Editor opens the chat, not the providers screen.
+- Each delegate's card shows only its own work, and new output stays at the bottom of the chat. Phased plans hand each phase the previous phase's report.
+- Read-only roles can write the lane's plan.md and notes.md.
+- A delegate's permission request shows inside its card, and its permission mode can be changed from the card. "Don't ask again" holds for Grok and other ACP agents.
+- MCP servers an agent starts mid-turn no longer hold up a finished delegate, and a card waiting on background work has Stop waiting.
+- The sidebar lists only lanes with chats or uncommitted work, with a status line for each; the rest are in the Lane view.
+
 ## 1.0.2
 
 - Marketplace readme shows its images and the chat recording.

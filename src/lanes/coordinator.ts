@@ -1,12 +1,14 @@
 import { join, relative, sep } from 'node:path'
 import type { WriteBoundary } from '../core/types'
+import { log } from '../log'
 import type { SessionManager } from '../sessions/manager'
 import type { SessionRecord } from '../sessions/store'
 import { envFilesFor, readConfig } from './config'
+import { formatFailure } from './git'
 import { deriveLanes } from './lanes'
 import type { LaneMemory } from './memory'
 import type { RepoState } from './state'
-import { hasBranch, joinRepo, migrateToSlots, moveToWorktree, park, rollback, swapAll, SwitchError, type SwapOptions, unfinishedMove } from './switch'
+import { hasBranch, joinRepo, migrateToSlots, moveToWorktree, park, rollback, swapAll, SwitchError, SwitchQuestion, type SwapOptions, unfinishedMove } from './switch'
 import type { LaneTracker } from './tracker'
 import { warmUp } from './warmup'
 
@@ -47,34 +49,41 @@ export class LaneCoordinator {
 
   /** Brings the lane into the primary checkout of every repo it is in; lanes there move to worktrees and are warmed up. */
   async moveIntoPrimary(lane: string, answers: Pick<SwapOptions, 'makeLane' | 'takeForeign'> = {}): Promise<string[]> {
-    const { tracker } = this.deps
-    await tracker.refresh()
-    const repos = this.reposOf(lane)
-    if (repos.length === 0) throw new SwitchError(`${lane} has no checkout to move.`)
-    const holders = repos.flatMap((repo) => {
-      const branch = repo.checkouts.find((checkout) => checkout.primary)?.branch
-      return branch && branch !== repo.base && branch !== lane ? [branch] : []
-    })
-    this.assertIdle([lane, ...holders])
-    for (const repo of repos) await migrateToSlots(repo.path)
-    await tracker.refresh()
-    const moves = this.reposOf(lane)
-    // One base and limit per repo: swapAll takes them per call, so repos with different bases move one group at a time.
-    const lines: string[] = []
-    for (const group of groupBy(moves, (repo) => JSON.stringify(this.limits(repo)))) {
-      const results = await swapAll(group.map((repo) => repo.path), lane, { ...this.limits(group[0]), ...answers })
-      for (const [index, result] of results.entries()) {
-        const repo = group[index]
-        lines.push(`${lane} moved to the primary checkout of ${repo.name}/`)
-        if (result.movedOut && result.slotPath) {
-          lines.push(`${result.movedOut} moved to ${this.rel(result.slotPath)}`)
-          void this.warm(repo, result.movedOut, result.slotPath, result.setupNeeded.includes(result.slotPath))
+    log(`switch ${lane}: moving into the primary checkout`)
+    try {
+      const { tracker } = this.deps
+      await tracker.refresh()
+      const repos = this.reposOf(lane)
+      if (repos.length === 0) throw new SwitchError(`${lane} has no checkout to move.`)
+      const holders = repos.flatMap((repo) => {
+        const branch = repo.checkouts.find((checkout) => checkout.primary)?.branch
+        return branch && branch !== repo.base && branch !== lane ? [branch] : []
+      })
+      this.assertIdle([lane, ...holders])
+      for (const repo of repos) await migrateToSlots(repo.path)
+      await tracker.refresh()
+      const moves = this.reposOf(lane)
+      // One base and limit per repo: swapAll takes them per call, so repos with different bases move one group at a time.
+      const lines: string[] = []
+      for (const group of groupBy(moves, (repo) => JSON.stringify(this.limits(repo)))) {
+        const results = await swapAll(group.map((repo) => repo.path), lane, { ...this.limits(group[0]), ...answers })
+        for (const [index, result] of results.entries()) {
+          const repo = group[index]
+          lines.push(`${lane} moved to the primary checkout of ${repo.name}/`)
+          if (result.movedOut && result.slotPath) {
+            lines.push(`${result.movedOut} moved to ${this.rel(result.slotPath)}`)
+            void this.warm(repo, result.movedOut, result.slotPath, result.setupNeeded.includes(result.slotPath))
+          }
+          if (result.setupNeeded.includes(repo.path)) lines.push(`Dependencies changed in ${repo.name}/: rerun its setup in the primary checkout`)
         }
-        if (result.setupNeeded.includes(repo.path)) lines.push(`Dependencies changed in ${repo.name}/: rerun its setup in the primary checkout`)
       }
+      await this.settle([lane, ...holders], lines)
+      log(`switch ${lane}: ${lines.join(' · ')}`)
+      return lines
+    } catch (error) {
+      if (!(error instanceof SwitchQuestion)) log(`switch ${lane} failed: ${formatFailure(error)}`, true)
+      throw error
     }
-    await this.settle([lane, ...holders], lines)
-    return lines
   }
 
   /** Moves the lane out of every primary checkout it holds; the base branch goes back in. */

@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import * as vscode from 'vscode'
 import { captureEnv, type Env } from './env'
+import { setLog } from './log'
 import { laneDescription } from './lanes/lanes'
 import { handoffPrompt, readTasks } from './lanes/tasks'
 import { customAgent } from './providers/acp/agents'
@@ -32,6 +33,12 @@ let core: Core | undefined
 const LINEAR_SECRET = 'canopy.linearKey'
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const output = vscode.window.createOutputChannel('Canopy')
+  context.subscriptions.push(output)
+  setLog((line, reveal) => {
+    output.appendLine(`${new Date().toTimeString().slice(0, 8)} ${line}`)
+    if (reveal) output.show(true)
+  })
   const custom = vscode.workspace.getConfiguration('canopy').get<Record<string, unknown>[]>('customAgents', [])
   const providers = buildProviders(custom.flatMap((entry) => customAgent(entry) ?? []))
   let env: Promise<Env> | undefined

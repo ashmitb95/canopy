@@ -62,12 +62,19 @@ async function submoduleChanges(path: string): Promise<boolean> {
   return (await git(path, ['submodule', 'status'])).split('\n').some((line) => line.startsWith('+') || line.startsWith('U'))
 }
 
-/** Ignored files a checkout would refuse to overwrite: tracked on `branch` but ignored here. Stashes carry everything else. */
+/** Ignored files a checkout would refuse to overwrite: tracked on `branch` but ignored here. Stashes carry everything else.
+ *  A tracked file is not ignored, so only paths added since HEAD can collide. Listing the whole ignore set overflows stdout on a large repo. */
 async function collisions(path: string, branch: string): Promise<string[]> {
-  const ignored = (await git(path, ['ls-files', '--others', '--ignored', '--exclude-standard'])).split('\n').filter(Boolean)
-  if (ignored.length === 0) return []
-  const tracked = new Set((await git(path, ['ls-tree', '-r', '--name-only', branch])).split('\n'))
-  return ignored.filter((file) => tracked.has(file))
+  // `--no-renames` so a rename shows up as an add. Otherwise the new path is missed and checkout still refuses it.
+  const added = (await git(path, ['diff', '-z', '--name-only', '--diff-filter=A', '--no-renames', 'HEAD', branch, '--'])).split('\0').filter(Boolean)
+  const hits: string[] = []
+  // A few pathspecs at a time stays under the OS argument limit. `:(literal)` keeps `*` and brackets in names from being globs.
+  for (let start = 0; start < added.length; start += 100) {
+    const slice = added.slice(start, start + 100).map((file) => `:(literal)${file}`)
+    const listed = (await git(path, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ...slice])).split('\0').filter(Boolean)
+    hits.push(...listed)
+  }
+  return hits
 }
 
 export type Verdict = { kind: 'ok'; noop?: boolean } | { kind: 'ask'; reason: string; files?: string[] } | { kind: 'stop'; reason: string }

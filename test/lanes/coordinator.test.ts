@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { PromptPart, SessionItem } from '../../src/core/types'
 import { LaneCoordinator } from '../../src/lanes/coordinator'
 import { LaneMemory } from '../../src/lanes/memory'
-import { swap } from '../../src/lanes/switch'
+import { SwitchQuestion, swap } from '../../src/lanes/switch'
+import { setLog } from '../../src/log'
 import { LaneTracker } from '../../src/lanes/tracker'
 import { SessionManager } from '../../src/sessions/manager'
 import { SessionStore } from '../../src/sessions/store'
@@ -14,7 +15,10 @@ import { MemoryMemento } from '../memory-memento'
 import { repo, run, workspace } from './repos'
 
 let tracker: LaneTracker | undefined
-afterEach(() => tracker?.dispose())
+afterEach(() => {
+  tracker?.dispose()
+  setLog(() => {})
+})
 const text = (value: string): PromptPart[] => [{ type: 'text', text: value }]
 
 async function setup() {
@@ -90,6 +94,40 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
 
     expect(await coordinator.moveToWorktree('b')).toEqual(['b moved to api/.worktrees/wt-2'])
     expect(run(api, 'branch', '--show-current').trim()).toBe('main')
+  })
+
+  it('logs a switch question without calling it a failure', async () => {
+    const { api, coordinator } = await setup()
+    const lines: { line: string; reveal?: boolean }[] = []
+    setLog((line, reveal) => lines.push({ line, ...(reveal ? { reveal } : {}) }))
+    await coordinator.newLane('b', ['api'], { worktrees: true })
+    writeFileSync(join(api, 'README.md'), 'dirty\n')
+    await expect(coordinator.moveIntoPrimary('b')).rejects.toBeInstanceOf(SwitchQuestion)
+    expect(lines).toEqual([{ line: 'switch b: moving into the primary checkout' }])
+  })
+
+  it('logs a finished switch into the primary checkout', async () => {
+    const { coordinator } = await setup()
+    const lines: { line: string; reveal?: boolean }[] = []
+    setLog((line, reveal) => lines.push({ line, ...(reveal ? { reveal } : {}) }))
+    await coordinator.newLane('a', ['api'], { worktrees: false })
+    await coordinator.newLane('b', ['api'], { worktrees: true })
+    const moved = await coordinator.moveIntoPrimary('b')
+    expect(lines[0]).toEqual({ line: 'switch b: moving into the primary checkout' })
+    expect(lines.at(-1)).toEqual({ line: `switch b: ${moved.join(' · ')}` })
+  })
+
+  it('reveals the output when a switch fails', async () => {
+    const { manager, coordinator } = await setup()
+    const lines: { line: string; reveal?: boolean }[] = []
+    setLog((line, reveal) => lines.push({ line, ...(reveal ? { reveal } : {}) }))
+    await coordinator.newLane('a', ['api'], { worktrees: false })
+    await coordinator.newLane('b', ['api'], { worktrees: true })
+    const chat = await manager.create('fake')
+    await manager.setLane(chat.id, 'a')
+    await manager.prompt(chat.id, text('work'))
+    await expect(coordinator.moveIntoPrimary('b')).rejects.toThrow(/finish its turn/)
+    expect(lines.at(-1)).toEqual({ line: expect.stringMatching(/^switch b failed: Waiting for/), reveal: true })
   })
 
   it('finds and undoes a move a crash left unfinished', async () => {

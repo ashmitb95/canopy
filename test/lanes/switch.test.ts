@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { repo as makeRepo, run, workspace } from './repos'
@@ -172,6 +172,53 @@ describe('preflight', { timeout: 30_000 }, () => {
     const verdict = await expectUnchanged('tracks-it', 'ask')
     expect(verdict).toMatchObject({ files: ['build.out'] })
     expect(read(repo, 'build.out')).toBe('my local build\n')
+  })
+
+  it('names an ignored collision without reading a large ignore set', async () => {
+    branch(repo, 'waiting')
+    run(repo, 'switch', '-qc', 'tracks-it')
+    write(repo, 'build.out', 'tracked here\n')
+    run(repo, 'add', '.')
+    run(repo, 'commit', '-qm', 'tracked')
+    run(repo, 'switch', '-q', 'main')
+    writeFileSync(join(repo, '.git/info/exclude'), '.worktrees/\nbuild.out\nignored/\n')
+    write(repo, 'build.out', 'my local build\n')
+    const dir = join(repo, 'ignored')
+    mkdirSync(dir)
+    const prefix = 'n'.repeat(200)
+    for (let i = 0; i < 100_000; i++) closeSync(openSync(join(dir, prefix + i), 'w'))
+    const verdict = await preflight(repo, 'tracks-it')
+    expect(verdict).toMatchObject({ kind: 'ask', files: ['build.out'] })
+  }, 180_000)
+
+  it('asks when the lane renames a file onto an ignored path', async () => {
+    write(repo, 'old.txt', 'was\n')
+    run(repo, 'add', '.')
+    run(repo, 'commit', '-qm', 'old')
+    run(repo, 'switch', '-qc', 'renamed')
+    run(repo, 'mv', 'old.txt', 'build.out')
+    run(repo, 'commit', '-qm', 'rename')
+    run(repo, 'switch', '-q', 'main')
+    writeFileSync(join(repo, '.git/info/exclude'), '.worktrees/\nbuild.out\n')
+    write(repo, 'build.out', 'my local build\n')
+    const verdict = await preflight(repo, 'renamed')
+    expect(verdict).toMatchObject({ kind: 'ask', files: ['build.out'] })
+  })
+
+  it('asks about an ignored file whose name contains brackets or spaces', async () => {
+    run(repo, 'switch', '-qc', 'odd-name')
+    mkdirSync(join(repo, 'build'))
+    write(join(repo, 'build'), 'a[b].js', 'tracked\n')
+    write(repo, 'my build.out', 'tracked\n')
+    run(repo, 'add', '.')
+    run(repo, 'commit', '-qm', 'odd')
+    run(repo, 'switch', '-q', 'main')
+    writeFileSync(join(repo, '.git/info/exclude'), '.worktrees/\nbuild/\nmy build.out\n')
+    mkdirSync(join(repo, 'build'))
+    write(join(repo, 'build'), 'a[b].js', 'local\n')
+    write(repo, 'my build.out', 'local\n')
+    const verdict = await preflight(repo, 'odd-name')
+    expect(verdict).toMatchObject({ kind: 'ask', files: ['build/a[b].js', 'my build.out'] })
   })
 
   it('stops during a merge', async () => {

@@ -12,7 +12,7 @@ import type { HostMessage, LaneCard, SideData, WebviewMessage } from './protocol
 import { relativeTime } from './time'
 import type { Unread } from './unread'
 
-export const SIDE_VIEW = 'agentdeck.sessions'
+export const SIDE_VIEW = 'canopy.sessions'
 
 /** The primary sidebar (lanes above sessions and group chats) and the full lane view in an editor tab, fed from one place. */
 export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -53,7 +53,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   /** Opens the full lane view, or reveals it if it is open. */
   openLanes(): void {
     if (this.panel) return this.panel.reveal()
-    const panel = vscode.window.createWebviewPanel('agentdeck.lanes', 'Lanes', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() })
+    const panel = vscode.window.createWebviewPanel('canopy.lanes', 'Lanes', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.roots() })
     panel.webview.html = this.html(panel.webview, 'lanes')
     panel.webview.onDidReceiveMessage((message: WebviewMessage) => this.receive(message))
     panel.onDidDispose(() => {
@@ -185,7 +185,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   private receive(message: WebviewMessage): void {
-    this.handle(message).catch((error: unknown) => vscode.window.showErrorMessage(`AgentDeck: ${error instanceof Error ? error.message : String(error)}`))
+    this.handle(message).catch((error: unknown) => vscode.window.showErrorMessage(`Canopy: ${error instanceof Error ? error.message : String(error)}`))
   }
 
   private async handle(message: WebviewMessage): Promise<void> {
@@ -203,29 +203,29 @@ export class SideView implements vscode.WebviewViewProvider, vscode.Disposable {
         return this.move(`Warming up ${message.laneId}…`, (lanes) => lanes.warmUp(message.laneId))
       case 'openLaneChat': {
         const group = this.chats.list().find((chat) => chat.record.laneId === message.laneId)
-        if (group) return void (await vscode.commands.executeCommand('agentdeck.openGroup', group.record.id))
+        if (group) return void (await vscode.commands.executeCommand('canopy.openGroup', group.record.id))
         const session = this.manager.list().find(({ record }) => record.laneId === message.laneId)
-        if (session) return void (await vscode.commands.executeCommand('agentdeck.openSessionInSidebar', { id: session.record.id }))
-        await vscode.commands.executeCommand('agentdeck.newGroupChat', { laneId: message.laneId, title: this.memory?.goal(message.laneId) ?? message.laneId })
+        if (session) return void (await vscode.commands.executeCommand('canopy.openSessionInSidebar', { id: session.record.id }))
+        await vscode.commands.executeCommand('canopy.newGroupChat', { laneId: message.laneId, title: this.memory?.goal(message.laneId) ?? message.laneId })
         return
       }
       case 'openSession':
-        await vscode.commands.executeCommand('agentdeck.openSessionInSidebar', { id: message.sessionId })
+        await vscode.commands.executeCommand('canopy.openSessionInSidebar', { id: message.sessionId })
         return
       case 'openGroup':
-        await vscode.commands.executeCommand('agentdeck.openGroup', message.groupId)
+        await vscode.commands.executeCommand('canopy.openGroup', message.groupId)
         return
       case 'newGroupChat':
-        await vscode.commands.executeCommand('agentdeck.newGroupChat')
+        await vscode.commands.executeCommand('canopy.newGroupChat')
         return
       case 'newChat':
-        await vscode.commands.executeCommand(message.providerId ? `agentdeck.newChat.${message.providerId}` : 'agentdeck.sidebar.newChat')
+        await vscode.commands.executeCommand(message.providerId ? `canopy.newChat.${message.providerId}` : 'canopy.sidebar.newChat')
         return
       case 'newLane':
-        await vscode.commands.executeCommand('agentdeck.newLane')
+        await vscode.commands.executeCommand('canopy.newLane')
         return
       case 'reviewLane':
-        await vscode.commands.executeCommand('agentdeck.reviewLane', message.laneId)
+        await vscode.commands.executeCommand('canopy.reviewLane', message.laneId)
         return
       case 'switchLane':
         return this.switchLane(message.laneId)

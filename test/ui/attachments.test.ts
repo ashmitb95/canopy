@@ -6,7 +6,7 @@ import { attachFile, saveImage } from '../../src/ui/attachments'
 
 describe('attachments', () => {
   it('stores an image under a new name', () => {
-    const dir = join(mkdtempSync(join(tmpdir(), 'agentdeck-att-')), 'attachments')
+    const dir = join(mkdtempSync(join(tmpdir(), 'canopy-att-')), 'attachments')
     const image = saveImage(dir, 'shot.png', 'image/png', Buffer.from('png-bytes'))
     expect(image).toMatchObject({ kind: 'image', mimeType: 'image/png', name: 'shot.png' })
     expect(image.kind === 'image' && image.path.startsWith(dir) && image.path.endsWith('.png')).toBe(true)
@@ -14,7 +14,7 @@ describe('attachments', () => {
   })
 
   it('copies picked images and references other files in place', () => {
-    const root = mkdtempSync(join(tmpdir(), 'agentdeck-att-'))
+    const root = mkdtempSync(join(tmpdir(), 'canopy-att-'))
     const dir = join(root, 'attachments')
     writeFileSync(join(root, 'diagram.jpg'), 'jpg-bytes')
     writeFileSync(join(root, 'notes.ts'), 'code')

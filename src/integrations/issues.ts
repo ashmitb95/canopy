@@ -13,7 +13,7 @@ export type Issue = { source: 'github' | 'linear'; id: string; title: string; ur
 export type Runner = (file: string, args: string[], cwd: string) => Promise<string>
 const run: Runner = async (file, args, cwd) => (await exec(file, args, { cwd, maxBuffer: 16 * 1024 * 1024 })).stdout
 
-/** A GitHub issue, through the user's own `gh` login. AgentDeck holds no GitHub token. */
+/** A GitHub issue, through the user's own `gh` login. Canopy holds no GitHub token. */
 export async function githubIssue(cwd: string, ref: string, runner: Runner = run): Promise<Issue> {
   const number = /(\d+)\s*$/.exec(ref)?.[1]
   if (!number) throw new Error(`Not a GitHub issue: ${ref}`)

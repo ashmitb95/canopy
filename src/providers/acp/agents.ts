@@ -65,7 +65,7 @@ export const gemini: AcpAgentSpec = {
 
 const BUILT_IN = new Set(['claude', 'codex', 'grok', 'cursor', 'opencode', 'gemini'])
 
-/** An ACP agent from `agentdeck.customAgents`: `{ id, label, command, args, loginArgs? }`. */
+/** An ACP agent from `canopy.customAgents`: `{ id, label, command, args, loginArgs? }`. */
 export function customAgent(entry: Record<string, unknown>): AcpAgentSpec | undefined {
   const { id, label, command, args, loginArgs } = entry
   const strings = (value: unknown) => (Array.isArray(value) && value.every((item) => typeof item === 'string') ? (value as string[]) : undefined)

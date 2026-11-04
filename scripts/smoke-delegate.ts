@@ -1,4 +1,4 @@
-// Live check: a lead hands a real feature out by roster, unprompted, with AgentDeck recording what really happened.
+// Live check: a lead hands a real feature out by roster, unprompted, with Canopy recording what really happened.
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -30,7 +30,7 @@ async function settled(chat: GroupChat): Promise<void> {
 async function run(env: Env, lead: string, implement: string, review: string): Promise<void> {
   const name = `${lead} leads, ${implement} builds, ${review} reviews`
   console.log(`== ${name}`)
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-delegate-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-delegate-')))
   const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   git(root, 'init', '-q', '-b', 'main')
   git(root, 'config', 'user.email', 'smoke@example.com')
@@ -38,7 +38,7 @@ async function run(env: Env, lead: string, implement: string, review: string): P
   writeFileSync(join(root, 'package.json'), '{ "name": "demo", "type": "module" }\n')
   git(root, 'add', '.')
   git(root, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'init')
-  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'agentdeck-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
+  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'canopy-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
   try {
     await core.lanes.newLane('slugify', core.tracker.repos.map((repo) => repo.name), { worktrees: true, goal: 'Add a slugify helper' })
     const slot = join(root, '.worktrees', 'wt-1')
@@ -52,7 +52,7 @@ async function run(env: Env, lead: string, implement: string, review: string): P
     check('lead delegated the build unprompted', Boolean(built))
     check('code is in the lane, not the primary checkout', existsSync(join(slot, 'slugify.js')) && !existsSync(join(root, 'slugify.js')))
     check('facts recorded the files', Boolean(built?.facts?.files.some((file) => file.includes('slugify'))), built?.facts?.files.join('; '))
-    check('AgentDeck ran verify itself', built?.facts?.verify?.ok === true, built?.facts?.verify?.output.split('\n').slice(-4).join(' '))
+    check('Canopy ran verify itself', built?.facts?.verify?.ok === true, built?.facts?.verify?.output.split('\n').slice(-4).join(' '))
     check('lead sent it to review', Boolean(reviewed))
     console.log(`      review ran: ${reviewed?.facts?.commands.map((command) => command.command).join(' | ') || 'no commands'}`)
     check('no role was broken', violations.length === 0, JSON.stringify(violations.map((violation) => [violation.agent, violation.files])))

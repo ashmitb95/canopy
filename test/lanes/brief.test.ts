@@ -18,18 +18,18 @@ describe('buildBrief', () => {
         root: '/w',
         lane,
         goal: 'Make retry reliable',
-        plan: { path: '/w/.agentdeck/lanes/retry-fix/plan.md', updated: '2026-10-29T10:00:00.000Z' },
-        notes: { path: '/w/.agentdeck/lanes/retry-fix/notes.md', entries: 1 },
-        earlier: [{ title: 'Research · grok', path: '/w/.agentdeck/lanes/retry-fix/chats/a.md' }]
+        plan: { path: '/w/.canopy/lanes/retry-fix/plan.md', updated: '2026-10-29T10:00:00.000Z' },
+        notes: { path: '/w/.canopy/lanes/retry-fix/notes.md', entries: 1 },
+        earlier: [{ title: 'Research · grok', path: '/w/.canopy/lanes/retry-fix/chats/a.md' }]
       })
     ).toBe(
       [
         '<lane name="retry-fix">',
         'Goal: Make retry reliable',
         'Code: api/ (primary checkout, 2 uncommitted) · ui/.worktrees/retry-fix (worktree, clean)',
-        'Plan: .agentdeck/lanes/retry-fix/plan.md (updated 2026-10-29T10:00:00.000Z)',
-        'Notes: .agentdeck/lanes/retry-fix/notes.md (1 entry)',
-        'Earlier chats: Research · grok (.agentdeck/lanes/retry-fix/chats/a.md)',
+        'Plan: .canopy/lanes/retry-fix/plan.md (updated 2026-10-29T10:00:00.000Z)',
+        'Notes: .canopy/lanes/retry-fix/notes.md (1 entry)',
+        'Earlier chats: Research · grok (.canopy/lanes/retry-fix/chats/a.md)',
         'Rules: edit only inside the code paths above. Do not switch branches in primary checkouts. Keep plan.md current as steps finish; add decisions and findings to notes.md as "- " bullets.',
         '</lane>'
       ].join('\n')
@@ -40,8 +40,8 @@ describe('buildBrief', () => {
     const brief = buildBrief({
       root: '/w',
       lane: { name: 'new', repos: [] },
-      plan: { path: '/w/.agentdeck/lanes/new/plan.md' },
-      notes: { path: '/w/.agentdeck/lanes/new/notes.md', entries: 0 },
+      plan: { path: '/w/.canopy/lanes/new/plan.md' },
+      notes: { path: '/w/.canopy/lanes/new/notes.md', entries: 0 },
       earlier: []
     })
     expect(brief).toContain('Goal: not set')

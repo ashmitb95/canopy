@@ -1,6 +1,6 @@
 # UI spec
 
-The target UI. Screens are in [design/end-to-end/](design/end-to-end/) as design-canvas source, one file per screen; the live version is the AgentDeck End to End canvas. Every screen and delegate state below is built.
+The target UI. Screens are in [design/end-to-end/](design/end-to-end/) as design-canvas source, one file per screen; the live version is the Canopy End to End canvas. Every screen and delegate state below is built.
 
 ## Terms
 
@@ -61,7 +61,7 @@ The composer always says who gets the message and when: "Grok gets this now" or 
 
 ## Visual system
 
-- **Palette:** Paper by default (`agentdeck.palette`). Backgrounds, surfaces, text, and borders come from the VS Code theme. The palette sets only brand and status colors. Paper's main color is the theme's text color, inverted.
+- **Palette:** Paper by default (`canopy.palette`). Backgrounds, surfaces, text, and borders come from the VS Code theme. The palette sets only brand and status colors. Paper's main color is the theme's text color, inverted.
 - **Style:** flat solid color and components. No gradients or illustration.
 - **Type:** the VS Code UI and editor fonts in the product; lane names, paths, and numbers use the monospace font.
 - **Status:** needs you, working, waiting, done, failed, and idle each differ in shape as well as color.

@@ -1,5 +1,5 @@
-// The subset of the Codex app-server protocol AgentDeck uses, transcribed from
-// `codex app-server generate-ts` (codex-cli 0.165.0). Fields AgentDeck ignores are omitted.
+// The subset of the Codex app-server protocol Canopy uses, transcribed from
+// `codex app-server generate-ts` (codex-cli 0.165.0). Fields Canopy ignores are omitted.
 
 export type UserInput = { type: 'text'; text: string; text_elements: [] }
 

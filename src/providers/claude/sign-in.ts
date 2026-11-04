@@ -10,7 +10,7 @@ const HELPER = `#!/bin/sh\nprintf '%s' "$1" > "$0.tmp" && mv "$0.tmp" "$0.link"\
 const POLL_MS = 250
 
 export function claudeSignIn(cliPath: string, env: Env, onEvent: (event: SignInEvent) => void): SignInFlow {
-  const dir = mkdtempSync(join(tmpdir(), 'agentdeck-sign-in-'))
+  const dir = mkdtempSync(join(tmpdir(), 'canopy-sign-in-'))
   const helper = join(dir, 'browser')
   writeFileSync(helper, HELPER, { mode: 0o700 })
   const cleanup = () => {
@@ -26,7 +26,7 @@ export function claudeSignIn(cliPath: string, env: Env, onEvent: (event: SignInE
     }
     clearInterval(poll)
     if (isClaudeSignInLink(link)) onEvent({ kind: 'link', url: link })
-    else onEvent({ kind: 'failed', message: 'Claude offered an unexpected sign-in link, so AgentDeck did not open it.' })
+    else onEvent({ kind: 'failed', message: 'Claude offered an unexpected sign-in link, so Canopy did not open it.' })
   }, POLL_MS)
   const flow = runLoginCli(cliPath, ['auth', 'login', '--claudeai'], { ...env, BROWSER: helper }, (event) => {
     if (event.kind !== 'link') cleanup()

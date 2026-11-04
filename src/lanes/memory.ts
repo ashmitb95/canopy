@@ -4,12 +4,12 @@ import { parseToml, stringifyToml } from './toml'
 
 export type ChatSummaryRef = { chatId: string; title: string; path: string; updated: string }
 
-/** `.agentdeck/` at the workspace root: what each lane is for and what its chats found. It never describes Git. */
+/** `.canopy/` at the workspace root: what each lane is for and what its chats found. It never describes Git. */
 export class LaneMemory {
   readonly dir: string
 
   constructor(private readonly root: string) {
-    this.dir = join(root, '.agentdeck')
+    this.dir = join(root, '.canopy')
   }
 
   laneDir(lane: string): string {
@@ -112,7 +112,7 @@ export class LaneMemory {
     appendFileSync(this.notesPath(lane), `${existsSync(this.notesPath(lane)) && readFileSync(this.notesPath(lane), 'utf8').trim() ? '\n' : ''}${text.trim()}\n`)
   }
 
-  /** Records an observed event; lanes AgentDeck holds no memory for are not given a folder just for this. */
+  /** Records an observed event; lanes Canopy holds no memory for are not given a folder just for this. */
   appendHistory(lane: string, event: Record<string, unknown>): void {
     if (!this.exists(lane)) return
     appendFileSync(join(this.laneDir(lane), 'history.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), ...event })}\n`)
@@ -123,15 +123,15 @@ export class LaneMemory {
     return existsSync(path) ? parseToml(readFileSync(path, 'utf8')) : {}
   }
 
-  /** In a single-repo workspace the root is the repo, so `.agentdeck/` is excluded locally (never in a committed .gitignore). */
+  /** In a single-repo workspace the root is the repo, so `.canopy/` is excluded locally (never in a committed .gitignore). */
   private exclude(): void {
     const gitDir = join(this.root, '.git')
     if (!existsSync(gitDir) || !statSync(gitDir).isDirectory()) return
     const file = join(gitDir, 'info', 'exclude')
     const current = existsSync(file) ? readFileSync(file, 'utf8') : ''
-    if (current.split('\n').includes('.agentdeck/')) return
+    if (current.split('\n').includes('.canopy/')) return
     mkdirSync(join(gitDir, 'info'), { recursive: true })
-    appendFileSync(file, `${current && !current.endsWith('\n') ? '\n' : ''}.agentdeck/\n`)
+    appendFileSync(file, `${current && !current.endsWith('\n') ? '\n' : ''}.canopy/\n`)
   }
 }
 

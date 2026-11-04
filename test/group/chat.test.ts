@@ -54,7 +54,7 @@ function build(root?: string, settleLimitMs?: number, watchProcesses = false): v
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'agentdeck-group-'))
+  dir = mkdtempSync(join(tmpdir(), 'canopy-group-'))
   memento = new MemoryMemento()
   build()
   chat = chats.create({ lead: 'claude' })
@@ -281,7 +281,7 @@ describe('delegation', () => {
   const lead = () => chats.create({ lead: 'claude', roster: { plan: 'claude', implement: 'codex', review: 'grok' }, verify: 'test -f built.txt' })
 
   beforeEach(() => {
-    repo = mkdtempSync(join(tmpdir(), 'agentdeck-delegate-'))
+    repo = mkdtempSync(join(tmpdir(), 'canopy-delegate-'))
     git('init', '-q', '-b', 'main')
     git('config', 'user.email', 'x@example.com')
     git('config', 'user.name', 'x')
@@ -319,7 +319,7 @@ describe('delegation', () => {
     expect(report).toContain('Report from codex')
     expect(report).toContain('A\tbuilt.txt')
     expect(report).toContain('touch built.txt')
-    expect(report).toContain('AgentDeck ran test -f built.txt: passed')
+    expect(report).toContain('Canopy ran test -f built.txt: passed')
     expect(chat.state().delegations[0]).toMatchObject({ status: 'done' })
     expect(chat.state().delegations[0].added?.[0]).toMatch(/^\d+ messages? from the chat, word for word$/)
     expect(readFileSync(chat.state().delegations[0].handoff ?? '', 'utf8')).toContain('Built it.')
@@ -397,7 +397,7 @@ describe('delegation', () => {
   })
 
   it('flags a stray write outside the lane, even by the agent allowed to write', async () => {
-    const lane = mkdtempSync(join(tmpdir(), 'agentdeck-lane-'))
+    const lane = mkdtempSync(join(tmpdir(), 'canopy-lane-'))
     execFileSync('git', ['init', '-q', '-b', 'lane'], { cwd: lane })
     const primary = repo
     const providers = fakeProvider('codex', ['steer'])
@@ -694,7 +694,7 @@ describe('delegation', () => {
     build(repo)
     await settled()
     expect(chats.get(id)?.state().running).toBe('codex')
-    expect(texts(codex[0])[0]).toContain('AgentDeck restarted')
+    expect(texts(codex[0])[0]).toContain('Canopy restarted')
     expect(codex[0].options.resumeId).toBeDefined()
   })
 

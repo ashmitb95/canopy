@@ -15,9 +15,9 @@ export type WorkspaceConfig = {
   maxSlots: number
 }
 
-/** `.agentdeck/config.toml`, with defaults for anything missing. */
+/** `.canopy/config.toml`, with defaults for anything missing. */
 export function readConfig(root: string): WorkspaceConfig {
-  const path = join(root, '.agentdeck', 'config.toml')
+  const path = join(root, '.canopy', 'config.toml')
   const data = existsSync(path) ? parseToml(readFileSync(path, 'utf8')) : {}
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined)
   const setup = typeof data.setup === 'object' && data.setup !== null && !Array.isArray(data.setup) ? data.setup : {}
@@ -31,9 +31,9 @@ export function readConfig(root: string): WorkspaceConfig {
   }
 }
 
-/** Writes the given settings into `.agentdeck/config.toml`, keeping every other key. An empty setup command removes it. */
+/** Writes the given settings into `.canopy/config.toml`, keeping every other key. An empty setup command removes it. */
 export function updateConfig(root: string, patch: { envFiles?: string[]; env?: Record<string, string[]>; setup?: Record<string, string> }): void {
-  const path = join(root, '.agentdeck', 'config.toml')
+  const path = join(root, '.canopy', 'config.toml')
   const data = existsSync(path) ? parseToml(readFileSync(path, 'utf8')) : {}
   if (patch.envFiles) data.env_files = patch.envFiles
   if (patch.setup) {
@@ -53,7 +53,7 @@ export function updateConfig(root: string, patch: { envFiles?: string[]; env?: R
     }
     data.env = env
   }
-  mkdirSync(join(root, '.agentdeck'), { recursive: true })
+  mkdirSync(join(root, '.canopy'), { recursive: true })
   writeFileSync(path, stringifyToml(data))
 }
 

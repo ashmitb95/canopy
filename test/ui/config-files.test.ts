@@ -12,12 +12,12 @@ describe('configFiles', () => {
     writeFileSync(join(home, '.claude', 'settings.json'), '{}')
     mkdirSync(join(home, '.codex'))
     writeFileSync(join(home, '.codex', 'config.toml'), '')
-    mkdirSync(join(root, '.agentdeck'))
-    writeFileSync(join(root, '.agentdeck', 'config.toml'), '')
+    mkdirSync(join(root, '.canopy'))
+    writeFileSync(join(root, '.canopy', 'config.toml'), '')
     expect(configFiles(home, root)).toEqual([
       { label: 'Claude settings', path: join(home, '.claude', 'settings.json') },
       { label: 'Codex config', path: join(home, '.codex', 'config.toml') },
-      { label: 'AgentDeck workspace config', path: join(root, '.agentdeck', 'config.toml') }
+      { label: 'Canopy workspace config', path: join(root, '.canopy', 'config.toml') }
     ])
   })
 })

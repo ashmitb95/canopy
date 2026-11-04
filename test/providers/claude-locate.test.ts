@@ -17,7 +17,7 @@ function extensionCli(home: string, version: string): string {
 
 describe.skipIf(process.platform === 'win32')('findClaude', () => {
   it('uses the official extension when its CLI is newer than the one on PATH', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'agentdeck-claude-'))
+    const root = mkdtempSync(join(tmpdir(), 'canopy-claude-'))
     fakeCli(join(root, 'bin', 'claude'), '2.1.111')
     extensionCli(join(root, 'home'), '2.1.289')
     const newest = extensionCli(join(root, 'home'), '2.1.311')
@@ -25,14 +25,14 @@ describe.skipIf(process.platform === 'win32')('findClaude', () => {
   })
 
   it('keeps the CLI on PATH when it is the newest', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'agentdeck-claude-'))
+    const root = mkdtempSync(join(tmpdir(), 'canopy-claude-'))
     const onPath = fakeCli(join(root, 'bin', 'claude'), '2.2.0')
     extensionCli(join(root, 'home'), '2.1.311')
     await expect(findClaude({ PATH: join(root, 'bin') }, join(root, 'home'))).resolves.toBe(onPath)
   })
 
   it('falls back to the extension when claude is not on PATH, and to null when absent', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'agentdeck-claude-'))
+    const root = mkdtempSync(join(tmpdir(), 'canopy-claude-'))
     const bundled = extensionCli(join(root, 'home'), '2.1.311')
     await expect(findClaude({ PATH: '' }, join(root, 'home'))).resolves.toBe(bundled)
     await expect(findClaude({ PATH: '' }, join(root, 'empty'))).resolves.toBeNull()

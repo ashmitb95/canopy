@@ -4,7 +4,7 @@
 
 First usable release.
 
-- Chat with Claude Code and Codex from VS Code, in editor tabs or the AgentDeck sidebar, on your own subscriptions through each official CLI.
+- Chat with Claude Code and Codex from VS Code, in editor tabs or the Canopy sidebar, on your own subscriptions through each official CLI.
 - Sessions persist across reloads and resume where they left off; messages sent while the agent works are queued.
 - Streaming replies, reasoning, tool cards, diffs that open in VS Code's diff editor, plans, and approvals with keyboard shortcuts.
 - Model and permission-mode pickers, a context meter, and an MCP popover with per-server status, sign-in, and reconnect.

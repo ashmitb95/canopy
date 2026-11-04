@@ -13,7 +13,7 @@ const git = (cwd: string, args: string[], env?: NodeJS.ProcessEnv) => execFileSy
 
 /** Everything in the folder, untracked files included, without touching the working tree, index, or stash list. */
 export function snapshotTree(repo: string): string {
-  const index = join(realpathSync(tmpdir()), `agentdeck-index-${process.pid}-${Date.now()}`)
+  const index = join(realpathSync(tmpdir()), `canopy-index-${process.pid}-${Date.now()}`)
   try {
     git(repo, ['add', '-A', '.'], { GIT_INDEX_FILE: index })
     return git(repo, ['write-tree'], { GIT_INDEX_FILE: index })
@@ -25,7 +25,7 @@ export function snapshotTree(repo: string): string {
 export function undoTo(repo: string, tree: string): void {
   const added = git(repo, ['diff', '--name-status', tree, snapshotTree(repo)]).split('\n').filter((row) => row.startsWith('A\t')).map((row) => row.slice(2))
   for (const file of added) rmSync(join(repo, file), { force: true })
-  const index = join(realpathSync(tmpdir()), `agentdeck-undo-${process.pid}-${Date.now()}`)
+  const index = join(realpathSync(tmpdir()), `canopy-undo-${process.pid}-${Date.now()}`)
   try {
     git(repo, ['read-tree', tree], { GIT_INDEX_FILE: index })
     git(repo, ['checkout-index', '--all', '--force'], { GIT_INDEX_FILE: index })
@@ -98,7 +98,7 @@ export class Group {
     const definition = providers.get(provider)
     if (!definition) throw new Error(`Unknown provider ${provider}`)
     const server = await this.server
-    const session = await definition.open({ env: this.env, cwd: this.repo, mode: 'full-access', toolServer: { name: 'agentdeck', url: server.url }, ...(resumeId ? { resumeId } : {}) })
+    const session = await definition.open({ env: this.env, cwd: this.repo, mode: 'full-access', toolServer: { name: 'canopy', url: server.url }, ...(resumeId ? { resumeId } : {}) })
     this.sessions.set(provider, session)
     this.nativeIds.set(provider, session.nativeId)
     return session
@@ -166,16 +166,16 @@ export class Group {
 
   brief(provider: string): string {
     const others = Object.entries(this.roster).map(([role, agent]) => `${role}: ${agent}`).join(', ')
-    return `You are ${provider}, the lead in a group chat of coding agents run by AgentDeck. Roster: ${others}. Only ${this.writer} may edit files; you are read-only unless that is you. When work belongs to another agent, call the delegate tool with that agent's name, without asking the user, then end your turn. Reports reach you on your next turn.`
+    return `You are ${provider}, the lead in a group chat of coding agents run by Canopy. Roster: ${others}. Only ${this.writer} may edit files; you are read-only unless that is you. When work belongs to another agent, call the delegate tool with that agent's name, without asking the user, then end your turn. Reports reach you on your next turn.`
   }
 
   /** Runs a delegate and hands the lead its report, with facts recorded by the harness. */
   async runDelegation(lead: string, delegation: Delegation): Promise<{ run: Run; facts: string; files: string[] }> {
     const before = snapshotTree(this.repo)
-    const packet = `You are ${delegation.provider}, delegated work by ${lead} in a group chat run by AgentDeck.\nTask: ${delegation.task}\nDone when: ${delegation.doneWhen}\nDo the work, then end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the question if you have one.`
+    const packet = `You are ${delegation.provider}, delegated work by ${lead} in a group chat run by Canopy.\nTask: ${delegation.task}\nDone when: ${delegation.doneWhen}\nDo the work, then end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the question if you have one.`
     const run = await this.turn(delegation.provider, packet)
     const files = changedFiles(this.repo, before, snapshotTree(this.repo))
-    const facts = `Recorded by AgentDeck, not the delegate. Files changed: ${files.join('; ') || 'none'}.`
+    const facts = `Recorded by Canopy, not the delegate. Files changed: ${files.join('; ') || 'none'}.`
     return { run, facts, files }
   }
 
@@ -186,7 +186,7 @@ export class Group {
 }
 
 export function tempRepo(): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-group-')))
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-group-')))
   git(dir, ['init', '-q', '-b', 'main'])
   git(dir, ['config', 'user.email', 'poc@example.com'])
   git(dir, ['config', 'user.name', 'POC'])
@@ -324,7 +324,7 @@ async function permissions(env: Env, agent: string): Promise<void> {
       if (item.kind === 'turn' && item.state === 'ended') finish()
     })
     // Outside the workspace, so Codex's sandbox cannot let it through without asking.
-    const outside = join(realpathSync(tmpdir()), `agentdeck-outside-${Date.now()}.txt`)
+    const outside = join(realpathSync(tmpdir()), `canopy-outside-${Date.now()}.txt`)
     await session.prompt([{ type: 'text', text: `Run this shell command: echo approved > ${outside}` }])
     await Promise.race([asked, ended, new Promise((resolve) => setTimeout(resolve, TURN_MS))])
     line(`${agent} permission: request reached the harness`, seen.length > 0)

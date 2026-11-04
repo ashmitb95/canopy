@@ -2,7 +2,7 @@ import { resolve, sep } from 'node:path'
 import type { WriteBoundary } from '../core/types'
 
 export const BRANCH_SWITCH =
-  "Branch switches are AgentDeck's job (Move to Primary Checkout, Move to Worktrees in the Sessions list). Keep working in this lane's paths."
+  "Branch switches are Canopy's job (Move to Primary Checkout, Move to Worktrees in the Sessions list). Keep working in this lane's paths."
 
 const within = (paths: string[], path: string) => paths.some((root) => path === root || path.startsWith(root + sep))
 

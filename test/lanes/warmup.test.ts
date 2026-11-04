@@ -9,8 +9,8 @@ import { workspace } from './repos'
 describe('updateConfig', () => {
   it('changes only the keys given, keeping the rest', () => {
     const root = workspace()
-    mkdirSync(join(root, '.agentdeck'))
-    writeFileSync(join(root, '.agentdeck', 'config.toml'), 'max_slots = 2\n\n[setup]\nui = "npm ci"\n')
+    mkdirSync(join(root, '.canopy'))
+    writeFileSync(join(root, '.canopy', 'config.toml'), 'max_slots = 2\n\n[setup]\nui = "npm ci"\n')
     updateConfig(root, { envFiles: ['.env', '.env.local'], setup: { api: 'pnpm install' } })
     expect(readConfig(root)).toEqual({ envFiles: ['.env', '.env.local'], env: {}, setup: { ui: 'npm ci', api: 'pnpm install' }, worktrees: true, maxSlots: 2 })
     updateConfig(root, { setup: { ui: '' } })
@@ -35,9 +35,9 @@ describe('readConfig', () => {
 
   it('reads env files, setup per repo, and the worktree default', () => {
     const root = workspace()
-    mkdirSync(join(root, '.agentdeck'))
+    mkdirSync(join(root, '.canopy'))
     writeFileSync(
-      join(root, '.agentdeck', 'config.toml'),
+      join(root, '.canopy', 'config.toml'),
       'env_files = [".env", "config/local.json"]\nworktrees = false\n\n[setup]\napi = "pnpm install"\n'
     )
     expect(readConfig(root)).toEqual({ envFiles: ['.env', 'config/local.json'], env: {}, setup: { api: 'pnpm install' }, worktrees: false, maxSlots: 4 })

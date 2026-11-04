@@ -17,9 +17,9 @@ describe('readTasks', () => {
 
   it('reads [task.<id>] tables, skipping incomplete ones', () => {
     const root = workspace()
-    mkdirSync(join(root, '.agentdeck'))
+    mkdirSync(join(root, '.canopy'))
     writeFileSync(
-      join(root, '.agentdeck', 'config.toml'),
+      join(root, '.canopy', 'config.toml'),
       '[task.build]\nlabel = "Build"\nprovider = "claude"\nmode = "auto"\n\n[task.broken]\nlabel = "Broken"\n'
     )
     expect(readTasks(root)).toEqual([{ id: 'build', label: 'Build', provider: 'claude', mode: 'auto' }])
@@ -29,9 +29,9 @@ describe('readTasks', () => {
 describe('handoffPrompt', () => {
   it('points at the previous chat’s summary on a lane', () => {
     expect(
-      handoffPrompt({ task: 'Build', lane: 'retry-fix', from: 'Retry approach', summaryPath: '.agentdeck/lanes/retry-fix/chats/a.md' })
+      handoffPrompt({ task: 'Build', lane: 'retry-fix', from: 'Retry approach', summaryPath: '.canopy/lanes/retry-fix/chats/a.md' })
     ).toBe(
-      'You are taking over lane retry-fix for the Build step. Start from the previous chat “Retry approach” (summary: .agentdeck/lanes/retry-fix/chats/a.md) and the lane plan, then continue.'
+      'You are taking over lane retry-fix for the Build step. Start from the previous chat “Retry approach” (summary: .canopy/lanes/retry-fix/chats/a.md) and the lane plan, then continue.'
     )
   })
 

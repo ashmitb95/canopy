@@ -17,7 +17,7 @@ export class KeepAwake implements vscode.Disposable {
   }
 
   private update(): void {
-    const enabled = vscode.workspace.getConfiguration('agentdeck').get<boolean>('keepAwake', true)
+    const enabled = vscode.workspace.getConfiguration('canopy').get<boolean>('keepAwake', true)
     const running = this.manager.list().some(({ status }) => status === 'running' || status === 'needs-input')
     if (enabled && running) this.hold()
     else this.release()
@@ -29,7 +29,7 @@ export class KeepAwake implements vscode.Disposable {
       process.platform === 'darwin'
         ? ['caffeinate', ['-i', '-w', String(process.pid)]]
         : process.platform === 'linux'
-          ? ['systemd-inhibit', ['--what=idle:sleep', '--who=AgentDeck', '--why=An agent is running', 'sleep', 'infinity']]
+          ? ['systemd-inhibit', ['--what=idle:sleep', '--who=Canopy', '--why=An agent is running', 'sleep', 'infinity']]
           : undefined
     if (!command) return
     const child = spawn(command[0] as string, command[1] as string[], { stdio: 'ignore' })

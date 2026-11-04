@@ -21,7 +21,7 @@ export function EmptyState({ providers, signIns }: { providers: ProviderInfo[]; 
         )}
         <div className="text-lg font-semibold @[36rem]:text-2xl">Your agents, one chat</div>
         <p className="text-xs text-muted-foreground @[36rem]:text-sm">
-          AgentDeck runs each provider's own CLI on your own subscription. Sign-ins stay with those CLIs; nothing is stored here.
+          Canopy runs each provider's own CLI on your own subscription. Sign-ins stay with those CLIs; nothing is stored here.
         </p>
       </div>
       {providers.length === 0 ? (

@@ -30,7 +30,7 @@ async function setup() {
   const manager = new SessionManager({
     providers: new Map([[provider.id, provider]]),
     store: new SessionStore(new MemoryMemento()),
-    journalDir: mkdtempSync(join(tmpdir(), 'agentdeck-coord-')),
+    journalDir: mkdtempSync(join(tmpdir(), 'canopy-coord-')),
     cwd: root,
     env: async () => ({ PATH: process.env.PATH ?? '/bin' })
   })
@@ -121,7 +121,7 @@ describe('LaneCoordinator', { timeout: 20_000 }, () => {
     await manager.setLane(chat.id, 'x')
     const record = manager.list()[0].record
     const boundary = await coordinator.boundary(record)
-    expect(boundary?.roots).toEqual([join(api, '.worktrees', 'wt-1'), join(root, '.agentdeck', 'lanes', 'x')])
+    expect(boundary?.roots).toEqual([join(api, '.worktrees', 'wt-1'), join(root, '.canopy', 'lanes', 'x')])
 
     expect(await boundary?.outside(join(api, 'src', 'a.ts'))).toBe(
       `api/src/a.ts is outside lane x. Make this edit at api/.worktrees/wt-1/src/a.ts instead.`

@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   console.log(`${providerId}:`, state)
   if (state.status !== 'signed-in') throw new Error(`${providerId} is not signed in`)
 
-  const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-smoke-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'canopy-smoke-'))
   const file = join(cwd, 'notes.md')
   writeFileSync(file, '# Notes\n\nhello world\n')
   const memento = new MemoryMemento()

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { SessionItem } from '../../src/core/types'
 import { Journal } from '../../src/sessions/journal'
 
-const path = () => join(mkdtempSync(join(tmpdir(), 'agentdeck-journal-')), 'sessions', 's.jsonl')
+const path = () => join(mkdtempSync(join(tmpdir(), 'canopy-journal-')), 'sessions', 's.jsonl')
 const text = (id: string, value: string): SessionItem => ({ kind: 'message', id, role: 'assistant', text: value, streaming: false })
 
 describe('Journal', () => {

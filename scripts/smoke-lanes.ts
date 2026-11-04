@@ -20,7 +20,7 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd,
 
 async function main(): Promise<void> {
   const providerId = process.argv[2] ?? 'claude'
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-lanes-smoke-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-lanes-smoke-')))
   const api = join(root, 'api')
   mkdirSync(api)
   git(api, 'init', '-q', '-b', 'main')

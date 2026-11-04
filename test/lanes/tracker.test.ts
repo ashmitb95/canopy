@@ -25,7 +25,7 @@ describe('LaneTracker', () => {
     expect(tracker.repos.map((state) => state.name)).toEqual(['api', 'ui'])
   })
 
-  it('notices a branch switch made outside AgentDeck', async () => {
+  it('notices a branch switch made outside Canopy', async () => {
     const root = workspace()
     const api = repo(join(root, 'api'))
     tracker = new LaneTracker(root)

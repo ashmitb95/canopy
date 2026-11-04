@@ -33,7 +33,7 @@ export type SessionRecord = {
   facts: Partial<Record<SessionFact['kind'], SessionFact>>
 }
 
-const KEY = 'agentdeck.sessions'
+const KEY = 'canopy.sessions'
 
 export class SessionStore {
   constructor(private readonly memento: Memento) {}

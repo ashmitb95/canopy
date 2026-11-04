@@ -21,7 +21,7 @@ const approval = (id: string, resolved?: string): ApprovalItem => ({
   resolved
 })
 
-function setup(memento = new MemoryMemento(), journalDir = mkdtempSync(join(tmpdir(), 'agentdeck-manager-'))) {
+function setup(memento = new MemoryMemento(), journalDir = mkdtempSync(join(tmpdir(), 'canopy-manager-'))) {
   const { provider, sessions } = fakeProvider()
   const manager = new SessionManager({
     providers: new Map([[provider.id, provider]]),
@@ -355,7 +355,7 @@ describe('SessionManager', () => {
     const manager = new SessionManager({
       providers: new Map([[provider.id, provider]]),
       store: new SessionStore(new MemoryMemento()),
-      journalDir: mkdtempSync(join(tmpdir(), 'agentdeck-manager-')),
+      journalDir: mkdtempSync(join(tmpdir(), 'canopy-manager-')),
       cwd: '/work',
       env: async () => ({ PATH: '/bin' }),
       decorate: async (record, parts) => {
@@ -411,7 +411,7 @@ describe('SessionManager', () => {
     const manager = new SessionManager({
       providers: new Map([[provider.id, provider]]),
       store: new SessionStore(new MemoryMemento()),
-      journalDir: mkdtempSync(join(tmpdir(), 'agentdeck-manager-')),
+      journalDir: mkdtempSync(join(tmpdir(), 'canopy-manager-')),
       cwd: '/work',
       env: async () => ({ PATH: '/bin' }),
       boundary: async (record) => (record.laneId ? boundary : undefined)

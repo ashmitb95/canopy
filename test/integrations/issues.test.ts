@@ -52,7 +52,7 @@ describe('issues', () => {
   it('names the lane from the issue, and seeds its goal and notes', () => {
     const issue = { source: 'linear' as const, id: 'ENG-214', title: 'Exports time out on large invoices!', url: 'u', body: 'Big ones', comments: ['Raj: seen'] }
     expect(laneName(issue)).toBe('eng-214-exports-time-out-on-large')
-    const memory = new LaneMemory(mkdtempSync(join(tmpdir(), 'agentdeck-issue-')))
+    const memory = new LaneMemory(mkdtempSync(join(tmpdir(), 'canopy-issue-')))
     seedLane(memory, 'eng-214', issue)
     expect(memory.goal('eng-214')).toBe('Exports time out on large invoices! (ENG-214)')
     expect(readFileSync(memory.notesPath('eng-214'), 'utf8')).toContain('Big ones')

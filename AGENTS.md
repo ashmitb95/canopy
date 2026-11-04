@@ -1,4 +1,4 @@
-# AgentDeck
+# Canopy
 
 VS Code extension: one chat UI for coding agents (Claude, Codex, ACP agents) that run through the user's installed CLIs, plus lanes, which coordinate chats, branches, and worktrees across repos.
 
@@ -6,7 +6,7 @@ Read before changing an area:
 
 - [docs/architecture.md](docs/architecture.md): layers, data flow, and the rules that constrain changes
 - [docs/providers.md](docs/providers.md): the provider contract, per-provider protocol facts, adding an agent
-- [docs/lanes.md](docs/lanes.md): the lane model, `.agentdeck/` files, switching, write boundaries
+- [docs/lanes.md](docs/lanes.md): the lane model, `.canopy/` files, switching, write boundaries
 - [docs/roadmap.md](docs/roadmap.md): planned work, with what to verify before building it
 - [docs/core-api.md](docs/core-api.md): the core the UI builds on
 - [docs/build-plan.md](docs/build-plan.md): the order it gets built in: a headless core first, the UI last
@@ -20,7 +20,7 @@ pnpm check            # typecheck + unit tests; run before every commit
 pnpm test <path>      # one test file
 pnpm build            # bundles dist/
 pnpm build:preview && pnpm screenshot dark   # renders the webview to dist/preview/ (also: light, hc)
-pnpm run package      # builds agentdeck-<version>.vsix
+pnpm run package      # builds canopy-<version>.vsix
 ```
 
 Press F5 in VS Code for an Extension Development Host on `playground/`.

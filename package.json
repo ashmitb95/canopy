@@ -1,6 +1,6 @@
 {
-  "name": "agentdeck",
-  "displayName": "AgentDeck",
+  "name": "canopy",
+  "displayName": "Canopy",
   "description": "Chat with coding agents on your own subscriptions.",
   "icon": "media/canopy-icon.png",
   "version": "0.1.0",
@@ -15,45 +15,45 @@
     "workspace"
   ],
   "activationEvents": [
-    "onWebviewPanel:agentdeck.chatPanel"
+    "onWebviewPanel:canopy.chatPanel"
   ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "agentdeck",
-          "title": "AgentDeck",
+          "id": "canopy",
+          "title": "Canopy",
           "icon": "media/canopy-mark.svg"
         }
       ],
       "secondarySidebar": [
         {
-          "id": "agentdeck-chat",
-          "title": "AgentDeck",
+          "id": "canopy-chat",
+          "title": "Canopy",
           "icon": "media/lanes.svg"
         }
       ]
     },
     "views": {
-      "agentdeck": [
+      "canopy": [
         {
-          "id": "agentdeck.sessions",
-          "name": "AgentDeck",
+          "id": "canopy.sessions",
+          "name": "Canopy",
           "type": "webview"
         }
       ],
-      "agentdeck-chat": [
+      "canopy-chat": [
         {
           "type": "webview",
-          "id": "agentdeck.chat",
-          "name": "AgentDeck"
+          "id": "canopy.chat",
+          "name": "Canopy"
         }
       ]
     },
     "configuration": {
-      "title": "AgentDeck",
+      "title": "Canopy",
       "properties": {
-        "agentdeck.notifications.finished.level": {
+        "canopy.notifications.finished.level": {
           "type": "string",
           "enum": [
             "sound+popup",
@@ -64,7 +64,7 @@
           "default": "sound+popup",
           "description": "When a chat finishes a turn."
         },
-        "agentdeck.notifications.finished.sound": {
+        "canopy.notifications.finished.sound": {
           "type": "string",
           "enum": [
             "Basso",
@@ -84,7 +84,7 @@
           ],
           "default": "Hero"
         },
-        "agentdeck.notifications.approval.level": {
+        "canopy.notifications.approval.level": {
           "type": "string",
           "enum": [
             "sound+popup",
@@ -95,7 +95,7 @@
           "default": "sound+popup",
           "description": "When a chat needs an approval."
         },
-        "agentdeck.notifications.approval.sound": {
+        "canopy.notifications.approval.sound": {
           "type": "string",
           "enum": [
             "Basso",
@@ -115,7 +115,7 @@
           ],
           "default": "Glass"
         },
-        "agentdeck.notifications.question.level": {
+        "canopy.notifications.question.level": {
           "type": "string",
           "enum": [
             "sound+popup",
@@ -126,7 +126,7 @@
           "default": "sound+popup",
           "description": "When a chat asks a question."
         },
-        "agentdeck.notifications.question.sound": {
+        "canopy.notifications.question.sound": {
           "type": "string",
           "enum": [
             "Basso",
@@ -146,7 +146,7 @@
           ],
           "default": "Ping"
         },
-        "agentdeck.notifications.failed.level": {
+        "canopy.notifications.failed.level": {
           "type": "string",
           "enum": [
             "sound+popup",
@@ -157,7 +157,7 @@
           "default": "sound+popup",
           "description": "When a turn fails."
         },
-        "agentdeck.notifications.failed.sound": {
+        "canopy.notifications.failed.sound": {
           "type": "string",
           "enum": [
             "Basso",
@@ -177,30 +177,30 @@
           ],
           "default": "Basso"
         },
-        "agentdeck.notifications.volume": {
+        "canopy.notifications.volume": {
           "type": "number",
           "minimum": 0,
           "maximum": 2,
           "default": 1,
           "description": "Sound volume (1 = system volume; macOS and Linux)."
         },
-        "agentdeck.notifications.minDurationSeconds": {
+        "canopy.notifications.minDurationSeconds": {
           "type": "number",
           "minimum": 0,
           "default": 10,
           "description": "Only notify that a turn finished when it ran at least this long."
         },
-        "agentdeck.notifications.muteWhenFocused": {
+        "canopy.notifications.muteWhenFocused": {
           "type": "boolean",
           "default": true,
           "description": "Stay quiet while VS Code is focused and the chat is visible."
         },
-        "agentdeck.keepAwake": {
+        "canopy.keepAwake": {
           "type": "boolean",
           "default": true,
           "description": "Keep the computer from sleeping while a chat is running (macOS and Linux)."
         },
-        "agentdeck.customAgents": {
+        "canopy.customAgents": {
           "type": "array",
           "default": [],
           "markdownDescription": "More ACP agents: `{ \"id\": \"goose\", \"label\": \"Goose\", \"command\": \"goose\", \"args\": [\"acp\"], \"loginArgs\": [\"configure\"] }`. Reload the window after changing.",
@@ -238,7 +238,7 @@
             }
           }
         },
-        "agentdeck.palette": {
+        "canopy.palette": {
           "type": "string",
           "enum": [
             "theme",
@@ -259,32 +259,32 @@
           "default": "paper",
           "description": "Brand and status colors for the chat, in light and dark to match your VS Code theme. Backgrounds, text, and borders always come from your theme. High-contrast themes keep their own colors."
         },
-        "agentdeck.roster.lead": {
+        "canopy.roster.lead": {
           "type": "string",
           "default": "claude",
           "description": "The agent that leads new group chats."
         },
-        "agentdeck.roster.research": {
+        "canopy.roster.research": {
           "type": "string",
           "default": "",
           "description": "The agent that holds the research role in new group chats; empty for none."
         },
-        "agentdeck.roster.implement": {
+        "canopy.roster.implement": {
           "type": "string",
           "default": "codex",
           "description": "The agent that holds the implement role in new group chats; empty for none."
         },
-        "agentdeck.roster.review": {
+        "canopy.roster.review": {
           "type": "string",
           "default": "grok",
           "description": "The agent that holds the review role in new group chats; empty for none."
         },
-        "agentdeck.roster.enforce": {
+        "canopy.roster.enforce": {
           "type": "boolean",
           "default": true,
           "description": "Only the implement agent may edit code in group chats."
         },
-        "agentdeck.roster.questionsTo": {
+        "canopy.roster.questionsTo": {
           "type": "string",
           "enum": [
             "lead",
@@ -297,470 +297,470 @@
           "default": "lead",
           "description": "Who answers questions from delegates in new group chats."
         },
-        "agentdeck.roster.verify": {
+        "canopy.roster.verify": {
           "type": "string",
           "default": "",
-          "description": "A command AgentDeck runs itself after the implement agent changes files, such as `pnpm test`."
+          "description": "A command Canopy runs itself after the implement agent changes files, such as `pnpm test`."
         }
       }
     },
     "commands": [
       {
-        "command": "agentdeck.newChat",
+        "command": "canopy.newChat",
         "title": "New Chat in Editor",
-        "category": "AgentDeck",
+        "category": "Canopy",
         "icon": "$(add)"
       },
       {
-        "command": "agentdeck.sidebar.newChat",
+        "command": "canopy.sidebar.newChat",
         "title": "New Chat",
-        "category": "AgentDeck",
+        "category": "Canopy",
         "icon": "$(add)"
       },
       {
-        "command": "agentdeck.openInEditor",
+        "command": "canopy.openInEditor",
         "title": "Open Chat in Editor",
-        "category": "AgentDeck",
+        "category": "Canopy",
         "icon": "$(link-external)"
       },
       {
-        "command": "agentdeck.manageProviders",
+        "command": "canopy.manageProviders",
         "title": "Manage Providers",
-        "category": "AgentDeck",
+        "category": "Canopy",
         "icon": "$(account)"
       },
       {
-        "command": "agentdeck.openProviderConfig",
+        "command": "canopy.openProviderConfig",
         "title": "Open Provider Config…",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.openSession",
+        "command": "canopy.openSession",
         "title": "Open in Editor",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.openSessionInSidebar",
+        "command": "canopy.openSessionInSidebar",
         "title": "Open in Sidebar",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.addToChat",
-        "title": "Add to AgentDeck Chat",
-        "category": "AgentDeck",
+        "command": "canopy.addToChat",
+        "title": "Add to Canopy Chat",
+        "category": "Canopy",
         "icon": "$(comment-discussion)"
       },
       {
-        "command": "agentdeck.forkSession",
+        "command": "canopy.forkSession",
         "title": "Fork Conversation",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.renameSession",
+        "command": "canopy.renameSession",
         "title": "Rename…",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.moveSessionToLane",
+        "command": "canopy.moveSessionToLane",
         "title": "Move to Lane…",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.setLaneGoal",
+        "command": "canopy.setLaneGoal",
         "title": "Set Lane Goal…",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.openLanePlan",
+        "command": "canopy.openLanePlan",
         "title": "Open Lane Plan",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newLane",
+        "command": "canopy.newLane",
         "title": "New Lane…",
-        "category": "AgentDeck",
+        "category": "Canopy",
         "icon": "$(git-branch)"
       },
       {
-        "command": "agentdeck.reviewLane",
+        "command": "canopy.reviewLane",
         "title": "Review Lane Changes",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.laneIntoPrimary",
+        "command": "canopy.laneIntoPrimary",
         "title": "Move to Primary Checkout",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.laneToWorktree",
+        "command": "canopy.laneToWorktree",
         "title": "Move to Worktrees",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.handOff",
+        "command": "canopy.handOff",
         "title": "Hand Off to…",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.testNotification",
+        "command": "canopy.testNotification",
         "title": "Test Notification",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.stopSession",
+        "command": "canopy.stopSession",
         "title": "Stop",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.deleteSession",
+        "command": "canopy.deleteSession",
         "title": "Delete…",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newChat.claude",
+        "command": "canopy.newChat.claude",
         "title": "Claude",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newChat.codex",
+        "command": "canopy.newChat.codex",
         "title": "Codex",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newChat.grok",
+        "command": "canopy.newChat.grok",
         "title": "Grok",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newChat.cursor",
+        "command": "canopy.newChat.cursor",
         "title": "Cursor",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newChat.opencode",
+        "command": "canopy.newChat.opencode",
         "title": "OpenCode",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newChat.gemini",
+        "command": "canopy.newChat.gemini",
         "title": "Gemini",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newChat.other",
+        "command": "canopy.newChat.other",
         "title": "Other Agent…",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.newGroupChat",
+        "command": "canopy.newGroupChat",
         "title": "New Group Chat",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.openGroup",
+        "command": "canopy.openGroup",
         "title": "Open Group Chat",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.openLanes",
+        "command": "canopy.openLanes",
         "title": "Open Lanes",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.reviewGroup",
+        "command": "canopy.reviewGroup",
         "title": "Review Group Chat",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.openSetup",
+        "command": "canopy.openSetup",
         "title": "Open Setup",
-        "category": "AgentDeck",
+        "category": "Canopy",
         "icon": "$(gear)"
       },
       {
-        "command": "agentdeck.setLinearKey",
+        "command": "canopy.setLinearKey",
         "title": "Connect Linear (API key)",
-        "category": "AgentDeck"
+        "category": "Canopy"
       },
       {
-        "command": "agentdeck.clearLinearKey",
+        "command": "canopy.clearLinearKey",
         "title": "Disconnect Linear",
-        "category": "AgentDeck"
+        "category": "Canopy"
       }
     ],
     "menus": {
       "webview/context": [
         {
-          "command": "agentdeck.openLanePlan",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'lane'",
+          "command": "canopy.openLanePlan",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'lane'",
           "group": "1_open@1"
         },
         {
-          "command": "agentdeck.reviewLane",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'lane'",
+          "command": "canopy.reviewLane",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'lane'",
           "group": "1_open@2"
         },
         {
-          "command": "agentdeck.setLaneGoal",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'lane'",
+          "command": "canopy.setLaneGoal",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'lane'",
           "group": "2_edit@1"
         },
         {
-          "command": "agentdeck.laneIntoPrimary",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'lane'",
+          "command": "canopy.laneIntoPrimary",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'lane'",
           "group": "3_move@1"
         },
         {
-          "command": "agentdeck.laneToWorktree",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'lane'",
+          "command": "canopy.laneToWorktree",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'lane'",
           "group": "3_move@2"
         },
         {
-          "command": "agentdeck.openSessionInSidebar",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.openSessionInSidebar",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "1_open@1"
         },
         {
-          "command": "agentdeck.openSession",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.openSession",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "1_open@2"
         },
         {
-          "command": "agentdeck.handOff",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.handOff",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "1_open@3"
         },
         {
-          "command": "agentdeck.forkSession",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.forkSession",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "1_open@4"
         },
         {
-          "command": "agentdeck.renameSession",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.renameSession",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "2_edit@1"
         },
         {
-          "command": "agentdeck.moveSessionToLane",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.moveSessionToLane",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "2_edit@2"
         },
         {
-          "command": "agentdeck.stopSession",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.stopSession",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "2_edit@3"
         },
         {
-          "command": "agentdeck.deleteSession",
-          "when": "webviewId == 'agentdeck.sessions' && webviewSection == 'session'",
+          "command": "canopy.deleteSession",
+          "when": "webviewId == 'canopy.sessions' && webviewSection == 'session'",
           "group": "3_delete@1"
         }
       ],
       "view/title": [
         {
-          "command": "agentdeck.openSetup",
-          "when": "view == agentdeck.sessions",
+          "command": "canopy.openSetup",
+          "when": "view == canopy.sessions",
           "group": "navigation@9"
         },
         {
-          "submenu": "agentdeck.newChatMenu.chat",
-          "when": "view == agentdeck.chat",
+          "submenu": "canopy.newChatMenu.chat",
+          "when": "view == canopy.chat",
           "group": "navigation@1"
         },
         {
-          "command": "agentdeck.openInEditor",
-          "when": "view == agentdeck.chat",
+          "command": "canopy.openInEditor",
+          "when": "view == canopy.chat",
           "group": "navigation@2"
         },
         {
-          "command": "agentdeck.manageProviders",
-          "when": "view == agentdeck.chat",
+          "command": "canopy.manageProviders",
+          "when": "view == canopy.chat",
           "group": "navigation@3"
         },
         {
-          "submenu": "agentdeck.newChatMenu.sessions",
-          "when": "view == agentdeck.sessions",
+          "submenu": "canopy.newChatMenu.sessions",
+          "when": "view == canopy.sessions",
           "group": "navigation@0"
         },
         {
-          "command": "agentdeck.newLane",
-          "when": "view == agentdeck.sessions",
+          "command": "canopy.newLane",
+          "when": "view == canopy.sessions",
           "group": "navigation@1"
         }
       ],
       "view/item/context": [],
       "commandPalette": [
         {
-          "command": "agentdeck.openSession",
+          "command": "canopy.openSession",
           "when": "false"
         },
         {
-          "command": "agentdeck.openSessionInSidebar",
+          "command": "canopy.openSessionInSidebar",
           "when": "false"
         },
         {
-          "command": "agentdeck.renameSession",
+          "command": "canopy.renameSession",
           "when": "false"
         },
         {
-          "command": "agentdeck.moveSessionToLane",
+          "command": "canopy.moveSessionToLane",
           "when": "false"
         },
         {
-          "command": "agentdeck.setLaneGoal",
+          "command": "canopy.setLaneGoal",
           "when": "false"
         },
         {
-          "command": "agentdeck.openLanePlan",
+          "command": "canopy.openLanePlan",
           "when": "false"
         },
         {
-          "command": "agentdeck.reviewLane",
+          "command": "canopy.reviewLane",
           "when": "false"
         },
         {
-          "command": "agentdeck.laneIntoPrimary",
+          "command": "canopy.laneIntoPrimary",
           "when": "false"
         },
         {
-          "command": "agentdeck.laneToWorktree",
+          "command": "canopy.laneToWorktree",
           "when": "false"
         },
         {
-          "command": "agentdeck.stopSession",
+          "command": "canopy.stopSession",
           "when": "false"
         },
         {
-          "command": "agentdeck.deleteSession",
+          "command": "canopy.deleteSession",
           "when": "false"
         },
         {
-          "command": "agentdeck.newChat.claude",
+          "command": "canopy.newChat.claude",
           "when": "false"
         },
         {
-          "command": "agentdeck.newChat.codex",
+          "command": "canopy.newChat.codex",
           "when": "false"
         },
         {
-          "command": "agentdeck.newChat.grok",
+          "command": "canopy.newChat.grok",
           "when": "false"
         },
         {
-          "command": "agentdeck.newChat.cursor",
+          "command": "canopy.newChat.cursor",
           "when": "false"
         },
         {
-          "command": "agentdeck.newChat.opencode",
+          "command": "canopy.newChat.opencode",
           "when": "false"
         },
         {
-          "command": "agentdeck.newChat.gemini",
+          "command": "canopy.newChat.gemini",
           "when": "false"
         },
         {
-          "command": "agentdeck.newChat.other",
+          "command": "canopy.newChat.other",
           "when": "false"
         },
         {
-          "command": "agentdeck.openGroup",
+          "command": "canopy.openGroup",
           "when": "false"
         },
         {
-          "command": "agentdeck.reviewGroup",
+          "command": "canopy.reviewGroup",
           "when": "false"
         }
       ],
       "explorer/context": [
         {
-          "command": "agentdeck.addToChat",
+          "command": "canopy.addToChat",
           "when": "resourceScheme == file",
-          "group": "agentdeck@1"
+          "group": "canopy@1"
         }
       ],
       "editor/title/context": [
         {
-          "command": "agentdeck.addToChat",
+          "command": "canopy.addToChat",
           "when": "resourceScheme == file",
-          "group": "agentdeck@1"
+          "group": "canopy@1"
         }
       ],
-      "agentdeck.newChatMenu.sessions": [
+      "canopy.newChatMenu.sessions": [
         {
-          "command": "agentdeck.newChat.claude",
-          "when": "agentdeck.installed.claude",
+          "command": "canopy.newChat.claude",
+          "when": "canopy.installed.claude",
           "group": "1_providers@0"
         },
         {
-          "command": "agentdeck.newChat.codex",
-          "when": "agentdeck.installed.codex",
+          "command": "canopy.newChat.codex",
+          "when": "canopy.installed.codex",
           "group": "1_providers@1"
         },
         {
-          "command": "agentdeck.newChat.grok",
-          "when": "agentdeck.installed.grok",
+          "command": "canopy.newChat.grok",
+          "when": "canopy.installed.grok",
           "group": "1_providers@2"
         },
         {
-          "command": "agentdeck.newChat.cursor",
-          "when": "agentdeck.installed.cursor",
+          "command": "canopy.newChat.cursor",
+          "when": "canopy.installed.cursor",
           "group": "1_providers@3"
         },
         {
-          "command": "agentdeck.newChat.opencode",
-          "when": "agentdeck.installed.opencode",
+          "command": "canopy.newChat.opencode",
+          "when": "canopy.installed.opencode",
           "group": "1_providers@4"
         },
         {
-          "command": "agentdeck.newChat.gemini",
-          "when": "agentdeck.installed.gemini",
+          "command": "canopy.newChat.gemini",
+          "when": "canopy.installed.gemini",
           "group": "1_providers@5"
         },
         {
-          "command": "agentdeck.newChat.other",
+          "command": "canopy.newChat.other",
           "group": "2_more@1"
         }
       ],
-      "agentdeck.newChatMenu.chat": [
+      "canopy.newChatMenu.chat": [
         {
-          "command": "agentdeck.newChat.claude",
-          "when": "agentdeck.installed.claude",
+          "command": "canopy.newChat.claude",
+          "when": "canopy.installed.claude",
           "group": "1_providers@0"
         },
         {
-          "command": "agentdeck.newChat.codex",
-          "when": "agentdeck.installed.codex",
+          "command": "canopy.newChat.codex",
+          "when": "canopy.installed.codex",
           "group": "1_providers@1"
         },
         {
-          "command": "agentdeck.newChat.grok",
-          "when": "agentdeck.installed.grok",
+          "command": "canopy.newChat.grok",
+          "when": "canopy.installed.grok",
           "group": "1_providers@2"
         },
         {
-          "command": "agentdeck.newChat.cursor",
-          "when": "agentdeck.installed.cursor",
+          "command": "canopy.newChat.cursor",
+          "when": "canopy.installed.cursor",
           "group": "1_providers@3"
         },
         {
-          "command": "agentdeck.newChat.opencode",
-          "when": "agentdeck.installed.opencode",
+          "command": "canopy.newChat.opencode",
+          "when": "canopy.installed.opencode",
           "group": "1_providers@4"
         },
         {
-          "command": "agentdeck.newChat.gemini",
-          "when": "agentdeck.installed.gemini",
+          "command": "canopy.newChat.gemini",
+          "when": "canopy.installed.gemini",
           "group": "1_providers@5"
         },
         {
-          "command": "agentdeck.newChat.other",
+          "command": "canopy.newChat.other",
           "group": "2_more@1"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "agentdeck.addToChat",
+        "command": "canopy.addToChat",
         "key": "ctrl+alt+a",
         "mac": "cmd+alt+a",
         "when": "editorTextFocus"
@@ -768,12 +768,12 @@
     ],
     "submenus": [
       {
-        "id": "agentdeck.newChatMenu.sessions",
+        "id": "canopy.newChatMenu.sessions",
         "label": "New Chat",
         "icon": "$(add)"
       },
       {
-        "id": "agentdeck.newChatMenu.chat",
+        "id": "canopy.newChatMenu.chat",
         "label": "New Chat",
         "icon": "$(add)"
       }

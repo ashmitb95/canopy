@@ -29,17 +29,17 @@ let manager: SessionManager | undefined
 let core: Core | undefined
 
 /** Where the Linear key lives: VS Code's SecretStorage, sent only to Linear. */
-const LINEAR_SECRET = 'agentdeck.linearKey'
+const LINEAR_SECRET = 'canopy.linearKey'
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const custom = vscode.workspace.getConfiguration('agentdeck').get<Record<string, unknown>[]>('customAgents', [])
+  const custom = vscode.workspace.getConfiguration('canopy').get<Record<string, unknown>[]>('customAgents', [])
   const providers = buildProviders(custom.flatMap((entry) => customAgent(entry) ?? []))
   let env: Promise<Env> | undefined
-  // claude-notifier's hooks read this; AgentDeck notifies for the CLIs it runs itself.
+  // claude-notifier's hooks read this; Canopy notifies for the CLIs it runs itself.
   const getEnv = () => (env ??= captureEnv().then((captured) => ({ ...captured, CLAUDE_NOTIFIER_DISABLE: '1' })))
   const storage = (context.storageUri ?? context.globalStorageUri).fsPath
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-  // The same core the terminal driver hosts. Without a folder it works in AgentDeck's storage, so the home folder is never scanned.
+  // The same core the terminal driver hosts. Without a folder it works in Canopy's storage, so the home folder is never scanned.
   core = await createCore({ root: root ?? storage, storage, memento: context.workspaceState, env: getEnv, providers })
   manager = core.manager
   const sessionManager = core.manager
@@ -86,7 +86,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   /** A group chat with the roster from settings; the lead can be overridden. */
   const newGroup = async (options: { lead?: string; laneId?: string; title?: string }) => {
-    const config = vscode.workspace.getConfiguration('agentdeck.roster')
+    const config = vscode.workspace.getConfiguration('canopy.roster')
     const lead = options.lead ?? config.get<string>('lead', 'claude')
     const roster = { plan: lead, ...Object.fromEntries((['research', 'implement', 'review'] as const).flatMap((role) => {
       const agent = config.get<string>(role, '')
@@ -106,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     linearKey: async () => context.secrets.get(LINEAR_SECRET),
     agents: async () => (await surfaces.providerInfos()).map((agent) => ({ id: agent.id, label: agent.label, ready: agent.state.status === 'signed-in' })),
     roster: () => {
-      const config = vscode.workspace.getConfiguration('agentdeck.roster')
+      const config = vscode.workspace.getConfiguration('canopy.roster')
       return { lead: config.get('lead', 'claude'), research: config.get('research', ''), implement: config.get('implement', ''), review: config.get('review', '') }
     },
     create: async ({ name, repos, lead, issue }) => {
@@ -128,47 +128,47 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     surfaces,
     new KeepAwake(sessionManager),
     notifier,
-    vscode.commands.registerCommand('agentdeck.testNotification', async () => {
+    vscode.commands.registerCommand('canopy.testNotification', async () => {
       const event = await vscode.window.showQuickPick(['finished', 'approval', 'question', 'failed'], { placeHolder: 'Which notification?' })
       if (event) notifier.test(event as 'finished' | 'approval' | 'question' | 'failed')
     }),
     vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW, surfaces, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.window.registerWebviewPanelSerializer(PANEL_TYPE, surfaces),
-    vscode.commands.registerCommand('agentdeck.newChat', () => surfaces.newChat('panel')),
-    vscode.commands.registerCommand('agentdeck.sidebar.newChat', () => surfaces.newChat('view')),
-    vscode.commands.registerCommand('agentdeck.newChat.other', () => surfaces.newChat('view')),
-    ...[...providers.keys()].map((id) => vscode.commands.registerCommand(`agentdeck.newChat.${id}`, () => surfaces.newChat('view', id))),
-    vscode.commands.registerCommand('agentdeck.newGroupChat', (options?: { laneId?: string; title?: string }) => newGroup(options ?? {})),
-    vscode.commands.registerCommand('agentdeck.setLinearKey', async () => {
+    vscode.commands.registerCommand('canopy.newChat', () => surfaces.newChat('panel')),
+    vscode.commands.registerCommand('canopy.sidebar.newChat', () => surfaces.newChat('view')),
+    vscode.commands.registerCommand('canopy.newChat.other', () => surfaces.newChat('view')),
+    ...[...providers.keys()].map((id) => vscode.commands.registerCommand(`canopy.newChat.${id}`, () => surfaces.newChat('view', id))),
+    vscode.commands.registerCommand('canopy.newGroupChat', (options?: { laneId?: string; title?: string }) => newGroup(options ?? {})),
+    vscode.commands.registerCommand('canopy.setLinearKey', async () => {
       const key = await vscode.window.showInputBox({ prompt: 'Linear personal API key (Settings → Security & access in Linear)', password: true, ignoreFocusOut: true })
       if (key?.trim()) await context.secrets.store(LINEAR_SECRET, key.trim())
     }),
-    vscode.commands.registerCommand('agentdeck.clearLinearKey', () => context.secrets.delete(LINEAR_SECRET)),
-    vscode.commands.registerCommand('agentdeck.openInEditor', () => surfaces.openSidebarInEditor()),
-    vscode.commands.registerCommand('agentdeck.manageProviders', () => surfaces.openProviders()),
+    vscode.commands.registerCommand('canopy.clearLinearKey', () => context.secrets.delete(LINEAR_SECRET)),
+    vscode.commands.registerCommand('canopy.openInEditor', () => surfaces.openSidebarInEditor()),
+    vscode.commands.registerCommand('canopy.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
     vscode.workspace.registerTextDocumentContentProvider(GIT_SCHEME, laneChanges),
-    vscode.commands.registerCommand('agentdeck.reviewLane', async (target: LaneNode | string) => {
+    vscode.commands.registerCommand('canopy.reviewLane', async (target: LaneNode | string) => {
       const name = typeof target === 'string' ? target : target.lane.name
       const lane = side.allLanes().find((candidate) => candidate.name === name)
       if (lane && tracker) await laneChanges.open(lane, tracker.repos)
     }),
     side,
     vscode.window.registerWebviewViewProvider(SIDE_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
-    vscode.commands.registerCommand('agentdeck.openGroup', (groupId: string) => surfaces.showGroupInSidebar(groupId)),
-    vscode.commands.registerCommand('agentdeck.openLanes', () => side.openLanes()),
-    vscode.commands.registerCommand('agentdeck.openSetup', () => setup.open()),
-    vscode.commands.registerCommand('agentdeck.reviewGroup', (groupId: string) => review.open(groupId)),
+    vscode.commands.registerCommand('canopy.openGroup', (groupId: string) => surfaces.showGroupInSidebar(groupId)),
+    vscode.commands.registerCommand('canopy.openLanes', () => side.openLanes()),
+    vscode.commands.registerCommand('canopy.openSetup', () => setup.open()),
+    vscode.commands.registerCommand('canopy.reviewGroup', (groupId: string) => review.open(groupId)),
     review,
     setup,
     new SessionsStatusBar(sessionManager),
-    vscode.commands.registerCommand('agentdeck.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),
-    vscode.commands.registerCommand('agentdeck.openSessionInSidebar', (node: SessionNode) => surfaces.showInSidebar(node.id)),
-    vscode.commands.registerCommand('agentdeck.renameSession', async (node: { id: string; title: string }) => {
+    vscode.commands.registerCommand('canopy.openSession', (node: SessionNode) => surfaces.openPanel(node.id)),
+    vscode.commands.registerCommand('canopy.openSessionInSidebar', (node: SessionNode) => surfaces.showInSidebar(node.id)),
+    vscode.commands.registerCommand('canopy.renameSession', async (node: { id: string; title: string }) => {
       const title = await vscode.window.showInputBox({ prompt: 'Session name', value: node.title })
       if (title?.trim()) await sessionManager.rename(node.id, title.trim())
     }),
-    vscode.commands.registerCommand('agentdeck.forkSession', async (target?: SessionNode | string) => {
+    vscode.commands.registerCommand('canopy.forkSession', async (target?: SessionNode | string) => {
       const id = typeof target === 'string' ? target : (target?.id ?? surfaces.activeSessionId())
       if (!id) return
       try {
@@ -178,13 +178,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         void vscode.window.showErrorMessage((error as Error).message)
       }
     }),
-    vscode.commands.registerCommand('agentdeck.addToChat', async (uri?: vscode.Uri, selected?: vscode.Uri[]) => {
+    vscode.commands.registerCommand('canopy.addToChat', async (uri?: vscode.Uri, selected?: vscode.Uri[]) => {
       const uris = selected?.length ? selected : uri ? [uri] : vscode.window.activeTextEditor ? [vscode.window.activeTextEditor.document.uri] : []
       const files = uris.filter((candidate) => candidate.scheme === 'file')
       if (files.length === 0) return
       await surfaces.insertAttachments(files.map((file) => attachFile(join(storage, 'attachments'), file.fsPath, vscode.workspace.asRelativePath(file))))
     }),
-    vscode.commands.registerCommand('agentdeck.openProviderConfig', async () => {
+    vscode.commands.registerCommand('canopy.openProviderConfig', async () => {
       const files = configFiles(homedir(), root)
       if (files.length === 0) return void vscode.window.showInformationMessage('No provider config files found.')
       const choice = await vscode.window.showQuickPick(
@@ -193,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       )
       if (choice) await vscode.window.showTextDocument(vscode.Uri.file(choice.path))
     }),
-    vscode.commands.registerCommand('agentdeck.moveSessionToLane', async (node: SessionNode) => {
+    vscode.commands.registerCommand('canopy.moveSessionToLane', async (node: SessionNode) => {
       const none = { label: '$(circle-slash) No branch', lane: undefined }
       const choices = [
         ...side.allLanes().map((lane) => ({ label: `$(git-branch) ${lane.name}`, description: laneDescription(lane), lane: lane.name })),
@@ -202,25 +202,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const choice = await vscode.window.showQuickPick(choices, { placeHolder: `Move “${node.title}” to…` })
       if (choice) await sessionManager.setLane(node.id, choice.lane)
     }),
-    vscode.commands.registerCommand('agentdeck.setLaneGoal', async (node: LaneNode) => {
+    vscode.commands.registerCommand('canopy.setLaneGoal', async (node: LaneNode) => {
       if (!memory) return
       const goal = await vscode.window.showInputBox({ prompt: `Goal for ${node.lane.name}`, value: memory.goal(node.lane.name) ?? '' })
       if (goal?.trim()) memory.setGoal(node.lane.name, goal.trim())
     }),
-    vscode.commands.registerCommand('agentdeck.openLanePlan', async (node: LaneNode) => {
+    vscode.commands.registerCommand('canopy.openLanePlan', async (node: LaneNode) => {
       if (!memory) return
       memory.ensure(node.lane.name)
       await vscode.window.showTextDocument(vscode.Uri.file(memory.planPath(node.lane.name)))
     }),
-    vscode.commands.registerCommand('agentdeck.newLane', () => (lanes ? newLane.open() : vscode.window.showInformationMessage('Open a folder to use lanes.'))),
+    vscode.commands.registerCommand('canopy.newLane', () => (lanes ? newLane.open() : vscode.window.showInformationMessage('Open a folder to use lanes.'))),
     newLane,
-    vscode.commands.registerCommand('agentdeck.laneIntoPrimary', (node: LaneNode) =>
+    vscode.commands.registerCommand('canopy.laneIntoPrimary', (node: LaneNode) =>
       lanes ? runLane(`Moving ${node.lane.name} to the primary checkout…`, () => lanes.moveIntoPrimary(node.lane.name)) : undefined
     ),
-    vscode.commands.registerCommand('agentdeck.laneToWorktree', (node: LaneNode) =>
+    vscode.commands.registerCommand('canopy.laneToWorktree', (node: LaneNode) =>
       lanes ? runLane(`Moving ${node.lane.name} to worktrees…`, () => lanes.moveToWorktree(node.lane.name)) : undefined
     ),
-    vscode.commands.registerCommand('agentdeck.handOff', async (target?: SessionNode | string) => {
+    vscode.commands.registerCommand('canopy.handOff', async (target?: SessionNode | string) => {
       const sourceId = typeof target === 'string' ? target : (target?.id ?? surfaces.activeSessionId())
       const source = sessionManager.list().find(({ record }) => record.id === sourceId)?.record
       if (!source) return void vscode.window.showInformationMessage('Open a chat to hand off from.')
@@ -235,7 +235,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       )
       if (!task) return
       if (!providers.has(task.task.provider)) {
-        return void vscode.window.showErrorMessage(`No provider “${task.task.provider}”. Check [task.${task.task.id}] in .agentdeck/config.toml.`)
+        return void vscode.window.showErrorMessage(`No provider “${task.task.provider}”. Check [task.${task.task.id}] in .canopy/config.toml.`)
       }
       const summary = source.laneId && memory ? join(memory.laneDir(source.laneId), 'chats', `${source.id}.md`) : undefined
       const text = await vscode.window.showInputBox({
@@ -254,8 +254,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       surfaces.openPanel(next.id)
       await sessionManager.prompt(next.id, [{ type: 'text', text: text.trim() }])
     }),
-    vscode.commands.registerCommand('agentdeck.stopSession', (node: SessionNode) => sessionManager.stop(node.id)),
-    vscode.commands.registerCommand('agentdeck.deleteSession', async (node: { id: string; title: string }) => {
+    vscode.commands.registerCommand('canopy.stopSession', (node: SessionNode) => sessionManager.stop(node.id)),
+    vscode.commands.registerCommand('canopy.deleteSession', async (node: { id: string; title: string }) => {
       const choice = await vscode.window.showWarningMessage(`Delete “${node.title}”?`, { modal: true }, 'Delete')
       if (choice === 'Delete') await sessionManager.delete(node.id)
     })
@@ -270,9 +270,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   // First run: show the providers and how to start, once.
-  if (!context.globalState.get('agentdeck.welcomed') && sessionManager.list().length === 0) {
-    void context.globalState.update('agentdeck.welcomed', true)
-    surfaces.openProviders('Welcome to AgentDeck')
+  if (!context.globalState.get('canopy.welcomed') && sessionManager.list().length === 0) {
+    void context.globalState.update('canopy.welcomed', true)
+    surfaces.openProviders('Welcome to Canopy')
   }
 }
 

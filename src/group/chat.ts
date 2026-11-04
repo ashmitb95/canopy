@@ -44,7 +44,7 @@ export type GroupRecord = {
   roster: Roster
   /** Only the agent holding Implement may write; others are blocked and told to delegate. */
   enforce: boolean
-  /** A command AgentDeck runs itself after a delegate writes, such as the test suite. */
+  /** A command Canopy runs itself after a delegate writes, such as the test suite. */
   verify?: string
   delegations: Delegation[]
   violations: Violation[]
@@ -75,7 +75,7 @@ export type GroupDeps = {
   /** Where a lane's code is: its checkouts, or the primary checkouts for a chat on no lane. */
   checkouts?: (lane: string | undefined) => string[]
   memoryDir?: (lane: string) => string
-  /** How long AgentDeck waits for background work before telling the lead. */
+  /** How long Canopy waits for background work before telling the lead. */
   settleLimitMs?: number
   /** Off only in tests that have no real processes to watch. */
   watchProcesses?: boolean
@@ -84,7 +84,7 @@ export type GroupDeps = {
 
 /** Everything in a folder, untracked files included, without touching the working tree, the index, or the stash list. */
 function snapshotTree(path: string): string {
-  const index = join(realpathSync(tmpdir()), `agentdeck-index-${process.pid}-${randomUUID()}`)
+  const index = join(realpathSync(tmpdir()), `canopy-index-${process.pid}-${randomUUID()}`)
   const git = (args: string[]) => execFileSync('git', args, { cwd: path, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, GIT_INDEX_FILE: index } }).trim()
   try {
     // Starting from the checkout's own index, Git only rehashes what changed: seconds become milliseconds on large repos.
@@ -103,7 +103,7 @@ const changed = (path: string, from: string, to: string) => execFileSync('git', 
 function restoreTree(path: string, tree: string): void {
   const added = changed(path, tree, snapshotTree(path)).filter((row) => row.startsWith('A\t')).map((row) => row.slice(2))
   for (const file of added) rmSync(join(path, file), { force: true })
-  const index = join(realpathSync(tmpdir()), `agentdeck-undo-${process.pid}-${randomUUID()}`)
+  const index = join(realpathSync(tmpdir()), `canopy-undo-${process.pid}-${randomUUID()}`)
   const env = { ...process.env, GIT_INDEX_FILE: index }
   try {
     execFileSync('git', ['read-tree', tree], { cwd: path, env })
@@ -157,7 +157,7 @@ export function groupTools(handle: (caller: string, name: string, args: Record<s
           doneWhen: { type: 'string' },
           phases: {
             type: 'array',
-            description: 'For a plan with several phases: one entry per phase, in order. AgentDeck hands them over one at a time and starts the next only when the last reports done and its checks pass.',
+            description: 'For a plan with several phases: one entry per phase, in order. Canopy hands them over one at a time and starts the next only when the last reports done and its checks pass.',
             items: { type: 'object', properties: { task: { type: 'string' }, doneWhen: { type: 'string' } }, required: ['task'] }
           },
           context: { type: 'string', description: 'Everything the delegate needs for its role, so it can start at once. Implement: your findings and the plan (files, approach, steps, facts you verified). Review: what changed and what to check it against. Research: the questions and what is already known.' }
@@ -204,7 +204,7 @@ type Turn = { agent: string; entry: number; started: boolean; delegation?: strin
 const isBusy = (status: SessionStatus) => status === 'running' || status === 'needs-input'
 
 /**
- * One conversation across agents. AgentDeck owns the shared record; each agent keeps its own session and context.
+ * One conversation across agents. Canopy owns the shared record; each agent keeps its own session and context.
  * One agent runs at a time, so writes need no locks; other messages wait in a queue the user can see and change.
  */
 export class GroupChat implements Disposable {
@@ -548,7 +548,7 @@ export class GroupChat implements Disposable {
         delete delegation.facts.servicesLeft
       }
     }
-    this.ledger.append({ from: 'agentdeck', text: 'Stopped what delegates left running.' })
+    this.ledger.append({ from: 'canopy', text: 'Stopped what delegates left running.' })
     this.save()
     this.changed()
   }
@@ -570,7 +570,7 @@ export class GroupChat implements Disposable {
     for (const delegation of this.record.delegations) {
       if (delegation.status !== 'running' && delegation.status !== 'settling') continue
       delegation.resuming = true
-      this.resumeDelegate(delegation, 'AgentDeck restarted while you were working. Check what got done, then finish. If you were waiting for an approval or an answer, ask again. End with a STATUS line.')
+      this.resumeDelegate(delegation, 'Canopy restarted while you were working. Check what got done, then finish. If you were waiting for an approval or an answer, ask again. End with a STATUS line.')
     }
   }
 
@@ -601,7 +601,7 @@ export class GroupChat implements Disposable {
     return { roots: [], except: [], outside: async () => `Your role is read-only here. ${agent === this.record.lead ? `Delegate this edit to ${writer}.` : `Report what should change; ${writer} edits code.`}` }
   }
 
-  /** What each delegate changed, as a diff, with its report and the facts AgentDeck recorded. */
+  /** What each delegate changed, as a diff, with its report and the facts Canopy recorded. */
   review(): { delegation: Delegation; diff: string }[] {
     return this.record.delegations.flatMap((delegation) => {
       if (!delegation.snapshots) return []
@@ -647,7 +647,7 @@ export class GroupChat implements Disposable {
     if (!violation || violation.undone) return
     for (const { path, tree } of violation.before) restoreTree(path, tree)
     violation.undone = true
-    this.ledger.append({ from: 'agentdeck', text: `Undid the write by ${violation.agent}: ${violation.files.join(', ')}.` })
+    this.ledger.append({ from: 'canopy', text: `Undid the write by ${violation.agent}: ${violation.files.join(', ')}.` })
     this.save()
     this.changed()
   }
@@ -658,11 +658,11 @@ export class GroupChat implements Disposable {
 
   private leadBrief(agent: string): string {
     const writer = this.record.roster.implement
-    return `You lead a group chat of coding agents run by AgentDeck, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. For a plan with several phases, pass them as phases: they are handed over one at a time, which keeps each delegate on track. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only.` : ''} When work belongs to another agent, call the delegate tool from the agentdeck MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what AgentDeck recorded, and decide what happens next.`
+    return `You lead a group chat of coding agents run by Canopy, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. For a plan with several phases, pass them as phases: they are handed over one at a time, which keeps each delegate on track. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only.` : ''} When work belongs to another agent, call the delegate tool from the canopy MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what Canopy recorded, and decide what happens next.`
   }
 
   private delegationText(delegation: Delegation): string {
-    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by AgentDeck${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.phase ? `Phase ${delegation.phase} of ${delegation.phases}: ` : ''}${delegation.task}${delegation.phase ? `\nDo only this phase. The whole plan, for reference: ${this.seriesOf(delegation).map((phase) => `${phase.phase}. ${phase.task}`).join(' ')}` : ''}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}${delegation.context ? `\n\nContext from ${delegation.lead}:\n${delegation.context}` : ''}\n\n${GUIDE[delegation.role ?? 'other']}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the agentdeck MCP server.`
+    return `You are ${delegation.agent}, delegated this by ${delegation.lead} in a group chat run by Canopy${delegation.role ? `, in the ${delegation.role} role` : ''}.\nTask: ${delegation.phase ? `Phase ${delegation.phase} of ${delegation.phases}: ` : ''}${delegation.task}${delegation.phase ? `\nDo only this phase. The whole plan, for reference: ${this.seriesOf(delegation).map((phase) => `${phase.phase}. ${phase.task}`).join(' ')}` : ''}${delegation.doneWhen ? `\nDone when: ${delegation.doneWhen}` : ''}${delegation.context ? `\n\nContext from ${delegation.lead}:\n${delegation.context}` : ''}\n\n${GUIDE[delegation.role ?? 'other']}\n${NARRATE}\nWhen you stop, end your reply with one line: STATUS: done, STATUS: blocked, or STATUS: question, followed by the reason or question. Only say done for what you actually did and checked. If your sandbox cannot run git commit, use the commit_work tool from the canopy MCP server.`
   }
 
   /** The manager's `decorate` hook for one member: what this agent missed, ahead of what it is told. */
@@ -670,7 +670,7 @@ export class GroupChat implements Disposable {
     const cursor = this.record.cursors[agent] ?? 0
     const missed = this.ledger.missed(cursor, agent, this.running.get(agent)?.entry)
     const text = catchUpText(missed, join(this.deps.dir, this.record.id, 'ledger.jsonl'))
-    // What AgentDeck put in a delegate's first prompt, for the handoff panel.
+    // What Canopy put in a delegate's first prompt, for the handoff panel.
     const starting = this.record.delegations.find((delegation) => delegation.agent === agent && delegation.status === 'running' && !delegation.added)
     if (starting) {
       starting.added = [
@@ -711,7 +711,7 @@ export class GroupChat implements Disposable {
       await this.deps.manager.warm(sessionId).catch(() => undefined)
       processes = await baseline(this.deps.root ?? process.cwd()).catch(() => processes)
     }
-    const entry = this.ledger.append(next.internal ? { from: 'agentdeck', to: next.target, text: next.text } : next.redirect ? { from: 'user', to: next.target, text: next.text } : delegation ? { from: delegation.lead, to: next.target, text: `${delegation.task}` } : { from: 'user', to: next.target, text: next.text })
+    const entry = this.ledger.append(next.internal ? { from: 'canopy', to: next.target, text: next.text } : next.redirect ? { from: 'user', to: next.target, text: next.text } : delegation ? { from: delegation.lead, to: next.target, text: `${delegation.task}` } : { from: 'user', to: next.target, text: next.text })
     if (delegation) {
       delegation.status = 'running'
       delegation.startedAt = new Date().toISOString()
@@ -882,7 +882,7 @@ export class GroupChat implements Disposable {
     if (agent !== this.record.lead || this.record.nudged || !SAID_DELEGATE.test(reply)) return
     if (this.record.delegations.some((candidate) => candidate.status === 'queued')) return
     this.record.nudged = true
-    this.record.queue.unshift({ id: randomUUID(), target: agent, internal: true, text: 'You said you would hand this off, but no delegate call reached AgentDeck. Call the delegate tool now if you meant to; otherwise carry on.' })
+    this.record.queue.unshift({ id: randomUUID(), target: agent, internal: true, text: 'You said you would hand this off, but no delegate call reached Canopy. Call the delegate tool now if you meant to; otherwise carry on.' })
   }
 
   private async finishDelegation(delegation: Delegation, agent: string, status: SessionStatus, reply: string, current: Turn, violation: Violation | undefined): Promise<void> {
@@ -935,12 +935,12 @@ export class GroupChat implements Disposable {
       ...this.seriesNote(delegation),
       delegation.report ?? '(no reply)',
       '',
-      'Recorded by AgentDeck, not by the agent:',
+      'Recorded by Canopy, not by the agent:',
       `Files changed: ${facts?.files.join('; ') || 'none'}`,
       `Commands run: ${facts?.commands.map((command) => `${command.command}${command.failed ? ' (failed)' : ''}`).join('; ') || 'none'}`,
-      ...(facts?.verify ? [`AgentDeck ran ${facts.verify.command}: ${facts.verify.ok ? 'passed' : `FAILED\n${facts.verify.output}`}`] : []),
+      ...(facts?.verify ? [`Canopy ran ${facts.verify.command}: ${facts.verify.ok ? 'passed' : `FAILED\n${facts.verify.output}`}`] : []),
       ...(facts?.violations.length ? [`Writes it should not have made: ${facts.violations.join('; ')}`] : []),
-      ...(facts?.stillRunning?.length ? [`Still running after AgentDeck stopped waiting: ${facts.stillRunning.join('; ')}. Decide whether to keep waiting or call stop_work.`] : []),
+      ...(facts?.stillRunning?.length ? [`Still running after Canopy stopped waiting: ${facts.stillRunning.join('; ')}. Decide whether to keep waiting or call stop_work.`] : []),
       ...(facts?.servicesLeft?.length ? [`Servers left running: ${facts.servicesLeft.join('; ')}. Stop them with stop_work when nothing needs them.`] : []),
       ...(delegation.status === 'question' ? [`${delegation.agent} is asking the question above and waiting. If this conversation already settles it, call answer_delegate and cite where. If not, or if it is a product decision, call ask_user. Never guess.`] : []),
       ...(delegation.status === 'unknown' ? ['It did not give a status line, so treat it as not finished until checked.'] : []),
@@ -998,7 +998,7 @@ export class GroupChat implements Disposable {
     if (files.length === 0) return undefined
     const violation: Violation = { id: randomUUID(), agent, files, before: watched }
     this.record.violations.push(violation)
-    this.ledger.append({ from: 'agentdeck', text: `${agent} changed files it should not have: ${files.join('; ')}${writer ? ', outside its lane' : ''}. The user can undo this.` })
+    this.ledger.append({ from: 'canopy', text: `${agent} changed files it should not have: ${files.join('; ')}${writer ? ', outside its lane' : ''}. The user can undo this.` })
     return violation
   }
 
@@ -1052,7 +1052,7 @@ export class GroupChats implements Disposable {
   /** The session's chat and agent, and the address its CLI connects to. */
   toolServer(record: SessionRecord, url: string): { name: string; url: string } | undefined {
     const found = this.memberOf(record.id)
-    return found ? { name: 'agentdeck', url: `${url}/${found.chat.record.id}/${found.agent}` } : undefined
+    return found ? { name: 'canopy', url: `${url}/${found.chat.record.id}/${found.agent}` } : undefined
   }
 
   boundary(record: SessionRecord): WriteBoundary | undefined {

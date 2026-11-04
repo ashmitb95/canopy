@@ -6,7 +6,7 @@ A lane is a unit of work: branch `X` in every repo that has it. Chats link to a 
 
 ```
 workspace/                  ← every chat's cwd
-├─ .agentdeck/              ← stored intent
+├─ .canopy/              ← stored intent
 ├─ ui/                      ← repo: primary checkout on some branch
 │  └─ .worktrees/wt-1/      ← worktree slot, holding whichever lane is there
 └─ api/
@@ -19,7 +19,7 @@ workspace/                  ← every chat's cwd
 
 `LaneTracker` watches each repo's Git directory (HEAD, packed-refs, `refs/heads`, `worktrees`) and refreshes, debounced, from `git worktree list --porcelain`, base-branch detection, and `status --porcelain` with `GIT_OPTIONAL_LOCKS=0`. None of this is stored.
 
-## Stored intent: `.agentdeck/`
+## Stored intent: `.canopy/`
 
 ```
 config.toml                 env_files, [setup] per repo, worktrees, max_slots, [task.<id>]
@@ -39,7 +39,7 @@ TOML is a small subset (`toml.ts`): `key = <JSON>` lines and `[table]` headers. 
 
 ## Moving lanes
 
-`switch.ts` treats a move as a transaction. `preflight` changes nothing and answers ok, ask, or stop; all repos must pass before any moves. `swap` then snapshots both sides to named stashes pinned under `refs/agentdeck/`, writes a journal to the Git directory, detaches the slot, switches the primary checkout, gives the slot the outgoing lane, restores each side's work, and verifies. Any failure restores both sides; leftovers are stashed, never discarded. After a crash, `rollback` undoes the move from the journal.
+`switch.ts` treats a move as a transaction. `preflight` changes nothing and answers ok, ask, or stop; all repos must pass before any moves. `swap` then snapshots both sides to named stashes pinned under `refs/canopy/`, writes a journal to the Git directory, detaches the slot, switches the primary checkout, gives the slot the outgoing lane, restores each side's work, and verifies. Any failure restores both sides; leftovers are stashed, never discarded. After a crash, `rollback` undoes the move from the journal.
 
 Worktrees are slots: `<repo>/.worktrees/wt-<n>`. Occupancy comes only from `git worktree list`. A parked lane leaves its slot detached and warm for the next lane, and existing lane-named worktrees migrate on the next move. `max_slots` in `config.toml` sets the limit (default 4). Worktrees elsewhere are tracked but not moved without asking. Primary checkouts can hold different lanes in different repos; each repo moves on its own terms within one all-or-nothing move.
 

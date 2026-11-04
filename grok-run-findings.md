@@ -9,7 +9,7 @@ Notes from reading the Phase 3 handoff and the code on `core`. No code was chang
 - Phases 0, 1, and 2 are done and committed. Phase 3 (delegation) is in `src/group/chat.ts` with unit tests. Its live script has not reported in this session.
 - Phase 4 has not started. `poc/settle.ts` is still in `poc/`.
 
-The handoff is `.agentdeck/handoff.md` (copy at `~/agentdeck-handoff.md`). The Claude session reader for `281c9f85-9c75-47f3-a4b3-7c9a8444c0aa` skipped 68 unknown records and recovered only a short tail: the Phase 3 rerun had been handed to Grok, then the user interrupted. Treat that transcript as incomplete.
+The handoff is `.canopy/handoff.md` (copy at `~/canopy-handoff.md`). The Claude session reader for `281c9f85-9c75-47f3-a4b3-7c9a8444c0aa` skipped 68 unknown records and recovered only a short tail: the Phase 3 rerun had been handed to Grok, then the user interrupted. Treat that transcript as incomplete.
 
 ## Claude quota
 
@@ -32,7 +32,7 @@ A lead cannot delegate to itself (`That is you` in `GroupChat.handleTool`). Impl
 - Temp git repo, lane `slugify`, worktrees on, slot `<repo>/.worktrees/wt-1`.
 - Chat mode `full-access`. Roster plan = lead, plus implement and review. Verify command `node --test`.
 - Prompt: add `slugify.js` and `slugify.test.js`, then get it reviewed.
-- Passes only if the lead delegates the build unprompted, the files land in the slot and not the primary checkout, recorded facts name the files, AgentDeck's own verify passes, review was delegated, no role violation, and the lead spoke last.
+- Passes only if the lead delegates the build unprompted, the files land in the slot and not the primary checkout, recorded facts name the files, Canopy's own verify passes, review was delegated, no role violation, and the lead spoke last.
 - Gives up after 420s. Each arrangement spends real CLI quota.
 
 ## Read-only ACP fix (committed, not live-tested)
@@ -50,7 +50,7 @@ The handoff: Codex as implementer hit a permission error on the worktree index l
 What the code does now:
 
 - With a lane boundary, `sandboxPolicy` in `src/providers/codex/provider.ts` is `workspaceWrite` in every permission mode. `full-access` only turns network on. It does not select `dangerFullAccess` once a boundary exists. An empty `roots` list becomes a read-only sandbox.
-- Lane writable roots are the lane checkout plus the lane memory directory (`LaneCoordinator.boundary`). The coordinator test expects exactly `[<repo>/.worktrees/wt-1, <workspace>/.agentdeck/lanes/<lane>]`.
+- Lane writable roots are the lane checkout plus the lane memory directory (`LaneCoordinator.boundary`). The coordinator test expects exactly `[<repo>/.worktrees/wt-1, <workspace>/.canopy/lanes/<lane>]`.
 - The Codex process cwd is the core root, which in this smoke test is the primary checkout (`SessionManager.open` passes `deps.cwd`). The boundary does not add that checkout, and it does not add the git directory.
 
 Where git actually writes, checked with a throwaway repo (created under `/tmp` and removed):
@@ -68,7 +68,7 @@ macOS detail from the same throwaway repo: `git rev-parse` printed `/private/var
 ## Other handoff items, not investigated past the note
 
 - A delegate ended its turn after starting a background test and reported early. Phase 4 settling is the planned answer. `poc/settle.ts` is still outside `src/group/`.
-- A reviewer told to run tests does not always do so. The smoke script depends on AgentDeck running `verify` itself.
+- A reviewer told to run tests does not always do so. The smoke script depends on Canopy running `verify` itself.
 - Codex background commands started with `&` disappeared when the command ended. Reports are supposed to show the expected output that is missing. Not traced in this pass.
 
 ## Not done

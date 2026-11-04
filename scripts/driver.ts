@@ -26,7 +26,7 @@ const HELP = `Type a message, or @agent to address one.
 
 async function main(): Promise<void> {
   const env = await captureEnv()
-  const core = await createCore({ root, storage: join(root, '.agentdeck', 'driver'), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
+  const core = await createCore({ root, storage: join(root, '.canopy', 'driver'), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
   const unfinished = await core.lanes.unfinishedMoves()
   if (unfinished.length > 0) console.log(`A move was left unfinished: ${unfinished.map((move) => `${move.lane} in ${move.repo}`).join(', ')}. Use /undo.`)
   const lead = flag('lead') ?? 'claude'

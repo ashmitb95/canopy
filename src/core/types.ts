@@ -6,7 +6,7 @@ export type PromptPart =
   | { type: 'file'; path: string; range?: [number, number] }
   | { type: 'command'; name: string }
   | { type: 'pasted'; text: string }
-  /** An image in AgentDeck's attachment store. */
+  /** An image in Canopy's attachment store. */
   | { type: 'image'; path: string; mimeType: string; name: string }
 
 export type ToolKind = 'read' | 'edit' | 'execute' | 'search' | 'fetch' | 'mcp' | 'other'
@@ -184,7 +184,7 @@ export interface ProviderDefinition {
   readonly cli: { command: string; installUrl: string }
   /** Shell command the UI runs in a terminal to sign in; depends on where the CLI was found. */
   signInCommand(env: Env): string
-  /** Runs the login inside AgentDeck, reporting the link to open; without it, sign-in runs in a terminal. */
+  /** Runs the login inside Canopy, reporting the link to open; without it, sign-in runs in a terminal. */
   startSignIn?(env: Env, onEvent: (event: SignInEvent) => void): Promise<SignInFlow>
   readonly capabilities: ReadonlySet<Capability>
   readonly modes: readonly PermissionMode[]

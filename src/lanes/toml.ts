@@ -1,5 +1,5 @@
 /**
- * The TOML subset AgentDeck writes: `[table]` headers and `key = value` lines whose value is JSON
+ * The TOML subset Canopy writes: `[table]` headers and `key = value` lines whose value is JSON
  * (strings, numbers, booleans, arrays). JSON values are valid TOML; lines outside the subset are skipped.
  */
 export function parseToml(text: string): Record<string, unknown> {

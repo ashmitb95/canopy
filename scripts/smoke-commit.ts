@@ -8,7 +8,7 @@ import { createCore } from '../src/group/host'
 import { providers } from '../src/providers/registry'
 
 async function main(): Promise<void> {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-commit-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-commit-')))
   const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   git(root, 'init', '-q', '-b', 'main')
   git(root, 'config', 'user.email', 'smoke@example.com')
@@ -18,10 +18,10 @@ async function main(): Promise<void> {
   git(root, 'add', '.')
   git(root, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'init')
   const env = await captureEnv()
-  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'agentdeck-store-')), env: async () => env, providers })
+  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'canopy-store-')), env: async () => env, providers })
   await core.lanes.newLane('note', core.tracker.repos.map((repo) => repo.name), { worktrees: true })
   const chat = core.chats.create({ lead: 'codex', mode: 'full-access', laneId: 'note', roster: { implement: 'codex' } })
-  await chat.send('In the lane worktree, create note.txt containing "hi", then commit it with the message "add note". If git cannot commit from your sandbox, use the commit_work tool from the agentdeck MCP server. Reply with the commit hash.')
+  await chat.send('In the lane worktree, create note.txt containing "hi", then commit it with the message "add note". If git cannot commit from your sandbox, use the commit_work tool from the canopy MCP server. Reply with the commit hash.')
   const started = Date.now()
   await new Promise((resolve) => setTimeout(resolve, 2_000))
   while ((chat.state().running || chat.state().queue.length > 0) && Date.now() - started < 180_000) await new Promise((resolve) => setTimeout(resolve, 500))

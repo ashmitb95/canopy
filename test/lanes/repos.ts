@@ -9,7 +9,7 @@ export function run(cwd: string, ...args: string[]): string {
 
 /** A temporary workspace root (real path: macOS tmpdir is behind a symlink, and git prints real paths). */
 export function workspace(): string {
-  return realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-lanes-')))
+  return realpathSync(mkdtempSync(join(tmpdir(), 'canopy-lanes-')))
 }
 
 /** A repo with one commit on `main`. */

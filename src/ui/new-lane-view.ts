@@ -22,7 +22,7 @@ export class NewLaneView implements vscode.Disposable {
 
   open(): void {
     if (this.panel) return this.panel.reveal()
-    const panel = vscode.window.createWebviewPanel('agentdeck.newLane', 'New Worktree', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() })
+    const panel = vscode.window.createWebviewPanel('canopy.newLane', 'New Worktree', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() })
     panel.webview.html = this.deps.html(panel.webview)
     panel.webview.onDidReceiveMessage((message: WebviewMessage) =>
       this.handle(message).catch((error: unknown) => this.post({ type: 'newLaneError', message: error instanceof Error ? error.message : String(error) }))
@@ -93,7 +93,7 @@ export class NewLaneView implements vscode.Disposable {
         return
       }
       case 'openSetup':
-        await vscode.commands.executeCommand('agentdeck.openSetup')
+        await vscode.commands.executeCommand('canopy.openSetup')
         return
       default:
         return

@@ -42,7 +42,7 @@ button{font-family:inherit;cursor:pointer}
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":880}}'>
 const line = (text) => ({ text, bg: text.startsWith('+') ? '#DDF3E6' : text.startsWith('−') ? '#FBE1E1' : 'transparent', ink: '#16140F' });
 const RUNS = [
-  { name: 'Claude', role: 'Plan', letter: 'C', bg: '#B8603F', summary: 'Found the cause and wrote a 3-step plan.', title: 'Claude · Plan', report: 'export.ts loads every row into memory. Streaming fixes it without changing the response.', files: [{ path: '.agentdeck/lanes/export-timeouts/plan.md', diff: 'plan' }], diff: [] },
+  { name: 'Claude', role: 'Plan', letter: 'C', bg: '#B8603F', summary: 'Found the cause and wrote a 3-step plan.', title: 'Claude · Plan', report: 'export.ts loads every row into memory. Streaming fixes it without changing the response.', files: [{ path: '.canopy/lanes/export-timeouts/plan.md', diff: 'plan' }], diff: [] },
   { name: 'Grok', role: 'Implement', letter: 'G', bg: '#5B6670', summary: 'Streamed rows and fixed retries. 215 tests pass.', title: 'Grok · Implement', report: 'Done. Old endpoint kept. Exports over 1M rows warn first, as you chose.', files: [{ path: 'api/export.ts', diff: '+88 −31' }, { path: 'api/queue.ts', diff: '+12 −4' }], diff: [line('− const rows = await loadAll(invoice)'), line('− return toCsv(rows)'), line('+ const cursor = openCursor(invoice)'), line('+ if (await cursor.count() > 1_000_000) warnLarge(res)'), line('+ return streamCsv(cursor, res)')] },
   { name: 'Codex', role: 'Review', letter: 'X', bg: '#4F63C9', summary: 'Passes, with 1 note. 1 write blocked.', title: 'Codex · Review', report: 'Passes. One note: exports have no progress indicator.', files: [], diff: [] }
 ];

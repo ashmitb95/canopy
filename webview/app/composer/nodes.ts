@@ -24,7 +24,7 @@ export const SubmitOnEnter = Extension.create<{ onSubmit: () => void }>({
   }
 })
 
-/** An image in AgentDeck's attachment store. */
+/** An image in Canopy's attachment store. */
 export const ImageAttachment = Node.create({
   name: 'imageAttachment',
   group: 'inline',

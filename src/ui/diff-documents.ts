@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 import * as vscode from 'vscode'
 import type { SessionManager } from '../sessions/manager'
 
-export const DIFF_SCHEME = 'agentdeck-diff'
+export const DIFF_SCHEME = 'canopy-diff'
 
 type Side = 'before' | 'after'
 

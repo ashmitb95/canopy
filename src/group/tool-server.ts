@@ -1,4 +1,4 @@
-// One local MCP server over HTTP, reachable from any provider's CLI. Only agents AgentDeck started know its address.
+// One local MCP server over HTTP, reachable from any provider's CLI. Only agents Canopy started know its address.
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
@@ -24,7 +24,7 @@ export async function startToolServer(tools: Tool[]): Promise<ToolServer> {
       const reply = (result: unknown) => {
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
       }
-      if (message.method === 'initialize') return reply({ protocolVersion: message.params?.protocolVersion ?? '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'agentdeck', version: '0.0.1' } })
+      if (message.method === 'initialize') return reply({ protocolVersion: message.params?.protocolVersion ?? '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'canopy', version: '0.0.1' } })
       if (message.method === 'ping') return reply({})
       if (message.method === 'tools/list') return reply({ tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) })
       if (message.method === 'tools/call') {

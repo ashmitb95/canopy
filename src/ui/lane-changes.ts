@@ -5,7 +5,7 @@ import { git } from '../lanes/git'
 import type { Lane } from '../lanes/lanes'
 import type { RepoState } from '../lanes/state'
 
-export const GIT_SCHEME = 'agentdeck-git'
+export const GIT_SCHEME = 'canopy-git'
 
 type Side = { cwd?: string; ref?: string; path?: string }
 

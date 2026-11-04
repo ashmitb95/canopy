@@ -13,7 +13,7 @@ describe('Claude MCP sign-in', () => {
     expect(claudeProvider.mcpSignIn?.('linear', 'user')).toEqual({
       kind: 'terminal',
       command: 'claude',
-      hint: 'In the terminal, run /mcp and choose linear to sign in. Then press Reconnect in AgentDeck.'
+      hint: 'In the terminal, run /mcp and choose linear to sign in. Then press Reconnect in Canopy.'
     })
   })
 })

@@ -10,7 +10,7 @@ import { MemoryMemento } from '../test/memory-memento'
 
 async function main(): Promise<void> {
   const providerId = process.argv[2] ?? 'codex'
-  const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-steer-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'canopy-steer-'))
   const env = await captureEnv()
   const manager = new SessionManager({ providers, store: new SessionStore(new MemoryMemento()), journalDir: join(cwd, '.journal'), cwd, env: async () => env })
   const { id } = await manager.create(providerId, 'full-access')

@@ -77,7 +77,7 @@ export type SwapOptions = {
   maxSlots?: number
   /** Answers "make it a lane" when the primary checkout has uncommitted work on the base branch. */
   makeLane?: string
-  /** Answers yes to taking a branch from a worktree AgentDeck did not create. */
+  /** Answers yes to taking a branch from a worktree Canopy did not create. */
   takeForeign?: boolean
   /** Fails the move just before this step, for tests. */
   failBefore?: Step
@@ -100,7 +100,7 @@ export async function preflight(repo: string, lane: string, options: SwapOptions
     if (await submoduleChanges(tree.path)) return { kind: 'stop', reason: `${tree.path} has submodule changes.` }
   }
   if (holder?.locked) return { kind: 'stop', reason: `The worktree holding ${lane} is locked.` }
-  if (holder && !holder.managed && !options.takeForeign) return { kind: 'ask', reason: `${lane} is checked out in ${holder.path}, which AgentDeck did not create.` }
+  if (holder && !holder.managed && !options.takeForeign) return { kind: 'ask', reason: `${lane} is checked out in ${holder.path}, which Canopy did not create.` }
   if (primary.branch === base && (await dirty(primary.path)) && !options.makeLane) return { kind: 'ask', reason: `The primary checkout has uncommitted work on ${base}. Make it a lane, or stash it.` }
   const files = await collisions(primary.path, lane)
   if (files.length > 0) return { kind: 'ask', reason: `These ignored files would be overwritten by ${lane}.`, files }
@@ -124,7 +124,7 @@ const commonDir = async (repo: string) => {
   const raw = (await git(repo, ['rev-parse', '--git-common-dir'])).trim()
   return isAbsolute(raw) ? raw : join(repo, raw)
 }
-const journalPath = async (repo: string) => join(await commonDir(repo), 'agentdeck-switch.json')
+const journalPath = async (repo: string) => join(await commonDir(repo), 'canopy-switch.json')
 
 async function saveJournal(repo: string, journal: Journal): Promise<void> {
   const path = await journalPath(repo)
@@ -141,11 +141,11 @@ export async function readJournal(repo: string): Promise<Journal | undefined> {
 async function snapshot(side: Side, lane: string, id: string, name: string): Promise<void> {
   if (!(await dirty(side.path))) return
   const before = (await git(side.path, ['rev-parse', '--verify', '--quiet', 'refs/stash']).catch(() => '')).trim()
-  await git(side.path, ['stash', 'push', '--include-untracked', '-m', `agentdeck:${lane}:${id}`])
+  await git(side.path, ['stash', 'push', '--include-untracked', '-m', `canopy:${lane}:${id}`])
   const hash = (await git(side.path, ['rev-parse', 'refs/stash'])).trim()
   if (hash === before) throw new SwitchError(`Nothing was stashed in ${side.path}.`)
   side.stash = hash
-  side.ref = `refs/agentdeck/${id}/${name}`
+  side.ref = `refs/canopy/${id}/${name}`
   await git(side.path, ['update-ref', side.ref, hash])
 }
 
@@ -170,10 +170,10 @@ async function forgetSnapshots(repo: string, journal: Journal): Promise<void> {
 
 async function adoptStash(side: Side, lane: string | undefined, id: string, name: string): Promise<void> {
   if (side.stash || !lane) return
-  const entry = (await git(side.path, ['stash', 'list', '--format=%H %gs'])).split('\n').find((line) => line.endsWith(`agentdeck:${lane}:${id}`))
+  const entry = (await git(side.path, ['stash', 'list', '--format=%H %gs'])).split('\n').find((line) => line.endsWith(`canopy:${lane}:${id}`))
   if (!entry) return
   side.stash = entry.split(' ')[0]
-  side.ref = `refs/agentdeck/${id}/${name}`
+  side.ref = `refs/canopy/${id}/${name}`
   await git(side.path, ['update-ref', side.ref, side.stash])
 }
 
@@ -183,7 +183,7 @@ async function restoreSide(side: Side, id: string): Promise<void> {
   // Not snapshotted and still in place: anything uncommitted is the user's own work, untouched.
   if (!side.stash && current === (side.branch ?? '')) return
   if (await dirty(side.path)) {
-    if (!(await attempt(side.path, ['stash', 'push', '--include-untracked', '-m', `agentdeck:rollback-leftovers:${id}`]))) {
+    if (!(await attempt(side.path, ['stash', 'push', '--include-untracked', '-m', `canopy:rollback-leftovers:${id}`]))) {
       // A failed apply can leave conflicts, which cannot be stashed. Everything in them is in the pinned snapshot.
       await git(side.path, ['reset', '--merge'])
     }
@@ -379,7 +379,7 @@ export async function joinRepo(repo: string, lane: string, options: { base?: str
   if (held) return { path: held.path, setupNeeded: false }
   const primary = all[0]
   if (primary.branch !== base || (await dirty(primary.path))) {
-    throw new SwitchError(`The primary checkout of ${repo} is busy (${primary.branch ?? 'detached HEAD'}). Move ${lane} to it from AgentDeck, or turn worktrees on for this lane.`)
+    throw new SwitchError(`The primary checkout of ${repo} is busy (${primary.branch ?? 'detached HEAD'}). Move ${lane} to it from Canopy, or turn worktrees on for this lane.`)
   }
   const exists = await attempt(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${lane}`])
   await git(primary.path, exists ? ['switch', lane] : ['switch', '-c', lane])

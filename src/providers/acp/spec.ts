@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Env, findOnPath } from '../../env'
 
-/** Everything AgentDeck needs to know about one ACP agent; the protocol handling is shared. */
+/** Everything Canopy needs to know about one ACP agent; the protocol handling is shared. */
 export type AcpAgentSpec = {
   id: string
   label: string

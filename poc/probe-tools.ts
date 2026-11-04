@@ -25,8 +25,8 @@ async function probe(providerId: string): Promise<string> {
       }
     }
   ])
-  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-tools-')))
-  const session = await provider.open({ env: await captureEnv(), cwd, mode: 'full-access', toolServer: { name: 'agentdeck', url: server.url } })
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-tools-')))
+  const session = await provider.open({ env: await captureEnv(), cwd, mode: 'full-access', toolServer: { name: 'canopy', url: server.url } })
   const texts: string[] = []
   let done: () => void = () => {}
   const ended = new Promise<void>((resolve) => (done = resolve))
@@ -39,7 +39,7 @@ async function probe(providerId: string): Promise<string> {
     if (error) console.log(`  ${providerId} exit: ${error.slice(0, 200)}`)
     done()
   })
-  await session.prompt([{ type: 'text', text: 'Call the delegate tool from the agentdeck MCP server with provider "grok" and task "say hello". Then reply with the confirmation code it returned, and nothing else.' }])
+  await session.prompt([{ type: 'text', text: 'Call the delegate tool from the canopy MCP server with provider "grok" and task "say hello". Then reply with the confirmation code it returned, and nothing else.' }])
   await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, TIMEOUT_MS))])
   await session.dispose()
   server.close()

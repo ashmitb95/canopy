@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { commit, newLane, park, preflight, swap, worktrees } from '../src/lanes/switch'
 
-const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-switch-')))
+const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-switch-')))
 const repo = join(sandbox, 'project')
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
 const check = (name: string, ok: boolean, detail = '') => {

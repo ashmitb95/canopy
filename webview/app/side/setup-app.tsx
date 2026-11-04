@@ -6,7 +6,7 @@ import { onHostMessage, send } from '../host'
 const STEPS = ['Connect agents', 'Who does what', 'Workspace'] as const
 
 const RAIL = [
-  { title: ['One chat.', 'Every agent.'], text: 'Give each agent the work it does best, on your own accounts. AgentDeck moves the work between them.' },
+  { title: ['One chat.', 'Every agent.'], text: 'Give each agent the work it does best, on your own accounts. Canopy moves the work between them.' },
   { title: ['Who does what.'], text: 'The lead talks with you and hands out work by this roster, without being asked. These are defaults, and any chat can change them.' },
   {
     title: ['Your code runs', 'in one place.'],
@@ -100,7 +100,7 @@ function Agents({ data }: { data: SetupData }) {
   return (
     <>
       <h1 className="text-[28px] font-extrabold tracking-[-0.02em]">Connect your agents</h1>
-      <p className="mt-1.5 text-muted-foreground">AgentDeck runs the CLIs you already have, and they keep their own sign-ins.</p>
+      <p className="mt-1.5 text-muted-foreground">Canopy runs the CLIs you already have, and they keep their own sign-ins.</p>
       <div className="mt-6 flex flex-col gap-2">
         {data.agents.map((agent) => {
           const ready = agent.status === 'signed-in'
@@ -193,7 +193,7 @@ function Roster({ data }: { data: SetupData }) {
         </Card>
       </div>
       <div data-card="" className="flex flex-wrap items-end gap-3 rounded-xl bg-surface p-3.5">
-        <Field label="Verify: AgentDeck runs this itself after Implement changes files" value={data.roster.verify} placeholder="pnpm test" onSave={(value) => send({ type: 'setRoster', role: 'verify', value: value.trim() })} />
+        <Field label="Verify: Canopy runs this itself after Implement changes files" value={data.roster.verify} placeholder="pnpm test" onSave={(value) => send({ type: 'setRoster', role: 'verify', value: value.trim() })} />
       </div>
     </div>
   )
@@ -312,7 +312,7 @@ export function SetupApp() {
           <span className="text-muted-foreground">
             {step === 0 ? `${connected} connected` : step === 2 && data.workspace ? (
               <button type="button" className="font-mono text-xs hover:underline" onClick={() => send({ type: 'editWorkspaceConfig' })}>
-                Saved to .agentdeck/config.toml
+                Saved to .canopy/config.toml
               </button>
             ) : step === 1 ? (
               'Saved to your settings'

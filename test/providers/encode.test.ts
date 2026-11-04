@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { encodePrompt, imageParts } from '../../src/providers/encode'
 
 function workspace(): string {
-  const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-encode-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'canopy-encode-'))
   mkdirSync(join(cwd, 'src'))
   const lines = Array.from({ length: 300 }, (_, i) => `line ${i + 1}`)
   writeFileSync(join(cwd, 'src', 'a.ts'), lines.join('\n'))

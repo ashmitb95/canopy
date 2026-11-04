@@ -41,7 +41,7 @@ export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Dispo
     private readonly tracker: LaneTracker | undefined,
     private readonly unread: Unread
   ) {
-    this.view = vscode.window.createTreeView('agentdeck.sessions', { treeDataProvider: this })
+    this.view = vscode.window.createTreeView('canopy.sessions', { treeDataProvider: this })
     this.subscriptions = [manager.onDidChange(() => this.refresh()), unread.onDidChange(() => this.refresh()), ...(tracker ? [tracker.onDidChange(() => this.refresh())] : [])]
     this.refresh()
   }
@@ -97,7 +97,7 @@ export class SessionsTree implements vscode.TreeDataProvider<Node>, vscode.Dispo
     item.tooltip = `${unread ? 'Unread · ' : ''}${node.provider} · ${node.status}`
     item.iconPath = unread ? new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('notificationsInfoIcon.foreground')) : ICONS[node.status]
     item.contextValue = 'session'
-    item.command = { command: 'agentdeck.openSessionInSidebar', title: 'Open', arguments: [node] }
+    item.command = { command: 'canopy.openSessionInSidebar', title: 'Open', arguments: [node] }
     return item
   }
 

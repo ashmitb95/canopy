@@ -2,7 +2,7 @@ import type { Quota } from '../../core/types'
 
 type Window = { utilization?: number; resetsAt?: number; status?: string }
 
-/** The parts of `rate_limit_event.rate_limit_info` AgentDeck reads; `unifiedWindows` is newer than the SDK's types. */
+/** The parts of `rate_limit_event.rate_limit_info` Canopy reads; `unifiedWindows` is newer than the SDK's types. */
 export type RateLimitInfo = Window & { rateLimitType?: string; unifiedWindows?: Record<string, Window> }
 
 const LABELS: Record<string, string> = {

@@ -22,7 +22,7 @@ describe('LaneMemory', () => {
     const memory = new LaneMemory(root)
     expect(memory.exists('feat/retry')).toBe(false)
     memory.ensure('feat/retry')
-    const dir = join(root, '.agentdeck', 'lanes', 'feat--retry')
+    const dir = join(root, '.canopy', 'lanes', 'feat--retry')
     expect(memory.laneDir('feat/retry')).toBe(dir)
     expect(parseToml(readFileSync(join(dir, 'lane.toml'), 'utf8'))).toMatchObject({ name: 'feat/retry' })
     expect(existsSync(join(dir, 'plan.md'))).toBe(true)
@@ -70,13 +70,13 @@ describe('LaneMemory', () => {
     expect(JSON.parse(lines[0])).toMatchObject({ event: 'moved', repo: 'api', at: expect.any(String) })
   })
 
-  it('keeps .agentdeck out of a single-repo workspace, once', () => {
+  it('keeps .canopy out of a single-repo workspace, once', () => {
     const root = repo(workspace())
     const memory = new LaneMemory(root)
     memory.ensure('x')
     memory.ensure('y')
     const exclude = readFileSync(join(root, '.git', 'info', 'exclude'), 'utf8')
-    expect(exclude.split('\n').filter((line) => line === '.agentdeck/')).toHaveLength(1)
+    expect(exclude.split('\n').filter((line) => line === '.canopy/')).toHaveLength(1)
   })
 
   it('stamps with time, author, and short commits', () => {

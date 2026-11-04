@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-const KEY = 'agentdeck.unread'
+const KEY = 'canopy.unread'
 
 /** Chats whose turn ended (or failed) while they were out of sight, until shown again. */
 export class Unread {

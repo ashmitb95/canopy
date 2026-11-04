@@ -3,7 +3,7 @@
 # Needs a headless Chromium (see scripts/screenshot.mjs) and ffmpeg. Run `pnpm build:preview` first.
 set -e
 cd "$(dirname "$0")/.."
-CHROME=${AGENTDECK_CHROME:-$(ls -d "$HOME"/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell 2>/dev/null | tail -1)}
+CHROME=${CANOPY_CHROME:-$(ls -d "$HOME"/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell 2>/dev/null | tail -1)}
 OUT=media/readme
 FRAMES=$(mktemp -d)
 mkdir -p "$OUT"

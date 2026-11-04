@@ -57,8 +57,8 @@ button:focus-visible{outline:2px solid #4D86FF;outline-offset:2px}
 <aside style="flex: none; width: 320px; box-sizing: border-box; padding: 14px; background: {{t.band}}; overflow: auto; display: flex; flex-direction: column; gap: 10px">
 <div><div style="font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: {{t.muted}}">HANDOFF</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">{{doc.title}}</div></div>
 <div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Task</div><div style="font-size: 11.5px; color: {{t.muted}}">Written by the lead</div><div style="margin-top: 6px; line-height: 1.45">{{doc.task}}</div></div>
-<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Added by AgentDeck</div><div style="margin-top: 6px; line-height: 1.45; white-space: pre-line">{{doc.added}}</div></div>
-<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Facts</div><div style="font-size: 11.5px; color: {{t.muted}}">Recorded by AgentDeck</div><div style="margin-top: 6px; line-height: 1.45; white-space: pre-line; font-family: 'Geist Mono', monospace; font-size: 12px">{{doc.facts}}</div></div>
+<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Added by Canopy</div><div style="margin-top: 6px; line-height: 1.45; white-space: pre-line">{{doc.added}}</div></div>
+<div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Facts</div><div style="font-size: 11.5px; color: {{t.muted}}">Recorded by Canopy</div><div style="margin-top: 6px; line-height: 1.45; white-space: pre-line; font-family: 'Geist Mono', monospace; font-size: 12px">{{doc.facts}}</div></div>
 <div style="padding: 11px; border-radius: 10px; background: {{t.surface}}"><div style="font-weight: 700">Report</div><div style="font-size: 11.5px; color: {{t.muted}}">Written by the delegate</div><div style="margin-top: 6px; line-height: 1.45">{{doc.report}}</div></div>
 <button style="min-height: 40px; border-radius: 8px; border: 0; background: {{t.control}}; color: {{t.text}}; font-weight: 500">Open full transcript</button>
 </aside>
@@ -77,8 +77,8 @@ const STEPS = [
   { note: 'Permission always comes to you', active: 'Grok', kind: 'needs', detail: 'Allow: pnpm db:migrate', next: 'Claude', composer: 'Answer on the card, or message Claude' },
   { note: 'A question goes to the lead first, and the chat already answers it', active: 'Claude', kind: 'working', detail: 'Answering Grok', next: 'Grok', composer: 'You can answer on the card first' },
   { note: 'The lead cannot make a product decision, so it comes to you', active: 'Grok', kind: 'needs', detail: 'Question for you', next: 'Claude', composer: 'Answer on the card, or message Claude' },
-  { note: 'Grok reports, AgentDeck adds the facts, and Claude sends it to Review', active: 'Codex', kind: 'working', detail: 'Reviewing 5 files', next: 'Claude', composer: 'Message Claude, or @codex' },
-  { note: 'Review is read-only, and AgentDeck caught a write', active: 'Codex', kind: 'working', detail: 'Reviewing · 1 write blocked', next: 'Claude', composer: 'Message Claude, or @codex' },
+  { note: 'Grok reports, Canopy adds the facts, and Claude sends it to Review', active: 'Codex', kind: 'working', detail: 'Reviewing 5 files', next: 'Claude', composer: 'Message Claude, or @codex' },
+  { note: 'Review is read-only, and Canopy caught a write', active: 'Codex', kind: 'working', detail: 'Reviewing · 1 write blocked', next: 'Claude', composer: 'Message Claude, or @codex' },
   { note: 'Back with the lead, and nothing was merged', active: 'Claude', kind: 'done', detail: 'Finished · waiting for you', next: 'You', composer: 'Message Claude, or type @ to mention an agent' }
 ];
 const DOCS = {
@@ -119,7 +119,7 @@ class Component extends DCLogic {
     }
     if (step >= 3) items.push(notice('Grok asked: keep the old /export endpoint? Claude answered: yes, from your first message.', 'Change answer'));
     if (step >= 5) { items.push(agent('Claude', 'Lead', 'Grok is done and the tests pass. Sending it to Codex for review.')); items.push(card('Codex', 'Review', 'Check the change against the plan', step >= 7 ? 'done' : 'working', step >= 7 ? 'Report ready · passes, 1 note' : step === 6 ? 'Reviewing · 1 write blocked' : 'Reading export.ts', {}, 'codex')); }
-    if (step >= 6) items.push(notice('Codex tried to edit export.ts, but Review is read-only. AgentDeck blocked it and told Codex to report it instead.', 'Allow this time', true));
+    if (step >= 6) items.push(notice('Codex tried to edit export.ts, but Review is read-only. Canopy blocked it and told Codex to report it instead.', 'Allow this time', true));
     if (step >= 7) { items.push(agent('Claude', 'Lead', 'Review passes: the CSV format and old endpoint are unchanged, and all 215 tests pass. Codex notes there\'s no progress indicator. Want that added?')); items.push({ ...f, t, isReview: true }); }
     const roleOf = { Claude: 'Lead · Plan', Grok: 'Implement', Codex: 'Review' };
     return {

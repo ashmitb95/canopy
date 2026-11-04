@@ -317,7 +317,7 @@ class CodexSession implements ProviderSession {
 
   private async handshake(): Promise<void> {
     await this.rpc.request('initialize', {
-      clientInfo: { name: 'agentdeck', title: 'AgentDeck', version: '0.0.1' },
+      clientInfo: { name: 'canopy', title: 'Canopy', version: '0.0.1' },
       capabilities: { experimentalApi: true, requestAttestation: false }
     })
     this.rpc.notify('initialized')
@@ -413,7 +413,7 @@ class CodexSession implements ProviderSession {
       case 'mcpServer/elicitation/request':
         return this.elicitation(params as ElicitationRequest)
       default:
-        return Promise.reject(new Error(`AgentDeck does not handle ${method} yet.`))
+        return Promise.reject(new Error(`Canopy does not handle ${method} yet.`))
     }
   }
 

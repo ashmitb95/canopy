@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   const env = await captureEnv()
   const cli = findAgentCli(grok, env, env.HOME ?? homedir())
   if (!cli) throw new Error('grok CLI not found')
-  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-record-')))
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-record-')))
   writeFileSync(join(cwd, 'notes.md'), '# Notes\n\nhello world\n')
 
   const child = spawnGroup(cli, grok.args, { cwd, env, stdio: ['pipe', 'pipe', 'inherit'] })
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   const init = await rpc.request<{ authMethods?: { id: string }[] }>('initialize', {
     protocolVersion: 1,
     clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-    clientInfo: { name: 'agentdeck', version: '0.1.0' }
+    clientInfo: { name: 'canopy', version: '0.1.0' }
   })
   const method = grok.authMethod((init.authMethods ?? []).map((auth) => auth.id), env)
   if (method) await rpc.request('authenticate', { methodId: method })

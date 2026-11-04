@@ -14,12 +14,12 @@ import type { Attachment, HostMessage, LaneCard, LaneInfo, ProviderInfo, SignInP
 import { recentSessions } from './recent'
 import type { Unread } from './unread'
 
-export const PANEL_TYPE = 'agentdeck.chatPanel'
-export const SIDEBAR_VIEW = 'agentdeck.chat'
+export const PANEL_TYPE = 'canopy.chatPanel'
+export const SIDEBAR_VIEW = 'canopy.chat'
 const PALETTES = ['theme', 'paper', 'peach', 'lilac', 'sage', 'sky']
-const SIDEBAR_SESSION_KEY = 'agentdeck.sidebarSession'
-const SIDEBAR_GROUP_KEY = 'agentdeck.sidebarGroup'
-const QUOTA_KEY = 'agentdeck.quota'
+const SIDEBAR_SESSION_KEY = 'canopy.sidebarSession'
+const SIDEBAR_GROUP_KEY = 'canopy.sidebarGroup'
+const QUOTA_KEY = 'canopy.quota'
 const DEFAULT_PROVIDER = 'claude'
 
 /** Lanes for the chat's lane chip; absent when no folder is open. */
@@ -107,7 +107,7 @@ export class ChatSurfaces
       manager.onAttention((event) => this.attend(event)),
       unread.onDidChange(() => this.postSessions()),
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('agentdeck.palette')) this.broadcast({ type: 'palette', palette: this.palette() })
+        if (event.affectsConfiguration('canopy.palette')) this.broadcast({ type: 'palette', palette: this.palette() })
       })
     )
   }
@@ -155,11 +155,11 @@ export class ChatSurfaces
     return choice ? choice.id : null
   }
 
-  /** Sets `agentdeck.installed.<id>` for each provider, which the New Chat menu shows by. */
+  /** Sets `canopy.installed.<id>` for each provider, which the New Chat menu shows by. */
   async markInstalled(): Promise<void> {
     for (const provider of this.providers.values()) {
       const { state } = await this.info(provider)
-      await vscode.commands.executeCommand('setContext', `agentdeck.installed.${provider.id}`, state.status !== 'not-installed')
+      await vscode.commands.executeCommand('setContext', `canopy.installed.${provider.id}`, state.status !== 'not-installed')
     }
   }
 
@@ -173,7 +173,7 @@ export class ChatSurfaces
   }
 
   /** The provider chooser in its own tab: the welcome screen and the providers page. */
-  openProviders(title = 'AgentDeck: Providers'): void {
+  openProviders(title = 'Canopy: Providers'): void {
     const panel = vscode.window.createWebviewPanel(PANEL_TYPE, title, vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
@@ -318,7 +318,7 @@ export class ChatSurfaces
         chat.cancelQueued(message.queuedId)
         return true
       case 'openReview':
-        await vscode.commands.executeCommand('agentdeck.reviewGroup', chat.record.id)
+        await vscode.commands.executeCommand('canopy.reviewGroup', chat.record.id)
         return true
       case 'groupSetLead':
         chat.setLead(message.agent)
@@ -423,7 +423,7 @@ export class ChatSurfaces
     const surface: Surface = { webview, kind, sessionId }
     surface.listener = webview.onDidReceiveMessage((message: WebviewMessage) =>
       this.handle(surface, message).catch((error: unknown) =>
-        vscode.window.showErrorMessage(`AgentDeck: ${error instanceof Error ? error.message : String(error)}`)
+        vscode.window.showErrorMessage(`Canopy: ${error instanceof Error ? error.message : String(error)}`)
       )
     )
     return surface
@@ -532,7 +532,7 @@ export class ChatSurfaces
         if (sessionId) await this.manager.setLane(sessionId, message.laneId)
         return
       case 'handOff':
-        if (sessionId) await vscode.commands.executeCommand('agentdeck.handOff', sessionId)
+        if (sessionId) await vscode.commands.executeCommand('canopy.handOff', sessionId)
         return
       case 'rewind': {
         if (!sessionId) return
@@ -553,22 +553,22 @@ export class ChatSurfaces
         return
       }
       case 'forkSession':
-        if (sessionId) await vscode.commands.executeCommand('agentdeck.forkSession', sessionId)
+        if (sessionId) await vscode.commands.executeCommand('canopy.forkSession', sessionId)
         return
       case 'renameSession':
       case 'deleteSession': {
         const target = message.sessionId ?? sessionId
         const record = this.manager.list().find((entry) => entry.record.id === target)?.record
         if (record) {
-          await vscode.commands.executeCommand(`agentdeck.${message.type}`, { kind: 'session', id: record.id, title: record.title })
+          await vscode.commands.executeCommand(`canopy.${message.type}`, { kind: 'session', id: record.id, title: record.title })
         }
         return
       }
       case 'newLane':
-        await vscode.commands.executeCommand('agentdeck.newLane')
+        await vscode.commands.executeCommand('canopy.newLane')
         return
       case 'reviewLane':
-        await vscode.commands.executeCommand('agentdeck.reviewLane', message.laneId)
+        await vscode.commands.executeCommand('canopy.reviewLane', message.laneId)
         return
       case 'openSession':
         this.openPanel(message.sessionId)
@@ -664,7 +664,7 @@ export class ChatSurfaces
     return state
   }
 
-  /** Runs the provider's login inside AgentDeck when it can; otherwise in a terminal. */
+  /** Runs the provider's login inside Canopy when it can; otherwise in a terminal. */
   private async signIn(surface: Surface, providerId?: string): Promise<void> {
     const provider = this.providers.get(providerId ?? this.providerOf(surface.sessionId))
     if (!provider) return
@@ -826,7 +826,7 @@ export class ChatSurfaces
   }
 
   private title(sessionId: string): string {
-    return this.manager.list().find(({ record }) => record.id === sessionId)?.record.title ?? 'AgentDeck'
+    return this.manager.list().find(({ record }) => record.id === sessionId)?.record.title ?? 'Canopy'
   }
 
   private assets(): vscode.Uri {
@@ -834,7 +834,7 @@ export class ChatSurfaces
   }
 
   private palette(): string {
-    const palette = vscode.workspace.getConfiguration('agentdeck').get<string>('palette', 'paper')
+    const palette = vscode.workspace.getConfiguration('canopy').get<string>('palette', 'paper')
     return PALETTES.includes(palette) ? palette : 'paper'
   }
 

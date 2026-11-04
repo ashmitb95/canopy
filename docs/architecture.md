@@ -28,7 +28,7 @@ src/notify/       Pure builders for notification text and OS commands
 | Providers run only through their official CLI; the extension holds no credentials | Auth stays with the vendor. Models, quota, skills, and MCP state therefore come only from what the CLI reports, and quota is shown with its age. |
 | The UI renders one item model (`SessionItem`) and shows controls by declared `Capability` | New providers and features meet without special cases. |
 | Every chat runs at the workspace root | Provider sessions (Claude's are keyed by folder) always resume; moving a lane never moves a chat. Where to work is an instruction plus a write boundary. |
-| Derive Git state, store only intent | Stored descriptions of Git drift. `.agentdeck/` never records where a branch is. |
+| Derive Git state, store only intent | Stored descriptions of Git drift. `.canopy/` never records where a branch is. |
 | The app coordinates; agents never call coordination tools | Orchestration should not spend the agent's context. |
 | One writer per lane | Two chats editing one checkout collide. Other prompts queue and wake when the lane frees up. |
 | Nothing runs while VS Code is closed | There is no daemon. Sessions resume from provider transcripts and the journal. |
@@ -36,14 +36,14 @@ src/notify/       Pure builders for notification text and OS commands
 | Messages sent during a turn queue until it ends, unless steered | Uniform across providers. |
 | Handoffs never advance on their own | Each stage stays a real, reviewable chat. |
 | Lanes stay implicit in the UI: no board or lane pages | Controls are added only when a feature needs one. |
-| CLIs get `CLAUDE_NOTIFIER_DISABLE=1` | AgentDeck notifies from its own events; this prevents double notifications from those hooks. |
+| CLIs get `CLAUDE_NOTIFIER_DISABLE=1` | Canopy notifies from its own events; this prevents double notifications from those hooks. |
 
 ## UI layout
 
-- The chat is one webview: a tab in the secondary sidebar (`agentdeck.chat`), or an editor tab through *Open in Editor*.
-- The Sessions tree (`agentdeck.sessions`) is in the primary sidebar, grouped by provider, then lane. Clicking a session opens it in the chat tab.
-- **+** is a submenu of per-provider commands, shown by the `agentdeck.installed.<id>` context keys. VS Code allows a submenu once per menu location, so each view has its own.
-- `agentdeck.palette` sets `data-palette` on the webview body; `webview/palettes.css` overrides only the brand and status tokens, in light and dark; backgrounds, surfaces, text, and borders stay the theme's. The Sessions tree is native, so it always follows the VS Code theme.
+- The chat is one webview: a tab in the secondary sidebar (`canopy.chat`), or an editor tab through *Open in Editor*.
+- The Sessions tree (`canopy.sessions`) is in the primary sidebar, grouped by provider, then lane. Clicking a session opens it in the chat tab.
+- **+** is a submenu of per-provider commands, shown by the `canopy.installed.<id>` context keys. VS Code allows a submenu once per menu location, so each view has its own.
+- `canopy.palette` sets `data-palette` on the webview body; `webview/palettes.css` overrides only the brand and status tokens, in light and dark; backgrounds, surfaces, text, and borders stay the theme's. The Sessions tree is native, so it always follows the VS Code theme.
 - Webview menu items that open a VS Code picker must stop the menu returning focus to its trigger (`onCloseAutoFocus`), or the picker closes at once.
 
 ## Webview

@@ -28,7 +28,7 @@ function findTerminalNotifier(): string | undefined {
   return undefined
 }
 
-/** Native notifications from AgentDeck's own session events. */
+/** Native notifications from Canopy's own session events. */
 export class Notifier implements vscode.Disposable {
   private readonly subscription: Disposable
   private readonly terminalNotifier = findTerminalNotifier()
@@ -61,7 +61,7 @@ export class Notifier implements vscode.Disposable {
   private notify(attention: Attention): void {
     const record = this.manager.list().find((entry) => entry.record.id === attention.sessionId)?.record
     if (!record) return
-    const config = vscode.workspace.getConfiguration('agentdeck.notifications')
+    const config = vscode.workspace.getConfiguration('canopy.notifications')
     if (attention.reason === 'turn-ended' && attention.durationMs < config.get<number>('minDurationSeconds', 10) * 1000) return
     if (config.get<boolean>('muteWhenFocused', true) && vscode.window.state.focused && this.isVisible(record.id)) return
     const { sessionId: _id, ...detail } = attention
@@ -73,7 +73,7 @@ export class Notifier implements vscode.Disposable {
   }
 
   private deliver(event: NotifyEvent, shown: { title: string; body: string }, force: boolean): void {
-    const config = vscode.workspace.getConfiguration('agentdeck.notifications')
+    const config = vscode.workspace.getConfiguration('canopy.notifications')
     const level = config.get<Level>(`${event}.level`, 'sound+popup')
     if (level === 'off' && !force) return
     if (level.includes('sound') || force) {
@@ -90,7 +90,7 @@ export class Notifier implements vscode.Disposable {
   private workspace(): string {
     const file = vscode.workspace.workspaceFile
     if (file?.scheme === 'file') return basename(file.fsPath).replace(/\.code-workspace$/, '')
-    return vscode.workspace.workspaceFolders?.[0]?.name ?? 'AgentDeck'
+    return vscode.workspace.workspaceFolders?.[0]?.name ?? 'Canopy'
   }
 
   private label(providerId: string): string {

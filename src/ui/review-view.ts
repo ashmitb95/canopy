@@ -29,10 +29,10 @@ export class ReviewView implements vscode.Disposable {
     if (open) return open.panel.reveal()
     const chat = this.deps.chats.get(groupId)
     if (!chat) return
-    const panel = vscode.window.createWebviewPanel('agentdeck.review', `Review: ${chat.record.title}`, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() })
+    const panel = vscode.window.createWebviewPanel('canopy.review', `Review: ${chat.record.title}`, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: this.deps.roots() })
     panel.webview.html = this.deps.html(panel.webview)
     panel.webview.onDidReceiveMessage((message: WebviewMessage) =>
-      this.handle(chat, message).catch((error: unknown) => vscode.window.showErrorMessage(`AgentDeck: ${error instanceof Error ? error.message : String(error)}`))
+      this.handle(chat, message).catch((error: unknown) => vscode.window.showErrorMessage(`Canopy: ${error instanceof Error ? error.message : String(error)}`))
     )
     const listener = chat.onEvent((event) => event.type === 'state' && this.post(chat))
     panel.onDidDispose(() => {
@@ -92,7 +92,7 @@ export class ReviewView implements vscode.Disposable {
         return
       }
       case 'openLaneDiff':
-        if (chat.record.laneId) await vscode.commands.executeCommand('agentdeck.reviewLane', chat.record.laneId)
+        if (chat.record.laneId) await vscode.commands.executeCommand('canopy.reviewLane', chat.record.laneId)
         return
       case 'switchLane':
         if (chat.record.laneId) await this.deps.switchLane(chat.record.laneId)
@@ -109,7 +109,7 @@ export class ReviewView implements vscode.Disposable {
     const lane = this.lane(chat)
     if (!lane || lane.repos.length === 0) return void vscode.window.showWarningMessage('This chat has no lane checked out to open a pull request from.')
     const names = lane.repos.map((repo) => repo.repo).join(', ')
-    const choice = await vscode.window.showWarningMessage(`Push ${lane.name} to origin and open a pull request in ${names}?`, { modal: true, detail: 'Only committed work is pushed. AgentDeck never force-pushes.' }, 'Open pull request')
+    const choice = await vscode.window.showWarningMessage(`Push ${lane.name} to origin and open a pull request in ${names}?`, { modal: true, detail: 'Only committed work is pushed. Canopy never force-pushes.' }, 'Open pull request')
     if (choice !== 'Open pull request') return
     const body = [
       '## Who did what',

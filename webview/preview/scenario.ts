@@ -251,7 +251,7 @@ const groupState: GroupState = {
   userQuestions: [],
   quotas: {}
 }
-const brief = (agent: string, role: string, task: string) => `You are ${agent}, delegated this by claude in a group chat run by AgentDeck, in the ${role} role.\nTask: ${task}`
+const brief = (agent: string, role: string, task: string) => `You are ${agent}, delegated this by claude in a group chat run by Canopy, in the ${role} role.\nTask: ${task}`
 const groupItems: TimelineItem[] = [
   { agent: 'claude', item: { kind: 'message', id: 'gu1', role: 'user', parts: [{ type: 'text', text: 'Exports time out on large invoices (ENG-214). Keep the CSV format and the old endpoint.' }] } },
   { agent: 'claude', item: { kind: 'message', id: 'ga1', role: 'assistant', text: "export.ts loads every row into memory. I'd stream rows and restart retries from an empty file. Plan saved to the lane.", streaming: false } },
@@ -427,7 +427,7 @@ const messages: HostMessage[] =
 
 // `?scenario=flow` plays a delegation from start to finish, step by step, for recordings.
 function flowSteps(): [number, HostMessage][] {
-  const brief = 'You are codex, delegated this by claude in a group chat run by AgentDeck, in the implement role.\nTask: Stream invoice rows and fix retries'
+  const brief = 'You are codex, delegated this by claude in a group chat run by Canopy, in the implement role.\nTask: Stream invoice rows and fix retries'
   const user: TimelineItem = { agent: 'claude', item: { kind: 'message', id: 'f-u1', role: 'user', parts: [{ type: 'text', text: 'Large invoice exports time out (ENG-214). Keep the CSV format and the old endpoint.' }] } }
   const lead = (id: string, text: string, streaming = false): TimelineItem => ({ agent: 'claude', item: { kind: 'message', id, role: 'assistant', text, streaming } })
   const codex = (item: TimelineItem['item']): TimelineItem => ({ agent: 'codex', item })

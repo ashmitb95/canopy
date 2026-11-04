@@ -72,7 +72,7 @@ async function early(env: Env, worker: string, lead: string): Promise<void> {
     console.log(`INFO  ${name}: CLI woke itself ${woke} time(s) while waiting`)
     const check = await group.turn(worker, 'Your background work has now really finished. Read result.log and correct your report. End with STATUS: done only if it succeeded; otherwise STATUS: blocked and say why.')
     line(`${name}: delegate corrected its report`, /STATUS:\s*blocked/i.test(check.reply), check.reply)
-    const leadRun = await group.turn(lead, `You lead this chat and own your delegates. ${worker} reported done early, but AgentDeck held that until its background work really ended. Report now:\n${check.reply}\nSay in one sentence whether the task succeeded and what you would do next.`)
+    const leadRun = await group.turn(lead, `You lead this chat and own your delegates. ${worker} reported done early, but Canopy held that until its background work really ended. Report now:\n${check.reply}\nSay in one sentence whether the task succeeded and what you would do next.`)
     line(`${name}: lead acts on the real result`, /(fail|did not succeed|didn't succeed|not succeed|blocked)/i.test(leadRun.reply), leadRun.reply)
   } catch (error) {
     line(name, false, (error as Error).message)
@@ -104,7 +104,7 @@ async function service(env: Env, worker: string, lead: string): Promise<void> {
   }
 }
 
-/** Past the limit, AgentDeck tells the lead, and the lead decides. */
+/** Past the limit, Canopy tells the lead, and the lead decides. */
 async function overdue(env: Env, worker: string, lead: string): Promise<void> {
   const stopped: number[] = []
   const { repo, group, base } = await setup(env, worker, lead, stopped)

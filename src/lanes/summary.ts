@@ -5,7 +5,7 @@ const MAX_REPLY = 400
 
 export type SummaryInput = { stamp: string; title: string; provider: string; root: string; files: string[]; reply?: string }
 
-/** A chat's summary, built from what AgentDeck already knows: no model call. */
+/** A chat's summary, built from what Canopy already knows: no model call. */
 export function chatSummary(input: SummaryInput): string {
   const files = [...new Set(input.files.map((file) => relative(input.root, file)))]
   const lines = [input.stamp, `# ${input.title} · ${input.provider}`]

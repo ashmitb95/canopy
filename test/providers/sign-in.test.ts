@@ -6,7 +6,7 @@ import type { SignInEvent } from '../../src/core/types'
 import { deviceLink, isClaudeSignInLink, runLoginCli } from '../../src/providers/sign-in'
 
 function script(body: string): string {
-  const path = join(mkdtempSync(join(tmpdir(), 'agentdeck-login-')), 'login')
+  const path = join(mkdtempSync(join(tmpdir(), 'canopy-login-')), 'login')
   writeFileSync(path, `#!/bin/sh\n${body}\n`)
   chmodSync(path, 0o755)
   return path

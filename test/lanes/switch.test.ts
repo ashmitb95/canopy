@@ -13,7 +13,7 @@ const read = (dir: string, name: string) => readFileSync(join(dir, name), 'utf8'
 const status = (dir: string) => run(dir, 'status', '--porcelain').trim()
 const branchOf = (dir: string) => run(dir, 'branch', '--show-current').trim()
 const stashes = (dir: string) => run(dir, 'stash', 'list').trim()
-const refs = (dir: string) => run(dir, 'for-each-ref', 'refs/agentdeck').trim()
+const refs = (dir: string) => run(dir, 'for-each-ref', 'refs/canopy').trim()
 
 function ignoreWorktrees(dir: string): void {
   writeFileSync(join(dir, '.git/info/exclude'), '.worktrees/\n')
@@ -234,7 +234,7 @@ describe('failures', { timeout: 60_000 }, () => {
     expect(read(repo, 'held-new.txt')).toBe('new in held\n')
     expect(read(slot, 'waiting.txt')).toBe('waiting edited\n')
     expect(read(slot, 'waiting-new.txt')).toBe('new in waiting\n')
-    expect(stashes(repo)).not.toContain('agentdeck:held')
+    expect(stashes(repo)).not.toContain('canopy:held')
     expect(refs(repo)).toBe('')
   }
 
@@ -293,7 +293,7 @@ describe('failures', { timeout: 60_000 }, () => {
     dirtySides(slot)
     const before = state(repo, slot)
     await expect(swap(repo, 'waiting', { failBefore: 'snapshot-slot', crash: true })).rejects.toThrow()
-    const path = join(repo, '.git/agentdeck-switch.json')
+    const path = join(repo, '.git/canopy-switch.json')
     const journal = JSON.parse(readFileSync(path, 'utf8'))
     delete journal.primary.stash
     delete journal.primary.ref

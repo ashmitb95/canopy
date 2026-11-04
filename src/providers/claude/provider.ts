@@ -100,7 +100,7 @@ export const claudeProvider: ProviderDefinition = {
     return {
       kind: 'terminal',
       command: 'claude',
-      hint: `In the terminal, run /mcp and choose ${server} to sign in. Then press Reconnect in AgentDeck.`
+      hint: `In the terminal, run /mcp and choose ${server} to sign in. Then press Reconnect in Canopy.`
     }
   }
 }

@@ -23,7 +23,7 @@ async function setup() {
   const manager = new SessionManager({
     providers: new Map([[provider.id, provider]]),
     store: new SessionStore(new MemoryMemento()),
-    journalDir: mkdtempSync(join(tmpdir(), 'agentdeck-link-')),
+    journalDir: mkdtempSync(join(tmpdir(), 'canopy-link-')),
     cwd: root,
     env: async () => ({ PATH: '/bin' })
   })

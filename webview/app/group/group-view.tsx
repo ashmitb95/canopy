@@ -28,13 +28,13 @@ function userText(entry: TimelineItem): string {
   return entry.item.kind === 'message' && entry.item.role === 'user' ? entry.item.parts.map((part) => ('text' in part ? part.text : '')).join(' ') : ''
 }
 
-/** Messages AgentDeck sent between agents. Handoffs and check-ins show as a band; reports and answers show on the card. */
+/** Messages Canopy sent between agents. Handoffs and check-ins show as a band; reports and answers show on the card. */
 function marker(entry: TimelineItem): 'handoff' | 'hidden' | 'checkin' | undefined {
   const text = userText(entry)
   if (!text) return undefined
   if (text.startsWith('You are ') && text.includes('delegated this by')) return 'handoff'
   if (text.startsWith('Report from ') || text.startsWith('The lead answered') || text.startsWith('The user answered')) return 'hidden'
-  if (text.startsWith('The background work you started') || text.startsWith('AgentDeck restarted') || text.startsWith('You said you would hand this off')) return 'checkin'
+  if (text.startsWith('The background work you started') || text.startsWith('Canopy restarted') || text.startsWith('You said you would hand this off')) return 'checkin'
   return undefined
 }
 
@@ -325,7 +325,7 @@ function DelegateCard({ group, delegation, items, selected, onSelect }: { group:
   )
 }
 
-/** The selected handoff: what the lead wrote, what AgentDeck added and recorded, and what the delegate reported. */
+/** The selected handoff: what the lead wrote, what Canopy added and recorded, and what the delegate reported. */
 function HandoffPanel({ group, delegation }: { group: GroupState; delegation?: Delegation }) {
   if (!delegation) return null
   const facts = delegation.facts
@@ -364,10 +364,10 @@ function HandoffPanel({ group, delegation }: { group: GroupState; delegation?: D
           {delegation.context ? <div className="mt-2 max-h-72 overflow-auto border-t border-band pt-2 whitespace-pre-wrap text-muted-foreground">{delegation.context}</div> : null}
         </>
       )}
-      {section('Added by AgentDeck', undefined, delegation.added ? (delegation.added.length > 0 ? delegation.added.map((line) => <div key={line}>{line}</div>) : 'Nothing: it had seen the whole chat.') : <span className="text-muted-foreground">Added when it starts.</span>)}
+      {section('Added by Canopy', undefined, delegation.added ? (delegation.added.length > 0 ? delegation.added.map((line) => <div key={line}>{line}</div>) : 'Nothing: it had seen the whole chat.') : <span className="text-muted-foreground">Added when it starts.</span>)}
       {section(
         'Facts',
-        'Recorded by AgentDeck',
+        'Recorded by Canopy',
         factLines.length > 0 ? (
           <div className="font-mono text-xs whitespace-pre-line">{factLines.join('\n')}</div>
         ) : (
@@ -520,7 +520,7 @@ export function GroupView({ state }: { state: ChatState }) {
                   if (kind === 'hidden') return null
                   if (kind === 'checkin') {
                     previous = undefined
-                    return <Band key={`${entry.agent}:${entry.item.id}`}>AgentDeck checked in with {name(entry.agent)}.</Band>
+                    return <Band key={`${entry.agent}:${entry.item.id}`}>Canopy checked in with {name(entry.agent)}.</Band>
                   }
                   if (entry.item.kind === 'turn' || inCard(group, entry)) return null
                   const isUser = entry.item.kind === 'message' && entry.item.role === 'user'

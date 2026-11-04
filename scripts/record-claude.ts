@@ -12,7 +12,7 @@ async function main(): Promise<void> {
   const cli = await findClaude(env)
   if (!cli) throw new Error('claude CLI not found on the login-shell PATH')
   const { query } = await import('@anthropic-ai/claude-agent-sdk')
-  const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-record-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'canopy-record-'))
   writeFileSync(join(cwd, 'notes.md'), '# Notes\n\nhello world\n')
 
   const lines: string[] = []

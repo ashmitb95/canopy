@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run AgentDeck",
+      "name": "Run Canopy",
       "type": "extensionHost",
       "request": "launch",
       // Open a folder up front: switching folders reloads the window and ends the debug session.

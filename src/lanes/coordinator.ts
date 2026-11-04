@@ -146,7 +146,7 @@ export class LaneCoordinator {
     const checkout = repo?.checkouts
       .filter((candidate) => inside(candidate.path, path))
       .sort((a, b) => b.path.length - a.path.length)[0]
-    if (!repo || !checkout) return `${this.rel(path)} is outside lane ${lane} and every repo AgentDeck tracks. Edit only inside the lane's paths.`
+    if (!repo || !checkout) return `${this.rel(path)} is outside lane ${lane} and every repo Canopy tracks. Edit only inside the lane's paths.`
     const within = relative(checkout.path, path)
     const own = repo.checkouts.find((candidate) => candidate.branch === lane)
     if (own) return `${this.rel(path)} is outside lane ${lane}. Make this edit at ${this.rel(join(own.path, within))} instead.`

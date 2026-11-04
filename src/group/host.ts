@@ -51,7 +51,7 @@ export async function laneFromIssue(core: Core, issue: Issue, options: { repos?:
 
 export type Core = { manager: SessionManager; tracker: LaneTracker; memory: LaneMemory; lanes: LaneCoordinator; chats: GroupChats; dispose(): Promise<void> }
 
-/** Everything AgentDeck does, with no UI: the extension and the terminal driver are both hosts of this. */
+/** Everything Canopy does, with no UI: the extension and the terminal driver are both hosts of this. */
 export async function createCore(options: CoreOptions): Promise<Core> {
   mkdirSync(options.storage, { recursive: true })
   const tracker = new LaneTracker(options.root)
@@ -83,7 +83,7 @@ export async function createCore(options: CoreOptions): Promise<Core> {
   manager.onQuota(({ providerId, quota }) => quotas.set(providerId, quota))
   const memoryDir = (lane: string) => memory.laneDir(lane)
   chats = new GroupChats({ manager, providers: options.providers, dir: join(options.storage, 'groups'), root: tracker.root, checkouts, memoryDir, quota: (agent) => quotas.get(agent) })
-  const server = await startToolServer(groupTools((caller, name, args) => chats?.handleTool(caller, name, args) ?? 'AgentDeck is not ready.'))
+  const server = await startToolServer(groupTools((caller, name, args) => chats?.handleTool(caller, name, args) ?? 'Canopy is not ready.'))
   toolUrl = server.url
   lanes = new LaneCoordinator({ tracker, memory, manager, env: async () => (await options.env()) as NodeJS.ProcessEnv })
   const watchers = [watchTurns(manager, tracker, memory), watchHistory(tracker, memory)]

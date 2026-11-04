@@ -7,9 +7,9 @@ import { join, resolve } from 'node:path'
 const [theme = 'dark', size = '900x1200', surface = 'panel', scenario = 'chat', palette = 'theme'] = process.argv.slice(2)
 const [width, height] = size.split('x')
 const out = resolve(`dist/preview/screenshot-${theme}-${surface}${scenario === 'chat' ? '' : `-${scenario}`}${palette === 'theme' ? '' : `-${palette}`}.png`)
-const browser = process.env.AGENTDECK_CHROME ?? findHeadlessShell()
+const browser = process.env.CANOPY_CHROME ?? findHeadlessShell()
 if (!browser) {
-  console.error('No headless Chromium found. Run `npx playwright install chromium-headless-shell` or set AGENTDECK_CHROME.')
+  console.error('No headless Chromium found. Run `npx playwright install chromium-headless-shell` or set CANOPY_CHROME.')
   process.exit(1)
 }
 execFileSync(

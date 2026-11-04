@@ -250,7 +250,7 @@ class AcpSession implements ProviderSession {
       {
         protocolVersion: 1,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'agentdeck', version: '0.1.0' }
+        clientInfo: { name: 'canopy', version: '0.1.0' }
       }
     )
     this.imagesAccepted = init.agentCapabilities?.promptCapabilities?.image === true
@@ -293,7 +293,7 @@ class AcpSession implements ProviderSession {
     if (name === 'session/request_permission') return this.permission(params as PermissionRequest)
     if (name === 'x.ai/ask_user_question') return this.question(params as AgentQuestionRequest)
     if (name === 'x.ai/exit_plan_mode') return this.plan(params as AgentPlanRequest)
-    return Promise.reject(new Error(`AgentDeck does not handle ${method}.`))
+    return Promise.reject(new Error(`Canopy does not handle ${method}.`))
   }
 
   private refuseEdit(options: PermissionRequest['options']): unknown {

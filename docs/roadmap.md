@@ -1,31 +1,31 @@
 # Roadmap
 
-AgentDeck is a multi-agent, multi-provider orchestrator for large features: different providers do different work, the harness moves the work between them, and the user stays in one conversation.
+Canopy is a multi-agent, multi-provider orchestrator for large features: different providers do different work, the harness moves the work between them, and the user stays in one conversation.
 
 Planned work, in priority order; [build-plan.md](build-plan.md) sets the order it gets built in. [lanes.md](lanes.md) and [architecture.md](architecture.md) describe what exists today.
 
 ## 1. Group chat across providers
 
-One chat for a feature, where anyone can lead. Providers cannot share a live session, so a chat is a timeline over one provider session per agent, and AgentDeck owns the shared record. [ui-spec.md](ui-spec.md) shows the experience.
+One chat for a feature, where anyone can lead. Providers cannot share a live session, so a chat is a timeline over one provider session per agent, and Canopy owns the shared record. [ui-spec.md](ui-spec.md) shows the experience.
 
 - **Roster:** the lead and a provider per role (research, plan, implement, review), set per workspace and changeable per chat.
-- **`@mentions`:** AgentDeck routes them directly, with no model involved.
+- **`@mentions`:** Canopy routes them directly, with no model involved.
 - **Delegation:** the lead calls a `delegate` tool, served to every provider by one local tool server. Delegates cannot delegate further at first.
 - **Turns:** one agent runs at a time in a lane, so writes need no locks. Others wait in a visible queue. Work that must truly run at once uses separate lanes.
-- **Enforcement:** roles are enforced. Implement is the only writing role by default. Edit tools and sandboxes block the rest; `git status` after each turn catches writes through shell commands, with a notice and an offer to undo. `.agentdeck/` stays writable.
+- **Enforcement:** roles are enforced. Implement is the only writing role by default. Edit tools and sandboxes block the rest; `git status` after each turn catches writes through shell commands, with a notice and an offer to undo. `.canopy/` stays writable.
 
 ### Ledger and handoffs
 
-AgentDeck keeps a ledger of each chat and how far each agent has read. Handoffs are views of it, written without user involvement.
+Canopy keeps a ledger of each chat and how far each agent has read. Handoffs are views of it, written without user involvement.
 
 | Moment | The agent receives |
 |---|---|
 | Lead to delegate | The lead's task and "done when", the user's messages verbatim, roster, lane plan, and everything since it last ran |
-| Delegate to lead | Facts recorded by AgentDeck (diff, commands, test results) and the delegate's report: status, done, not done, decisions, risks, questions |
+| Delegate to lead | Facts recorded by Canopy (diff, commands, test results) and the delegate's report: status, done, not done, decisions, risks, questions |
 | `@mention` | As a delegate; the lead catches up on its next turn |
 | Lead switch | A catch-up, work in progress, and that it now leads |
 
-- `delegate` returns at once and the lead's turn ends. AgentDeck starts the lead's next turn with the report, so no long tool call stays open.
+- `delegate` returns at once and the lead's turn ends. Canopy starts the lead's next turn with the report, so no long tool call stays open.
 - A snapshot before each delegate gives an exact diff and an undo. It must include untracked files, which `git stash create` leaves out, without disturbing the checkout; the proof of concept settles how.
 - The complete transcript is saved as a file the lead can read.
 
@@ -46,13 +46,13 @@ A delegate's card shows a rolling window of its real stream: its text, tool line
 
 ### Settling
 
-A delegate's "done" is a claim. AgentDeck wakes the lead only once open tool calls, the process tree, and processes working in the folder show the work has stopped.
+A delegate's "done" is a claim. Canopy wakes the lead only once open tool calls, the process tree, and processes working in the folder show the work has stopped.
 
 - Compare against a baseline from before the turn, and ignore each CLI's own helpers.
 - A process listening on a port is a service: it is not waited for, and is recorded as left running.
 - A delegate that started background work gets one verification turn to check results and correct its report.
 - Past a time limit, the lead is told and decides. It stops work as a whole tree, not one process.
-- No CLI wakes itself when background work ends, so AgentDeck does the waking.
+- No CLI wakes itself when background work ends, so Canopy does the waking.
 - Codex did not keep background commands started with `&`: the work vanished while it could still report done. Reports therefore list what ran and which expected output is missing.
 
 ### Quota
@@ -69,7 +69,7 @@ A branch can be checked out in only one place, so switching is the main source o
 
 1. **Preflight, changing nothing, in every repo:** classify each state below. All repos must pass, or none move.
 2. **Wait:** no affected chat is mid-turn. Queue the switch for the end of the turn, and hold new turns.
-3. **Snapshot:** stash both sides' uncommitted work, untracked files included, under named stashes (`agentdeck:<lane>:<ts>`), pin each with a ref in `refs/agentdeck/` so a user's `git stash clear` cannot lose it, and write a recovery journal.
+3. **Snapshot:** stash both sides' uncommitted work, untracked files included, under named stashes (`canopy:<lane>:<ts>`), pin each with a ref in `refs/canopy/` so a user's `git stash clear` cannot lose it, and write a recovery journal.
 4. **Swap:** detach the slot's worktree to free the branch, switch the primary checkout, then check the outgoing lane out in that slot. Folders trade branches, keeping installed dependencies and their paths. Restore each side's work.
 5. **Verify and settle:** check both sides, rerun setup only where a lockfile changed, tell affected chats, and offer to restart the dev server.
 
@@ -82,7 +82,7 @@ Any failure restores both sides from the snapshot. On startup, an unfinished jou
 | Lockfile or env files differ | Automatic, with setup rerun or a notice |
 | Primary checkout on the base branch with uncommitted work | Ask: make it a lane, or stash it |
 | Untracked file collides with one on the other branch | Ask, naming the files |
-| Branch held by a worktree AgentDeck did not create | Ask |
+| Branch held by a worktree Canopy did not create | Ask |
 | Agent mid-turn | Wait, or offer Stop |
 | Merge, rebase, or cherry-pick in progress, or detached HEAD | Stop and explain |
 | Locked worktree, submodule changes | Stop and explain |
@@ -94,7 +94,7 @@ Worktrees live in generically named folders, `<repo>/.worktrees/wt-<n>`, and hol
 - Paths stay stable across switches, so terminals, editor windows, tool caches, and dev server configs keep working. Branch names with `/` need no mapping, and nothing is renamed.
 - **Occupancy is derived from `git worktree list`, never stored.** There is no slots file to drift or repair. A lane takes the lowest number free across its repos, so it keeps one number everywhere when it can.
 - A lane leaving a slot leaves the folder detached and warm. The next New Worktree reuses it, with setup rerun only if the lockfile differs.
-- The number of slots has a setting. At the limit, AgentDeck asks which slot to free and never evicts by itself. Removing a slot checks for uncommitted work first.
+- The number of slots has a setting. At the limit, Canopy asks which slot to free and never evicts by itself. Removing a slot checks for uncommitted work first.
 - Slot numbers can map to dev server ports (`wt-1` to a port offset), so warm lanes can run side by side.
 - Worktrees that users or agents created keep their names and are tracked as they are. Agents get current paths in the brief, and the UI always shows the lane, not the folder.
 
@@ -121,7 +121,7 @@ To verify: renaming a branch from the first message when no issue was chosen.
 
 Picking an issue seeds the lane: its goal, a link, and the description and comments in lane memory, which the brief then points every chat at. The app fetches once; agents spend no context on it.
 
-- **GitHub:** through the user's `gh` login. AgentDeck stores no token.
+- **GitHub:** through the user's `gh` login. Canopy stores no token.
 - **Linear:** an API key in SecretStorage first, OAuth later.
 
 ## 6. Release
@@ -131,7 +131,7 @@ Picking an issue seeds the lane: its goal, a link, and the description and comme
 
 ## 7. Claude connection settings (low priority)
 
-Set up subscription, API key, and Bedrock inside AgentDeck, and switch between whichever are configured.
+Set up subscription, API key, and Bedrock inside Canopy, and switch between whichever are configured.
 
 | Connection | What the CLI gets | Where credentials live |
 |---|---|---|

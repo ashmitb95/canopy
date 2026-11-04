@@ -25,7 +25,7 @@ async function quiet(chat: GroupChat): Promise<void> {
 }
 
 async function scenario(env: Env, worker: string, name: string, body: (chat: GroupChat, slot: string, core: Core) => Promise<void>): Promise<void> {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-lead-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-lead-')))
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
   git('config', 'user.email', 'smoke@example.com')
@@ -33,7 +33,7 @@ async function scenario(env: Env, worker: string, name: string, body: (chat: Gro
   writeFileSync(join(root, 'README.md'), '# demo\n')
   git('add', '.')
   git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'init')
-  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'agentdeck-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
+  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'canopy-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
   console.log(`== ${worker}: ${name}`)
   try {
     await core.lanes.newLane('work', core.tracker.repos.map((repo) => repo.name), { worktrees: true })
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
       const delegation = chat.state().delegations[0]
       const finished = existsSync(join(slot, 'result.log'))
       console.log(`      status ${delegation?.status}; verified ${delegation?.verified}; result ${finished ? readFileSync(join(slot, 'result.log'), 'utf8').trim() : 'never appeared'}`)
-      check('AgentDeck held the report and gave a verification turn, or the work vanished', delegation?.verified === true || !finished)
+      check('Canopy held the report and gave a verification turn, or the work vanished', delegation?.verified === true || !finished)
       const last = chat.ledger.all().at(-1)?.text ?? ''
       check('the lead did not call it a success', /(fail|did not succeed|didn.t succeed|not succeed|not confirmed|missing|blocked|never)/i.test(last), last)
     })

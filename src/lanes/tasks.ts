@@ -14,9 +14,9 @@ export const DEFAULT_TASKS: TaskType[] = [
 
 const MODES = new Set<string>(['ask', 'accept-edits', 'auto', 'plan', 'full-access'])
 
-/** Task types from `[task.<id>]` tables in `.agentdeck/config.toml`, or the defaults when none are complete. */
+/** Task types from `[task.<id>]` tables in `.canopy/config.toml`, or the defaults when none are complete. */
 export function readTasks(root: string): TaskType[] {
-  const path = join(root, '.agentdeck', 'config.toml')
+  const path = join(root, '.canopy', 'config.toml')
   const data = existsSync(path) ? parseToml(readFileSync(path, 'utf8')) : {}
   const tasks = Object.entries(data).flatMap(([key, value]) => {
     if (!key.startsWith('task.') || typeof value !== 'object' || value === null) return []

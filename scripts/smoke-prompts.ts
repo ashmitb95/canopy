@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const providerId = process.argv[2] ?? 'claude'
   if (!providers.has(providerId)) throw new Error(`Unknown provider: ${providerId}`)
   const env = await captureEnv()
-  const cwd = mkdtempSync(join(tmpdir(), 'agentdeck-prompts-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'canopy-prompts-'))
   writeFileSync(join(cwd, 'notes.md'), '# Notes\n\nhello world\n')
   const manager = new SessionManager({
     providers,

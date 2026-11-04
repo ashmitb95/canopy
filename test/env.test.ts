@@ -6,7 +6,7 @@ import { captureEnv, findOnPath } from '../src/env'
 
 describe('findOnPath', () => {
   it('finds a command in a later PATH entry', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'agentdeck-env-'))
+    const dir = mkdtempSync(join(tmpdir(), 'canopy-env-'))
     const cli = join(dir, 'fake-cli')
     writeFileSync(cli, '#!/bin/sh\n')
     chmodSync(cli, 0o755)
@@ -14,7 +14,7 @@ describe('findOnPath', () => {
   })
 
   it('returns null when the command is absent', () => {
-    expect(findOnPath({ PATH: tmpdir() }, 'agentdeck-no-such-cli')).toBeNull()
+    expect(findOnPath({ PATH: tmpdir() }, 'canopy-no-such-cli')).toBeNull()
   })
 })
 

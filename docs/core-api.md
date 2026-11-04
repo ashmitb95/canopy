@@ -1,6 +1,6 @@
 # Core API
 
-What the UI builds on. `createCore` (`src/group/host.ts`) returns everything AgentDeck does, with no UI. The extension and the terminal driver (`scripts/driver.ts`) are hosts of it. Nothing here imports `vscode`.
+What the UI builds on. `createCore` (`src/group/host.ts`) returns everything Canopy does, with no UI. The extension and the terminal driver (`scripts/driver.ts`) are hosts of it. Nothing here imports `vscode`.
 
 ```ts
 const core = await createCore({ root, storage, env, providers })
@@ -8,7 +8,7 @@ core.chats   // GroupChats: every chat in the workspace
 core.lanes   // LaneCoordinator: create and move lanes
 core.manager // SessionManager: one session per agent per chat
 core.tracker // LaneTracker: repos, checkouts, lanes, live from Git
-core.memory  // LaneMemory: goals, plans, notes in .agentdeck/
+core.memory  // LaneMemory: goals, plans, notes in .canopy/
 await core.dispose()
 ```
 

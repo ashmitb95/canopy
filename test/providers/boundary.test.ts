@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { claudeWritePaths, switchesBranch, writable } from '../../src/providers/boundary'
 
-const boundary = { roots: ['/w/api', '/w/.agentdeck/lanes/x'], except: ['/w/api/.worktrees/other'], outside: async () => '' }
+const boundary = { roots: ['/w/api', '/w/.canopy/lanes/x'], except: ['/w/api/.worktrees/other'], outside: async () => '' }
 
 describe('boundary', () => {
   it('allows writes under roots but not into other lanes nested inside them', () => {
     expect(writable(boundary, '/w/api/src/a.ts')).toBe(true)
     expect(writable(boundary, '/w/api')).toBe(true)
-    expect(writable(boundary, '/w/.agentdeck/lanes/x/plan.md')).toBe(true)
+    expect(writable(boundary, '/w/.canopy/lanes/x/plan.md')).toBe(true)
     expect(writable(boundary, '/w/api/.worktrees/other/a.ts')).toBe(false)
     expect(writable(boundary, '/w/api-old/a.ts')).toBe(false)
     expect(writable(boundary, '/w/ui/a.ts')).toBe(false)

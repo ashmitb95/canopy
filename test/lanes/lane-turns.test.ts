@@ -33,7 +33,7 @@ describe('watchTurns', () => {
     const manager = new SessionManager({
       providers: new Map([[provider.id, provider]]),
       store: new SessionStore(new MemoryMemento()),
-      journalDir: mkdtempSync(join(tmpdir(), 'agentdeck-turns-')),
+      journalDir: mkdtempSync(join(tmpdir(), 'canopy-turns-')),
       cwd: root,
       env: async () => ({ PATH: '/bin' })
     })
@@ -56,7 +56,7 @@ describe('watchTurns', () => {
 })
 
 describe('watchHistory', () => {
-  it('records moves of lanes AgentDeck holds memory for, not the first reading', async () => {
+  it('records moves of lanes Canopy holds memory for, not the first reading', async () => {
     const root = workspace()
     const api = repo(join(root, 'api'))
     run(api, 'checkout', '-q', '-b', 'retry-fix')

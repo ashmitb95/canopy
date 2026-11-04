@@ -1,4 +1,4 @@
-// Live check: a real change to AgentDeck itself, built through the core on a clone, verified by the full check.
+// Live check: a real change to Canopy itself, built through the core on a clone, verified by the full check.
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,19 +8,19 @@ import { createCore } from '../src/group/host'
 import { providers } from '../src/providers/registry'
 
 const TASK =
-  'In scripts/driver.ts, add two commands. /review prints each delegation in this chat with its agent, role, status, and the files AgentDeck recorded, numbered. /undo-delegate n undoes the nth delegation with chat.undoDelegation and prints the result. Add both to the HELP text. Keep to the style of the file. Have it built and reviewed, and tell me when it is done.'
+  'In scripts/driver.ts, add two commands. /review prints each delegation in this chat with its agent, role, status, and the files Canopy recorded, numbered. /undo-delegate n undoes the nth delegation with chat.undoDelegation and prints the result. Add both to the HELP text. Keep to the style of the file. Have it built and reviewed, and tell me when it is done.'
 
 async function main(): Promise<void> {
   const source = resolve(process.argv[2] ?? '.')
-  const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-real-')))
-  const root = join(sandbox, 'agentdeck')
+  const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-real-')))
+  const root = join(sandbox, 'canopy')
   execFileSync('git', ['clone', '-q', '--local', '--branch', 'core', source, root])
   execFileSync('git', ['config', 'user.email', 'smoke@example.com'], { cwd: root })
   execFileSync('git', ['config', 'user.name', 'Smoke'], { cwd: root })
   execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: root })
   symlinkSync(join(source, 'node_modules'), join(root, 'node_modules'))
   const env = await captureEnv()
-  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'agentdeck-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
+  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'canopy-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
   await core.lanes.newLane('driver-review', [core.tracker.repos[0].name], { worktrees: true, goal: 'Review and undo from the driver' })
   const slot = join(root, '.worktrees', 'wt-1')
   symlinkSync(join(source, 'node_modules'), join(slot, 'node_modules'))

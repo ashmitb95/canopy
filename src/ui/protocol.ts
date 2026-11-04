@@ -54,7 +54,7 @@ export type SetupData = {
   palette: string
 }
 
-/** The review screen for one group chat: who did what, with what AgentDeck recorded and each delegate's diff. */
+/** The review screen for one group chat: who did what, with what Canopy recorded and each delegate's diff. */
 export type ReviewData = {
   title: string
   laneId?: string
@@ -128,7 +128,7 @@ export type HostMessage =
   | { type: 'reply'; requestId: number; value: unknown }
   /** Webview URI of the attachment store, for showing attached images. */
   | { type: 'assets'; attachments: string }
-  /** Files to put into the composer, from *Add to AgentDeck Chat*. */
+  /** Files to put into the composer, from *Add to Canopy Chat*. */
   | { type: 'insertAttachments'; attachments: Attachment[] }
   /** A rewound message to edit and resend. */
   | { type: 'editPrompt'; parts: PromptPart[] }

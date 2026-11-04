@@ -14,7 +14,7 @@ function executable(path: string): string {
 
 describe('ACP agent specs', () => {
   it('finds the CLI on PATH, then in the installer folder', () => {
-    const root = mkdtempSync(join(tmpdir(), 'agentdeck-acp-'))
+    const root = mkdtempSync(join(tmpdir(), 'canopy-acp-'))
     const installed = executable(join(root, 'home', '.grok', 'bin', 'grok'))
     expect(findAgentCli(grok, { PATH: '' }, join(root, 'home'))).toBe(installed)
     const onPath = executable(join(root, 'bin', 'grok'))
@@ -29,7 +29,7 @@ describe('ACP agent specs', () => {
   })
 
   it('treats a cached token or an API key as signed in', () => {
-    const home = mkdtempSync(join(tmpdir(), 'agentdeck-grok-home-'))
+    const home = mkdtempSync(join(tmpdir(), 'canopy-grok-home-'))
     expect(grok.signedIn({}, home)).toBe(false)
     expect(grok.signedIn({ XAI_API_KEY: 'k' }, home)).toBe(true)
     mkdirSync(join(home, '.grok'))

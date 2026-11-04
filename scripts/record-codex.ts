@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const env = await captureEnv()
   const cli = findCodex(env)
   if (!cli) throw new Error('codex CLI not found')
-  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-record-')))
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-record-')))
   writeFileSync(join(cwd, 'notes.md'), '# Notes\n\nhello world\n')
 
   const child = spawnGroup(cli, ['app-server'], { cwd, env, stdio: ['pipe', 'pipe', 'inherit'] })
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     })
   })
   await rpc.request('initialize', {
-    clientInfo: { name: 'agentdeck', title: 'AgentDeck', version: '0.0.1' },
+    clientInfo: { name: 'canopy', title: 'Canopy', version: '0.0.1' },
     capabilities: { experimentalApi: true, requestAttestation: false }
   })
   rpc.notify('initialized')

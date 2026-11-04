@@ -36,7 +36,7 @@ const idle = (chat: GroupChat) =>
   })
 
 async function main(): Promise<void> {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'agentdeck-group-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'canopy-group-')))
   const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   git(root, 'init', '-q', '-b', 'main')
   git(root, 'config', 'user.email', 'smoke@example.com')
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   git(root, 'add', '.')
   git(root, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'init')
   const env = await captureEnv()
-  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'agentdeck-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
+  const core = await createCore({ root, storage: mkdtempSync(join(tmpdir(), 'canopy-store-')), env: async () => ({ ...env, CLAUDE_NOTIFIER_DISABLE: '1' }), providers })
   await core.lanes.newLane('slugify', ['.'].flatMap(() => core.tracker.repos.map((repo) => repo.name)), { worktrees: true, goal: 'Add a slugify helper' })
   const slot = join(root, '.worktrees', 'wt-1')
   check('lane starts in a slot', git(slot, 'branch', '--show-current') === 'slugify')

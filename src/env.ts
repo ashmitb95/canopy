@@ -8,7 +8,7 @@ const run = promisify(execFile)
 /** Environment for spawning provider CLIs. */
 export type Env = Record<string, string>
 
-const MARKER = '__AGENTDECK_PATH__'
+const MARKER = '__CANOPY_PATH__'
 
 /** GUI-launched VS Code lacks the shell's PATH, so read it from a login shell. */
 export async function captureEnv(base: NodeJS.ProcessEnv = process.env): Promise<Env> {

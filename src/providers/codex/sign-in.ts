@@ -22,7 +22,7 @@ export async function codexSignIn(cliPath: string, env: Env, onEvent: (event: Si
   child.on('exit', () => finish({ kind: 'failed', message: 'Codex stopped before sign-in completed.' }))
   try {
     await rpc.request('initialize', {
-      clientInfo: { name: 'canopy', title: 'Canopy', version: '1.0.0' },
+      clientInfo: { name: 'canopy', title: 'Canopy', version: '1.0.1' },
       capabilities: { experimentalApi: true, requestAttestation: false }
     })
     rpc.notify('initialized')

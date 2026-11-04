@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Marketplace readme images resolve to the files already on GitHub.
+
 ## 1.0.0
 
 First usable release.

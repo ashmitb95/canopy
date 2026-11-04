@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   const init = await rpc.request<{ authMethods?: { id: string }[] }>('initialize', {
     protocolVersion: 1,
     clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-    clientInfo: { name: 'canopy', version: '1.0.0' }
+    clientInfo: { name: 'canopy', version: '1.0.1' }
   })
   const method = grok.authMethod((init.authMethods ?? []).map((auth) => auth.id), env)
   if (method) await rpc.request('authenticate', { methodId: method })

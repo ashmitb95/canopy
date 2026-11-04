@@ -1,7 +1,7 @@
 # Canopy - A Multi-provider, multi-repo orchestration tool
 
 <p align="center">
-  <img src="media/canopy-logo.svg" alt="Canopy logo: a tree of worktrees with an agent at the hub" width="280">
+  <img src="media/canopy-icon.png" alt="Canopy logo: a tree of worktrees with an agent at the hub" width="180">
 </p>
 
 **Chat with coding agents — Claude, Codex, Grok, and any ACP agent — from one place in VS Code, on your own subscriptions.**
@@ -54,7 +54,7 @@ Canopy is not on the Marketplace yet. Build and sideload it:
 ```sh
 pnpm install
 pnpm run package
-code --install-extension canopy-1.0.0.vsix --force
+code --install-extension canopy-1.0.1.vsix --force
 ```
 
 Reload VS Code and open Canopy from the activity bar.

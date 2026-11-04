@@ -189,7 +189,9 @@ function cardState(group: GroupState, delegation: Delegation, items: TimelineIte
       return { text: `Blocked: ${(delegation.report ?? '').match(/STATUS:\s*blocked\W*(.*)/i)?.[1] || 'it cannot go on'}`, tone: 'text-warning', mark: 'needs', actions: [{ label: 'Answer myself', answer: true }] }
     case 'done': {
       const failedCheck = facts?.verify && !facts.verify.ok
-      const parts = ['Report ready', ...(facts ? [`${facts.files.length} ${facts.files.length === 1 ? 'file' : 'files'}`] : []), ...(facts?.verify ? [facts.verify.ok ? 'checks pass' : 'checks fail'] : [])]
+      // A read-only role changes nothing, so a file count of zero says nothing.
+      const files = facts && (facts.files.length > 0 || delegation.role === 'implement') ? [`${facts.files.length} ${facts.files.length === 1 ? 'file' : 'files'}`] : []
+      const parts = ['Report ready', ...files, ...(facts?.verify ? [facts.verify.ok ? 'checks pass' : 'checks fail'] : [])]
       return { text: parts.join(' · '), tone: failedCheck ? 'text-destructive' : 'text-success', mark: failedCheck ? 'fail' : 'done', actions: [...(delegation.handoff ? [viewHandoff] : []), ...(changed ? [undo] : [])] }
     }
     case 'stopped':
@@ -522,7 +524,7 @@ export function GroupView({ state }: { state: ChatState }) {
       placed.add(id)
       return (
         <Fragment key={`card:${id}`}>
-          <Band>{delegation.role ? `Roster: ${ROLE_LABEL[delegation.role]} belongs to ${name(delegation.agent)}. ${name(delegation.lead)} delegated it.` : `${name(delegation.lead)} handed this to ${name(delegation.agent)}.`}</Band>
+          {(delegation.phase ?? 1) === 1 ? <Band>{delegation.role ? `Roster: ${ROLE_LABEL[delegation.role]} belongs to ${name(delegation.agent)}. ${name(delegation.lead)} delegated it.` : `${name(delegation.lead)} handed this to ${name(delegation.agent)}.`}</Band> : null}
           {card(delegation)}
         </Fragment>
       )

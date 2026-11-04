@@ -2,6 +2,7 @@ import type { SessionItem } from '../../src/core/types'
 import type { SessionRecord } from '../../src/sessions/store'
 import type { GroupState, TimelineItem } from '../../src/group/chat'
 import type { HostMessage, ProviderInfo } from '../../src/ui/protocol'
+import { showcaseSteps } from './showcase'
 
 const record: SessionRecord = {
   id: 's1',
@@ -412,6 +413,8 @@ const messages: HostMessage[] =
         ]
     : scenario === 'flow'
       ? [providers]
+    : scenario === 'showcase'
+      ? [providers, { type: 'groupComposer', composer: { agent: 'claude', sessionId: 'm1', provider: claude, facts: record.facts, mode: 'ask' } }]
     : scenario === 'states'
       ? [providers, { type: 'groupSnapshot', state: statesGroup, items: [] }]
     : scenario === 'group'
@@ -489,4 +492,11 @@ function flowSteps(): [number, HostMessage][] {
 setTimeout(() => {
   for (const message of messages) window.postMessage(message, '*')
   if (scenario === 'flow') for (const [at, message] of flowSteps()) setTimeout(() => window.postMessage(message, '*'), at)
+  // The page loops the showcase; `?once` plays it a single time, for recording.
+  const play = () => {
+    const steps = showcaseSteps()
+    for (const [at, message] of steps) setTimeout(() => window.postMessage(message, '*'), at)
+    if (!new URLSearchParams(location.search).has('once')) setTimeout(play, (steps.at(-1)?.[0] ?? 0) + 6000)
+  }
+  if (scenario === 'showcase') play()
 }, 100)

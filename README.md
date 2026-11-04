@@ -4,11 +4,14 @@
   <img src="media/canopy-icon.png" alt="Canopy logo: a tree of worktrees with an agent at the hub" width="180">
 </p>
 
-**Claude, Codex, Grok, and any ACP agent working together in VS Code, on your own subscriptions.**
+**Chat with coding agents — Claude, Codex, Grok, and any ACP agent — from one place in VS Code, on your own subscriptions.**
 
-You talk to one lead in one chat. The lead does the research, writes the plan, and hands each part to the agent you picked for that kind of work: Codex implements, Grok reviews, Claude researches, or any mix you like. Canopy writes the handoffs, shows you each agent's work as it happens, and checks the results itself before anyone calls a job done. Each piece of work lives in its own lane, a branch with its own worktree in every repo it touches, so agents never trip over each other or over the code you are running.
 
-![The lead hands an implementation task to Codex, Codex's card streams its work, and Canopy records the files changed and the test result before the lead reports back](media/readme/chat.gif)
+Canopy runs each provider through its official CLI. It never reads, stores, or forwards your credentials, and it never calls provider APIs itself. Sign-in stays with each CLI.
+
+You give the work to a lead. The lead captures the context of the task, and then delegates to other agents for research, implementation and review based on the providers you assign to each task type.
+
+![A chat where Claude finds why invoice exports time out, hands the fix to Codex, and reports the result after the tests pass](media/readme/chat.gif)
 
 ## Install
 

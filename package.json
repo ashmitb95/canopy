@@ -1,7 +1,7 @@
 {
   "name": "canopy",
   "displayName": "Canopy",
-  "description": "Chat with coding agents on your own subscriptions.",
+  "description": "Multi provider hat with coding agents on your own subscriptions.",
   "icon": "media/canopy-icon.png",
   "version": "1.0.0",
   "license": "MIT",

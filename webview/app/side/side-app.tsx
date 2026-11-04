@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { SideData } from '../../../src/ui/protocol'
 import { relativeTime } from '../../../src/ui/time'
 import { Codicon } from '../components/codicon'
@@ -22,35 +23,58 @@ function Heading({ children }: { children: string }) {
   return <span className="text-[11px] font-extrabold tracking-[0.08em]">{children}</span>
 }
 
-function Lanes({ lanes }: { lanes: NonNullable<SideData['lanes']> }) {
+type Lane = NonNullable<SideData['lanes']>[number]
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+/** What a lane holds, in words: where its code is, uncommitted files, and chats. */
+function laneStatus(lane: Lane, chats: number): string {
+  return [lane.primary ? undefined : lane.warm ? 'worktree' : 'branch only', lane.dirty > 0 ? `${lane.dirty} uncommitted` : lane.primary ? undefined : 'clean', chats > 0 ? plural(chats, 'chat') : undefined].filter(Boolean).join(' · ')
+}
+
+/** The primary checkout, then only lanes with chats or uncommitted work; the rest are a click away in the Lane view. */
+function Lanes({ data }: { data: SideData }) {
+  const lanes = data.lanes ?? []
+  const chats = (name: string) => [...data.groups, ...data.sessions].filter((chat) => chat.laneId === name).length
   const primary = lanes.find((lane) => lane.primary)
-  const warm = lanes.filter((lane) => !lane.primary && lane.warm)
-  const cold = lanes.filter((lane) => !lane.primary && !lane.warm)
+  const busy = lanes.filter((lane) => !lane.primary && (lane.dirty > 0 || chats(lane.name) > 0))
+  const rest = lanes.length - busy.length - (primary ? 1 : 0)
+  const primaryStatus = primary ? laneStatus(primary, chats(primary.name)) : ''
   return (
     <div className="flex flex-col gap-1 px-2 pb-2">
-      <div data-card="primary" className="rounded-lg bg-primary px-[11px] py-[9px] text-primary-foreground">
-        <div className="text-[10px] font-extrabold tracking-[0.08em]">PRIMARY CHECKOUT · RUNS HERE</div>
+      <button type="button" data-card="primary" className="rounded-lg bg-primary px-[11px] py-[9px] text-left text-primary-foreground" title="Open the Lane view" onClick={() => send({ type: 'openLanes' })}>
+        <div className="text-[10px] font-extrabold tracking-[0.08em]">RUNS HERE · PRIMARY CHECKOUT</div>
         <div className="mt-0.5 truncate font-mono text-sm font-semibold">{primary ? primary.name : 'base branch'}</div>
-      </div>
-      {warm.map((lane) => (
+        {primaryStatus ? <div className="mt-0.5 truncate text-xs">{primaryStatus}</div> : null}
+      </button>
+      {busy.map((lane) => (
         <div
           key={lane.name}
           data-card=""
           data-vscode-context={JSON.stringify({ webviewSection: 'lane', lane: { name: lane.name }, preventDefaultContextMenuItems: true })}
-          className="flex h-[38px] items-center gap-2 rounded-[7px] bg-surface pr-1 pl-2.5"
+          className="flex items-center rounded-[7px] bg-surface hover:bg-control"
         >
-          <span className="min-w-0 flex-1 truncate font-mono text-xs font-medium" title={lane.where}>
-            {lane.name}
-            {lane.dirty > 0 ? <span className="ml-1.5 font-sans text-[11px] text-muted-foreground">●{lane.dirty}</span> : null}
-          </span>
-          <button type="button" className="h-[30px] rounded-md px-2 text-[11px] font-bold hover:bg-control" title={`Move ${lane.name} into the primary checkout`} onClick={() => send({ type: 'switchLane', laneId: lane.name })}>
-            Switch
+          <button type="button" className="min-w-0 flex-1 py-1.5 pl-2.5 text-left" title={lane.where} onClick={() => send({ type: 'openLanes' })}>
+            <span className="block truncate font-mono text-xs font-medium">{lane.name}</span>
+            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{laneStatus(lane, chats(lane.name))}</span>
           </button>
+          {lane.warm ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label={`More for ${lane.name}`} className="flex size-[30px] shrink-0 items-center justify-center rounded-md hover:bg-surface">
+                  <Codicon name="ellipsis" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => send({ type: 'switchLane', laneId: lane.name })}>Run here (move into the primary checkout)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </div>
       ))}
-      {cold.length > 0 ? (
+      {rest > 0 ? (
         <button type="button" className="flex h-[30px] items-center px-2.5 text-left text-muted-foreground hover:text-foreground" onClick={() => send({ type: 'openLanes' })}>
-          {cold.length} cold {cold.length === 1 ? 'lane' : 'lanes'}
+          {rest} more {rest === 1 ? 'lane' : 'lanes'} in Lane view
         </button>
       ) : null}
     </div>
@@ -91,14 +115,11 @@ export function SideApp({ conversationsOnly = false }: { conversationsOnly?: boo
               <Codicon name={lanesOpen ? 'chevron-down' : 'chevron-right'} size={12} />
               <Heading>LANES</Heading>
             </button>
-            <button type="button" className="h-[38px] px-2 text-xs font-semibold underline-offset-2 hover:underline" onClick={() => send({ type: 'openLanes' })}>
-              Lane view
-            </button>
             <button type="button" aria-label="New worktree" className="flex size-[38px] items-center justify-center hover:bg-surface" onClick={() => send({ type: 'newLane' })}>
               <Codicon name="add" />
             </button>
           </div>
-          {lanesOpen ? <Lanes lanes={data.lanes} /> : null}
+          {lanesOpen ? <Lanes data={data} /> : null}
         </>
       ) : null}
       <div className={`flex h-[38px] shrink-0 items-center pl-2.5 ${conversationsOnly ? 'hidden' : ''}`}>

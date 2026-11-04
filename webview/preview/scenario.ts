@@ -398,7 +398,9 @@ const messages: HostMessage[] =
               lanes: [
                 { name: 'auth-flow', where: 'api primary ●2', primary: true, warm: false, dirty: 2 },
                 { name: 'export-timeouts', where: 'api worktree ●1', primary: false, warm: true, dirty: 1 },
-                { name: 'billing-export', where: 'api worktree', primary: false, warm: true, dirty: 0 }
+                { name: 'billing-export', where: 'api worktree', primary: false, warm: true, dirty: 0 },
+                { name: 'search-ranking', where: 'api worktree', primary: false, warm: true, dirty: 0 },
+                { name: 'pr960-trusted-origin', where: 'api branch', primary: false, warm: false, dirty: 0 }
               ],
               groups: [
                 { id: 'g1', title: 'Export timeouts', lead: 'claude', running: 'codex', activity: '$ node --test', needsYou: false, agents: ['claude', 'codex', 'grok'], laneId: 'export-timeouts' },

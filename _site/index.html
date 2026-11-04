@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canopy</title>
+<meta name="description" content="Claude, Codex, Grok, and any ACP agent working as a team in one VS Code chat, on your own subscriptions. A lead plans the work, hands it to the right agent, and Canopy checks what each one really did.">
+<meta property="og:title" content="Canopy">
+<meta property="og:description" content="Coding agents that work as a team, in VS Code.">
+<meta property="og:image" content="canopy-icon.png">
+<link rel="icon" href="canopy-mark.svg" type="image/svg+xml">
+<style>
+  :root {
+    --page: #f7f6f3;
+    --surface: #ffffff;
+    --band: #efede8;
+    --ink: #1d1d1b;
+    --muted: #6b6a65;
+    --line: #e2dfd8;
+    --success: #0a6641;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #161615;
+      --surface: #1f1f1e;
+      --band: #2a2a28;
+      --ink: #ecebe6;
+      --muted: #a09f99;
+      --line: #33332f;
+      --success: #62d6a2;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #161615;
+    --surface: #1f1f1e;
+    --band: #2a2a28;
+    --ink: #ecebe6;
+    --muted: #a09f99;
+    --line: #33332f;
+    --success: #62d6a2;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+
+  nav { display: flex; align-items: center; gap: 20px; height: 64px; }
+  nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; text-decoration: none; letter-spacing: -0.01em; }
+  nav .brand img { width: 28px; height: 28px; }
+  nav .links { margin-left: auto; display: flex; gap: 20px; font-size: 14px; }
+  nav .links a { text-decoration: none; color: var(--muted); }
+  nav .links a:hover { color: var(--ink); }
+  @media (max-width: 520px) { nav .links .optional { display: none; } }
+
+  header.hero { padding: 56px 0 40px; display: grid; gap: 28px; align-items: center; }
+  @media (min-width: 880px) { header.hero { grid-template-columns: 1fr auto; padding: 80px 0 48px; } }
+  .hero h1 { margin: 0; font-size: clamp(36px, 6vw, 60px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 800; max-width: 14ch; }
+  .hero p { margin: 18px 0 0; font-size: 18px; color: var(--muted); max-width: 54ch; }
+  .hero .logo { width: 180px; height: 180px; justify-self: center; }
+  @media (max-width: 879px) { .hero .logo { display: none; } }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+  .button { display: inline-flex; align-items: center; min-height: 46px; padding: 0 18px; border-radius: 10px; font-weight: 700; text-decoration: none; }
+  .button.primary { background: var(--ink); color: var(--page); }
+  .button.secondary { background: var(--band); }
+  .install { margin-top: 14px; font: 13px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+
+  .demo { margin: 8px 0 72px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; overflow-x: auto; }
+  .tabs button {
+    min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent;
+    color: var(--muted); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  }
+  .tabs button[aria-selected="true"] { background: var(--ink); color: var(--page); }
+  .tabs button:hover:not([aria-selected="true"]) { color: var(--ink); background: var(--band); }
+  .window { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 30px 80px -40px rgb(0 0 0 / 0.35); }
+  .window .bar { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+  .window .bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+  .window .bar span { margin-left: 10px; font-size: 12px; color: var(--muted); }
+  .stage { position: relative; overflow: hidden; }
+  .stage iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; }
+  .caption { margin: 14px 2px 0; color: var(--muted); font-size: 15px; max-width: 70ch; }
+
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  section h2 { margin: 0 0 8px; font-size: clamp(26px, 3.4vw, 34px); letter-spacing: -0.025em; line-height: 1.15; }
+  section .lead { margin: 0 0 32px; color: var(--muted); font-size: 17px; max-width: 62ch; }
+  .grid { display: grid; gap: 14px; }
+  @media (min-width: 720px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1000px) { .grid.three { grid-template-columns: repeat(3, 1fr); } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; letter-spacing: -0.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .places { display: grid; gap: 14px; }
+  @media (min-width: 720px) { .places { grid-template-columns: repeat(3, 1fr); } }
+  .place .tag { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .place.primary { background: var(--ink); color: var(--page); border-color: var(--ink); }
+  .place.primary p { color: inherit; opacity: 0.8; }
+  ul.plain { margin: 0; padding-left: 20px; color: var(--muted); }
+  ul.plain li { margin: 6px 0; }
+  code { font: 0.9em var(--mono); background: var(--band); padding: 1px 5px; border-radius: 5px; }
+  .split { display: grid; gap: 32px; }
+  @media (min-width: 880px) { .split { grid-template-columns: 1fr 1fr; gap: 48px; } }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
+  footer .row { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 14px; }
+  footer a { text-decoration: none; }
+  footer a:hover { color: var(--ink); text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#"><img src="canopy-mark.svg" alt="">Canopy</a>
+    <div class="links">
+      <a class="optional" href="#how">How it works</a>
+      <a class="optional" href="#lanes">Lanes</a>
+      <a href="https://github.com/ashmitb95/canopy">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <h1>Coding agents that work as a team.</h1>
+      <p>Claude, Codex, Grok, and any ACP agent in one VS Code chat, on your own subscriptions. A lead plans the work and hands each part to the right agent. Canopy checks what each one really did.</p>
+      <div class="actions">
+        <a class="button primary" href="https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy">Install from the Marketplace</a>
+        <a class="button secondary" href="https://github.com/ashmitb95/canopy">View on GitHub</a>
+      </div>
+      <div class="install">code --install-extension SingularityInc.canopy</div>
+    </div>
+    <img class="logo" src="canopy-icon.png" alt="Canopy logo: a tree of worktrees with an agent at the hub">
+  </header>
+
+  <div class="demo">
+    <div class="tabs" role="tablist" aria-label="Screens">
+      <button role="tab" aria-selected="true" data-surface="panel" data-scenario="showcase" data-title="Rank recent edits higher" data-caption="Claude researches and plans, then hands the work to Codex in two phases. The second phase starts only after the first passes its checks. Grok reviews, and Claude reports what really happened.">Chat</button>
+      <button role="tab" aria-selected="false" data-surface="lanes" data-scenario="lanes" data-title="Lanes" data-caption="Every lane in the workspace: the one running in your primary checkout, warm lanes with a worktree ready for agents, and cold lanes that are only a branch.">Lanes</button>
+      <button role="tab" aria-selected="false" data-surface="review" data-scenario="review" data-title="Review" data-caption="Who did what: each agent's report, the files it changed, and the checks it passed. Undo one agent's work and keep everyone else's.">Review</button>
+      <button role="tab" aria-selected="false" data-surface="setup" data-scenario="setup" data-title="Setup" data-caption="Connect the agent CLIs you already use, choose who researches, implements, and reviews, and tell Canopy how to set up new worktrees.">Setup</button>
+    </div>
+    <div class="window">
+      <div class="bar"><i></i><i></i><i></i><span id="window-title">Rank recent edits higher</span></div>
+      <div class="stage" id="stage"><iframe id="screen" title="Canopy, running a scripted chat" loading="eager"></iframe></div>
+    </div>
+    <p class="caption" id="caption" aria-live="polite"></p>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2>One chat, a whole team</h2>
+    <p class="lead">You give the work to a lead. It finds out what the change needs, makes a plan, and hands each part to the agent you picked for that kind of work.</p>
+    <div class="grid three">
+      <div class="card"><h3>Any lead</h3><p>Start a chat with Claude, Codex, or Grok in charge, and switch whenever you like. A message goes to the lead unless you <code>@mention</code> another agent, and it goes at once, even while others work.</p></div>
+      <div class="card"><h3>Roles you set once</h3><p>Pick who does research, implementation, and review. With roles enforced, only the implementer changes code; everyone else is read-only.</p></div>
+      <div class="card"><h3>Handoffs written for you</h3><p>The lead passes on its findings and plan, so the delegate starts on the change instead of rediscovering the codebase.</p></div>
+      <div class="card"><h3>Big plans, one phase at a time</h3><p>A multi-phase plan is handed over phase by phase. The next phase starts only when the last reports done and its checks pass.</p></div>
+      <div class="card"><h3>Facts, not claims</h3><p>When a delegate says it is done, Canopy records the files that really changed and the commands that really ran, and runs your tests itself.</p></div>
+      <div class="card"><h3>Undo per agent</h3><p>Every delegate's changes are snapshotted. Undo one agent's work and keep everyone else's.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="lanes">
+  <div class="wrap">
+    <h2>Lanes: worktrees across repos</h2>
+    <p class="lead">A lane is a unit of work: the same branch in every repo of your workspace that has it, with one goal, plan, and set of notes. Agents work in a lane's worktree while you run something else.</p>
+    <div class="places">
+      <div class="card place primary"><span class="tag">PRIMARY CHECKOUT</span><h3>Where you run things</h3><p>The folder you cloned, with your env files and dev server.</p></div>
+      <div class="card place"><span class="tag">WARM</span><h3>A worktree, ready</h3><p>Set up with your env files and setup command, so agents can work on it now.</p></div>
+      <div class="card place"><span class="tag">COLD</span><h3>Just a branch</h3><p>Until you warm it up. Slots are reused, so installs stay fast.</p></div>
+    </div>
+    <p class="caption"><strong>Run here</strong> moves a lane into the primary checkouts and the old one into a worktree, uncommitted work included, across every repo at once or not at all. Start a lane from a GitHub or Linear issue and Canopy names the branch and seeds its goal.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div>
+      <h2>Your accounts, your credentials</h2>
+      <p class="lead">Canopy runs the agent CLIs installed on your machine, signed in the way you signed them in. It never reads, stores, or forwards your credentials, and it never calls a provider's API itself, so usage counts against your own plan with each provider.</p>
+    </div>
+    <div>
+      <h2>Requirements</h2>
+      <ul class="plain">
+        <li>VS Code 1.106 or later, and Git.</li>
+        <li>At least one agent CLI, installed and signed in: Claude Code, the Codex CLI, or the Grok CLI. Cursor, OpenCode, and Gemini work too, and you can add other ACP agents.</li>
+        <li>Optional: the GitHub CLI for issues and pull requests, and a Linear API key for Linear issues.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <a href="https://marketplace.visualstudio.com/items?itemName=SingularityInc.canopy">Marketplace</a>
+      <a href="https://github.com/ashmitb95/canopy">GitHub</a>
+      <a href="https://github.com/ashmitb95/canopy/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://medium.com/@ashmitbbiswas/worktrees-across-repos-take-two-this-time-its-multi-agent-too-9a3f78d13b27">How it was built</a>
+      <a href="https://github.com/ashmitb95/canopy-cli">The Canopy CLI</a>
+    </div>
+    <div>MIT licensed. Canopy is not affiliated with or endorsed by Anthropic, OpenAI, or xAI. Claude, Codex, and Grok are their respective owners' trademarks.</div>
+  </div>
+</footer>
+
+<script>
+  const stage = document.getElementById('stage')
+  const screen = document.getElementById('screen')
+  const tabs = [...document.querySelectorAll('[role="tab"]')]
+  const dark = window.matchMedia('(prefers-color-scheme: dark)')
+  let current = tabs[0]
+
+  // The app is drawn at a desktop size and scaled to fit, so it looks the same on any screen.
+  function fit() {
+    const width = stage.clientWidth
+    const logical = width >= 900 ? 1200 : 820
+    const height = current.dataset.surface === 'panel' ? 760 : 720
+    const scale = width / logical
+    screen.style.width = `${logical}px`
+    screen.style.height = `${height}px`
+    screen.style.transform = `scale(${scale})`
+    stage.style.height = `${height * scale}px`
+  }
+
+  function show(tab) {
+    current = tab
+    for (const other of tabs) other.setAttribute('aria-selected', String(other === tab))
+    const theme = dark.matches ? 'dark' : 'light'
+    screen.src = `demo/index.html?theme=${theme}&palette=paper&surface=${tab.dataset.surface}&scenario=${tab.dataset.scenario}`
+    document.getElementById('window-title').textContent = tab.dataset.title
+    document.getElementById('caption').textContent = tab.dataset.caption
+    fit()
+  }
+
+  for (const tab of tabs) tab.addEventListener('click', () => show(tab))
+  dark.addEventListener('change', () => show(current))
+  new ResizeObserver(fit).observe(stage)
+  show(current)
+</script>
+</body>
+</html>

@@ -828,6 +828,7 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "build:preview": "node esbuild.mjs --preview",
+    "build:site": "sh scripts/build-site.sh",
     "screenshot": "node scripts/screenshot.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p webview",
     "test": "vitest run",

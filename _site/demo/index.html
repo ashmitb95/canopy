@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="themes.css">
+<link rel="stylesheet" href="codicon.css">
+<link rel="stylesheet" href="katex.css">
+<link rel="stylesheet" href="webview.css">
+<script>
+  // Stands in for VS Code: the theme variables, the body theme class, and the webview API.
+  window.previewTheme = ['light', 'hc'].includes(new URLSearchParams(location.search).get('theme')) ? new URLSearchParams(location.search).get('theme') : 'dark'
+  document.documentElement.dataset.previewTheme = window.previewTheme
+  window.acquireVsCodeApi = () => ({ postMessage() {}, getState() {}, setState() {} })
+</script>
+</head>
+<body>
+<script>document.body.classList.add({ light: 'vscode-light', hc: 'vscode-high-contrast' }[window.previewTheme] ?? 'vscode-dark'); document.body.dataset.surface = new URLSearchParams(location.search).get('surface') ?? 'panel'; document.body.dataset.palette = new URLSearchParams(location.search).get('palette') ?? 'theme'</script>
+<div id="root"></div>
+<script src="main.js"></script>
+<script src="scenario.js"></script>
+</body>
+</html>

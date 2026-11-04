@@ -6,7 +6,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "private": true,
-  "publisher": "ashmitb95",
+  "publisher": "SingularityInc",
   "engines": {
     "vscode": "^1.106.0"
   },

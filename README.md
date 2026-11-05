@@ -11,7 +11,9 @@ Canopy runs each provider through its official CLI. It never reads, stores, or f
 
 You give the work to a lead. The lead captures the context of the task, and then delegates to other agents for research, implementation and review based on the providers you assign to each task type.
 
-![A chat where Claude finds why invoice exports time out, hands the fix to Codex, and reports the result after the tests pass](media/readme/chat.gif)
+Delegation is a switch on each chat. Off, which is how every chat starts, the lead does the work itself. On, it hands work out by role.
+
+![A chat where Claude researches a search ranking bug and plans the fix, Codex builds it in two phases, Grok reviews it, and Claude reports the checked result](media/readme/chat.gif)
 
 ## Install
 
@@ -26,7 +28,8 @@ Then open Canopy from the activity bar. Setup walks you through connecting your 
 ## How it works
 
 - **One chat, any lead.** Start a chat with Claude, Codex, or Grok in charge, and switch the lead whenever you like. A message goes to the lead unless you `@mention` another agent, and it goes straight away, even while others are working.
-- **Roles you set once.** Pick who does Research, Implement, and Review. The lead hands each kind of work to its agent without being asked. With roles enforced, only the implementer can change code; everyone else is read-only.
+- **Delegation when you want it.** Turn on **Delegate** in a chat and the lead can hand work to other agents. Turn it off and the lead works alone, with no roles in the way.
+- **Roles you set once.** Pick who does Research, Implement, and Review. With delegation on, the lead hands each kind of work to its agent without being asked. With roles enforced, only the implementer can change code; everyone else is read-only, apart from the lane's plan and notes.
 - **Handoffs written for you.** The lead passes on its findings and plan, so the delegate goes straight to the change instead of rediscovering the codebase. Canopy adds what the delegate missed in the chat and the lane's goal and notes.
 - **Big plans, one phase at a time.** A multi-phase plan is handed over phase by phase. The next phase starts only when the last one reports done and its checks pass.
 - **Watch it happen.** Each delegate's card streams what it reads, runs, and finds. Redirect it with an `@mention` or stop it from the card.

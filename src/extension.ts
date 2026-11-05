@@ -152,6 +152,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('canopy.clearLinearKey', () => context.secrets.delete(LINEAR_SECRET)),
     vscode.commands.registerCommand('canopy.openInEditor', () => surfaces.openSidebarInEditor()),
+    vscode.commands.registerCommand('canopy.showConversations', () => vscode.commands.executeCommand('canopy.conversations.focus')),
     vscode.commands.registerCommand('canopy.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
     vscode.workspace.registerTextDocumentContentProvider(GIT_SCHEME, laneChanges),

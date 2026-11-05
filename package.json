@@ -514,6 +514,12 @@
         "icon": "$(git-branch)"
       },
       {
+        "command": "canopy.showConversations",
+        "title": "Show Conversations",
+        "category": "Canopy",
+        "icon": "$(comment-discussion)"
+      },
+      {
         "command": "canopy.openGroupInEditor",
         "title": "Open in Editor",
         "category": "Canopy"
@@ -612,6 +618,11 @@
           "command": "canopy.showLanes",
           "when": "view == canopy.chat",
           "group": "navigation@3"
+        },
+        {
+          "command": "canopy.showConversations",
+          "when": "view == canopy.chat",
+          "group": "navigation@4"
         },
         {
           "submenu": "canopy.newChatMenu.sessions",

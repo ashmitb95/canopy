@@ -22,7 +22,8 @@ const WINDOW = 8
 const name = (agent: string) => agent.charAt(0).toUpperCase() + agent.slice(1)
 
 function roleOf(group: GroupState, agent: string): string {
-  const roles = Object.entries(group.roster).flatMap(([role, holder]) => (holder === agent ? [ROLE_LABEL[role] ?? role] : []))
+  // With delegation off, the roster does not apply: the lead does everything.
+  const roles = !group.delegating ? [] : Object.entries(group.roster).flatMap(([role, holder]) => (holder === agent ? [ROLE_LABEL[role] ?? role] : []))
   return [agent === group.lead ? 'Lead' : undefined, ...roles].filter(Boolean).join(' · ')
 }
 
@@ -452,6 +453,19 @@ function Status({ group }: { group: GroupState }) {
         </span>
       ))}
       <span className="ml-auto" />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={group.delegating}
+        title={group.delegating ? `${name(group.lead)} can hand work to other agents by role` : `Only ${name(group.lead)} works in this chat`}
+        className="flex h-7 items-center gap-1.5 rounded-md bg-control px-2.5"
+        onClick={() => send({ type: 'setDelegating', on: !group.delegating })}
+      >
+        <span aria-hidden="true" className={`relative h-3.5 w-6 rounded-full transition-colors ${group.delegating ? 'bg-primary' : 'bg-muted-foreground/40'}`}>
+          <span className={`absolute top-0.5 size-2.5 rounded-full bg-background transition-[left] ${group.delegating ? 'left-3' : 'left-0.5'}`} />
+        </span>
+        Delegate
+      </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className="h-7 rounded-md bg-control px-2.5">

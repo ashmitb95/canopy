@@ -221,6 +221,7 @@ const groupState: GroupState = {
     { agent: 'grok', status: 'running', activity: 'Reading export.ts' }
   ],
   roster: { plan: 'claude', implement: 'codex', review: 'grok' },
+  delegating: true,
   delegations: [
     {
       id: 'd1',
@@ -444,7 +445,7 @@ function flowSteps(): [number, HostMessage][] {
       { agent: 'codex', status: 'idle', activity: '' },
       { agent: 'grok', status: 'idle', activity: '' }
     ],
-    roster: { plan: 'claude', implement: 'codex', review: 'grok' }, delegations: [], violations: [], userQuestions: [], quotas: {}, laneId: 'export-timeouts'
+    roster: { plan: 'claude', implement: 'codex', review: 'grok' }, delegating: true, delegations: [], violations: [], userQuestions: [], quotas: {}, laneId: 'export-timeouts'
   }
   const started = new Date(Date.now() - 4000).toISOString()
   const task = {

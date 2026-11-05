@@ -25,6 +25,7 @@ export function showcaseSteps(): Step[] {
       { agent: 'grok', status: 'idle', activity: '' }
     ],
     roster: { plan: 'claude', research: 'claude', implement: 'codex', review: 'grok' },
+    delegating: true,
     delegations: [],
     violations: [],
     userQuestions: [],

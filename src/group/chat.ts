@@ -46,6 +46,8 @@ export type GroupRecord = {
   roster: Roster
   /** Only the agent holding Implement may write; others are blocked and told to delegate. */
   enforce: boolean
+  /** Whether the lead may hand work to other agents. Off, the chat is just the lead. Missing in chats from before the toggle, which delegated. */
+  delegating?: boolean
   /** A command Canopy runs itself after a delegate writes, such as the test suite. */
   verify?: string
   delegations: Delegation[]
@@ -64,7 +66,7 @@ export type GroupRecord = {
 
 /** `mode` is the agent's permission mode, and `modes` the ones its provider offers. */
 export type MemberState = { agent: string; status: SessionStatus; activity: string; mode?: PermissionMode; modes?: readonly PermissionMode[] }
-export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; active: string[]; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
+export type GroupState = { id: string; title: string; lead: string; target: string; running?: string; active: string[]; queue: QueuedMessage[]; members: MemberState[]; blocked?: string; laneId?: string; roster: Roster; delegating: boolean; delegations: Delegation[]; violations: Violation[]; userQuestions: UserQuestion[]; limited?: string; quotas: Record<string, Quota> }
 /** `delegation` is the delegation the agent was working on when the item first arrived. */
 export type TimelineItem = { agent: string; item: SessionItem; delegation?: string }
 
@@ -272,6 +274,7 @@ export class GroupChat implements Disposable {
       ...(record.blocked ? { blocked: record.blocked } : {}),
       ...(record.laneId ? { laneId: record.laneId } : {}),
       roster: record.roster,
+      delegating: this.delegating,
       delegations: record.delegations,
       violations: record.violations,
       userQuestions: record.userQuestions,
@@ -445,9 +448,27 @@ export class GroupChat implements Disposable {
     this.listeners.clear()
   }
 
+  get delegating(): boolean {
+    return this.record.delegating !== false
+  }
+
+  /** Roles bind only while the lead can delegate; alone, the lead does the work itself. */
+  private get enforcing(): boolean {
+    return this.delegating && this.record.enforce
+  }
+
+  /** Turns delegation on or off. The lead hears about it at the start of its next turn. */
+  setDelegating(on: boolean): void {
+    if (this.delegating === on) return
+    this.record.delegating = on
+    this.save()
+    this.changed()
+  }
+
   /** Called through the tool server by an agent in this chat. */
   handleTool(agent: string, name: string, args: Record<string, unknown>): string {
     if (name === 'commit_work') return this.commitWork(agent, String(args.message ?? ''))
+    if (!this.delegating && ['delegate', 'answer_delegate', 'ask_user', 'message_delegate'].includes(name)) return 'Delegation is off in this chat. Do this work yourself; the user can turn delegation on.'
     if (agent === this.record.lead) {
       if (name === 'answer_delegate') return this.leadAnswers(String(args.agent ?? ''), String(args.answer ?? ''))
       if (name === 'ask_user') return this.askUser(String(args.agent ?? ''), String(args.question ?? ''))
@@ -586,7 +607,7 @@ export class GroupChat implements Disposable {
   /** Commits for an agent whose sandbox protects Git's own files. Never amends, resets, or pushes. */
   private commitWork(agent: string, message: string): string {
     const writer = this.record.roster.implement
-    if (this.record.enforce && writer && agent !== writer) return `Only ${writer} can commit here.`
+    if (this.enforcing && writer && agent !== writer) return `Only ${writer} can commit here.`
     if (!message.trim()) return 'A commit message is required.'
     const done: string[] = []
     for (const path of this.deps.checkouts?.(this.record.laneId) ?? []) {
@@ -605,7 +626,7 @@ export class GroupChat implements Disposable {
 
   /** Read-only for anyone but the Implement agent, when roles are enforced. The lane's plan and notes stay writable. */
   readOnlyBoundary(agent: string): WriteBoundary | undefined {
-    if (!this.record.enforce || !this.record.roster.implement || agent === this.record.roster.implement) return undefined
+    if (!this.enforcing || !this.record.roster.implement || agent === this.record.roster.implement) return undefined
     const writer = this.record.roster.implement
     const memory = this.record.laneId ? this.deps.memoryDir?.(this.record.laneId) : undefined
     const notes = memory ? ` You can still write the lane's plan.md and notes.md in ${memory}.` : ''
@@ -669,7 +690,7 @@ export class GroupChat implements Disposable {
 
   private leadBrief(agent: string): string {
     const writer = this.record.roster.implement
-    return `You lead a group chat of coding agents run by Canopy, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. For a plan with several phases, pass them as phases: they are handed over one at a time, which keeps each delegate on track. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.record.enforce && writer !== agent ? ` Only ${writer} may edit code; you are read-only${this.record.laneId ? ", except for the lane's plan.md and notes.md" : ''}.` : ''} When work belongs to another agent, call the delegate tool from the canopy MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what Canopy recorded, and decide what happens next.`
+    return `You lead a group chat of coding agents run by Canopy, and you own the work you hand out. Roster: ${this.rosterText()}. You own the research and the plan: before handing out implementation, find out what the change needs (yourself, or by delegating research), then pass your findings and a concrete plan in the delegate tool's context, so the implementer goes straight to the change. For a plan with several phases, pass them as phases: they are handed over one at a time, which keeps each delegate on track. Give every delegate the context its role needs, and answer its questions from what you know.${writer && this.enforcing && writer !== agent ? ` Only ${writer} may edit code; you are read-only${this.record.laneId ? ", except for the lane's plan.md and notes.md" : ''}.` : ''} When work belongs to another agent, call the delegate tool from the canopy MCP server with its role, without asking the user, then end your turn. Reports start your next turn: read them, judge them against what Canopy recorded, and decide what happens next.`
   }
 
   private delegationText(delegation: Delegation): string {
@@ -690,10 +711,13 @@ export class GroupChat implements Disposable {
       ]
     }
     this.record.cursors[agent] = this.ledger.length
-    const brief = agent === this.record.lead && Object.keys(this.record.roster).length > 0 && this.record.briefed !== agent
-    if (brief) this.record.briefed = agent
+    // The lead is told how the chat works on its first turn, and again whenever delegation is turned on or off.
+    const briefing = this.delegating ? agent : `${agent}:alone`
+    const brief = agent === this.record.lead && Object.keys(this.record.roster).length > 0 && this.record.briefed !== briefing
+    if (brief) this.record.briefed = briefing
     this.save()
-    return [...(brief ? [{ type: 'text' as const, text: this.leadBrief(agent) }] : []), ...(text ? [{ type: 'text' as const, text }] : []), ...parts]
+    const briefText = this.delegating ? this.leadBrief(agent) : 'Delegation is off in this chat, so do the work yourself and do not call the canopy delegate tools. The user can turn delegation on.'
+    return [...(brief ? [{ type: 'text' as const, text: briefText }] : []), ...(text ? [{ type: 'text' as const, text }] : []), ...parts]
   }
 
   /** Starts every waiting message that can go now: the first one for each idle agent, in queue order. */
@@ -1022,7 +1046,7 @@ export class GroupChat implements Disposable {
 
   /** The backstop: edit tools are blocked for read-only roles, but a shell command can still write. */
   private checkViolation(agent: string, before: { path: string; tree: string; outsideLane?: boolean }[]): Violation | undefined {
-    const writer = !this.record.enforce || !this.record.roster.implement || agent === this.record.roster.implement
+    const writer = !this.enforcing || !this.record.roster.implement || agent === this.record.roster.implement
     const watched = writer ? before.filter((entry) => entry.outsideLane) : before
     const files = watched.flatMap(({ path, tree }) => changed(path, tree, snapshotTree(path)))
     if (files.length === 0) return undefined
@@ -1034,7 +1058,7 @@ export class GroupChat implements Disposable {
 
   /** ACP agents only stop at permission requests, which full access skips. */
   private async applyRole(agent: string, sessionId: string): Promise<void> {
-    if (agent === 'claude' || agent === 'codex' || !this.record.roster.implement || !this.record.enforce) return
+    if (agent === 'claude' || agent === 'codex' || !this.record.roster.implement || !this.enforcing) return
     const mode = agent === this.record.roster.implement ? (this.record.modes?.[agent] ?? this.record.mode) : 'ask'
     await this.deps.manager.setMode(sessionId, mode).catch(() => undefined)
   }
@@ -1121,7 +1145,7 @@ export class GroupChats implements Disposable {
     return undefined
   }
 
-  create(options: { lead: string; title?: string; mode?: PermissionMode; laneId?: string; roster?: Roster; enforce?: boolean; verify?: string; questionsTo?: 'lead' | 'user' }): GroupChat {
+  create(options: { lead: string; title?: string; mode?: PermissionMode; laneId?: string; roster?: Roster; enforce?: boolean; delegating?: boolean; verify?: string; questionsTo?: 'lead' | 'user' }): GroupChat {
     const record: GroupRecord = {
       id: randomUUID(),
       title: options.title ?? 'New chat',
@@ -1134,6 +1158,7 @@ export class GroupChats implements Disposable {
       mode: options.mode ?? 'ask',
       roster: options.roster ?? {},
       enforce: options.enforce ?? true,
+      ...(options.delegating === false ? { delegating: false } : {}),
       delegations: [],
       violations: [],
       questionsTo: options.questionsTo ?? 'lead',

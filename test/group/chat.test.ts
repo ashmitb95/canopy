@@ -276,6 +276,31 @@ describe('GroupChat', () => {
   })
 })
 
+describe('delegation toggle', () => {
+  it('leaves a chat with delegation off to the lead alone, and turns roles back on with it', async () => {
+    chat = chats.create({ lead: 'claude', roster: { plan: 'claude', implement: 'codex' }, delegating: false })
+    expect(chat.state().delegating).toBe(false)
+    expect(chat.readOnlyBoundary('claude')).toBeUndefined()
+    await chat.send('fix it')
+    await tick()
+    expect(texts(claude.at(-1))[0]).toContain('Delegation is off')
+    expect(texts(claude.at(-1))[0]).not.toContain('Roster:')
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'x', context: CONTEXT })).toContain('Delegation is off')
+    expect(chat.state().delegations).toHaveLength(0)
+    await finish(claude.at(-1), 'fixed')
+    chat.setDelegating(true)
+    expect(chat.readOnlyBoundary('claude')?.readOnly).toBe(true)
+    await chat.send('now hand the tests to codex')
+    await tick()
+    expect(texts(claude.at(-1)).at(-1)).toContain('Roster:')
+    expect(chat.handleTool('claude', 'delegate', { to: 'implement', task: 'Write the tests', context: CONTEXT })).toContain('Accepted')
+  })
+
+  it('keeps delegation on for chats made before the toggle', () => {
+    expect(chats.create({ lead: 'claude' }).state().delegating).toBe(true)
+  })
+})
+
 describe('read-only roles', () => {
   it('may write only the lane plan and notes', async () => {
     const providers = fakeProvider('claude')

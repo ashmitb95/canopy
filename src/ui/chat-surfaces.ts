@@ -339,6 +339,9 @@ export class ChatSurfaces
       case 'setMemberMode':
         await chat.setMemberMode(message.agent, message.mode)
         return true
+      case 'setDelegating':
+        chat.setDelegating(message.on)
+        return true
       case 'answerDelegate':
         chat.answerDelegate(message.id, message.text)
         return true

@@ -63,7 +63,7 @@ Every chat has a review screen: who did what, each agent's report, the files it 
 
 ## More
 
-- Chats in the right sidebar or in editor tabs, and Conversations to browse them all. Open tabs come back after a reload.
+- Chats in the right sidebar or in editor tabs. The sidebar's Lanes and Conversations buttons list every lane and every chat. Open tabs come back after a reload.
 - The full composer for whichever agent you are talking to: model, reasoning effort, permission mode, files, images, and slash commands.
 - Streaming replies, reasoning, tool cards, diffs, plans, LaTeX, and Mermaid. Answer questions and allow or deny actions from the chat.
 - Notifications when a chat finishes, fails, or needs you.

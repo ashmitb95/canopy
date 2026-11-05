@@ -10,7 +10,7 @@ import { attachFile, saveImage } from './attachments'
 import type { DiffDocuments } from './diff-documents'
 import type { EditorContextTracker } from './editor-context'
 import { FileSearch } from './file-search'
-import type { Attachment, HostMessage, LaneCard, LaneInfo, ProviderInfo, SignInProgress, WebviewMessage } from './protocol'
+import type { Attachment, HostMessage, LaneCard, LaneInfo, ProviderInfo, SignInProgress, WebviewMessage, SideData } from './protocol'
 import { recentSessions } from './recent'
 import type { Unread } from './unread'
 
@@ -39,6 +39,8 @@ type Surface = {
   listener?: vscode.Disposable
   /** In a group chat, the session of the agent the next message goes to, which the composer shows. */
   member?: { agent: string; sessionId: string; subscription: Disposable }
+  /** What the chat view shows with no chat open: the lanes, or every conversation. */
+  listing?: 'lanes' | 'conversations'
 }
 
 /** Editor tabs and the sidebar chat. Each subscribes to a session and relays its events. */
@@ -59,21 +61,24 @@ export class ChatSurfaces
   private readonly files = new FileSearch()
   private readonly attachmentsDir: string
 
-  /** Lane cards for the chat view when no chat is open in it; set by the extension. */
-  private laneView: { cards(): Promise<LaneCard[]>; handle(message: WebviewMessage): Promise<boolean> } | undefined
+  /** Lane cards and the conversation list for the chat view when no chat is open in it; set by the extension. */
+  private laneView: { cards(): Promise<LaneCard[]>; side(): SideData; handle(message: WebviewMessage): Promise<boolean> } | undefined
 
-  useLanes(lanes: { cards(): Promise<LaneCard[]>; handle(message: WebviewMessage): Promise<boolean>; onChange(listener: () => void): { dispose(): void } }): { dispose(): void } {
+  useLanes(lanes: { cards(): Promise<LaneCard[]>; side(): SideData; handle(message: WebviewMessage): Promise<boolean>; onChange(listener: () => void): { dispose(): void } }): { dispose(): void } {
     this.laneView = lanes
     return lanes.onChange(() => {
       if (this.sidebar) void this.postLaneCards(this.sidebar)
     })
   }
 
-  /** The chat view with no chat in it shows the lanes. */
+  /** The chat view with no chat in it shows the lanes, or every conversation. */
   private async postLaneCards(surface: Surface): Promise<void> {
     if (surface.kind !== 'view' || surface.sessionId || surface.groupId || !this.laneView) return
-    if (this.sidebarView) this.sidebarView.title = 'Lanes'
-    this.post(surface, { type: 'laneCards', lanes: await this.laneView.cards() })
+    const listing = surface.listing ?? 'lanes'
+    if (this.sidebarView) this.sidebarView.title = listing === 'lanes' ? 'Lanes' : 'Conversations'
+    this.post(surface, { type: 'listing', listing })
+    if (listing === 'conversations') this.post(surface, { type: 'side', side: this.laneView.side() })
+    else this.post(surface, { type: 'laneCards', lanes: await this.laneView.cards() })
   }
 
   /** Starts a group chat with the roster from settings, led by the given provider or the roster's lead; set by the extension. */
@@ -384,12 +389,13 @@ export class ChatSurfaces
     if (this.sidebar?.sessionId) this.openPanel(this.sidebar.sessionId)
   }
 
-  /** The right sidebar's chat view goes back to the lanes; the chat it showed stays in Conversations. */
-  async showLanesInSidebar(): Promise<void> {
+  /** The right sidebar's chat view shows the lanes, or every conversation; the chat it showed stays in the list. */
+  async showLanesInSidebar(listing: 'lanes' | 'conversations' = 'lanes'): Promise<void> {
     await this.context.workspaceState.update(SIDEBAR_SESSION_KEY, undefined)
     await this.context.workspaceState.update(SIDEBAR_GROUP_KEY, undefined)
     await vscode.commands.executeCommand(`${SIDEBAR_VIEW}.focus`)
     if (this.sidebar) {
+      this.sidebar.listing = listing
       this.sidebar.member?.subscription.dispose()
       this.sidebar.member = undefined
       this.clear(this.sidebar)

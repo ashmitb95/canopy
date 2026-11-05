@@ -14,7 +14,6 @@ import type { Unread } from './unread'
 
 export const SIDE_VIEW = 'canopy.sessions'
 /** Every conversation, in its own view in the secondary sidebar. */
-export const CONVERSATIONS_VIEW = 'canopy.conversations'
 export const LANES_PANEL = 'canopy.lanes'
 
 /**
@@ -49,7 +48,7 @@ export class SideView implements vscode.WebviewViewProvider, vscode.WebviewPanel
   resolveWebviewView(view: vscode.WebviewView): void {
     this.views.add(view)
     view.webview.options = { enableScripts: true, localResourceRoots: this.roots() }
-    view.webview.html = this.html(view.webview, view.viewType === CONVERSATIONS_VIEW ? 'conversations' : 'side')
+    view.webview.html = this.html(view.webview, 'side')
     view.webview.onDidReceiveMessage((message: WebviewMessage) => this.receive(message))
     view.onDidDispose(() => this.views.delete(view))
   }
@@ -97,6 +96,11 @@ export class SideView implements vscode.WebviewViewProvider, vscode.WebviewPanel
     for (const listener of this.chatListeners) listener.dispose()
   }
 
+  /** The lanes and every conversation, for another view that lists them. */
+  side(): SideData {
+    return this.data()
+  }
+
   private data(): SideData {
     // Group chats change often while agents work; listen to each, and pick up new ones on every refresh.
     for (const listener of this.chatListeners) listener.dispose()
@@ -132,9 +136,9 @@ export class SideView implements vscode.WebviewViewProvider, vscode.WebviewPanel
     return { dispose: () => this.laneListeners.delete(listener) }
   }
 
-  /** Runs a lane action from another view that shows lane cards; false for anything else. */
+  /** Runs a lane or conversation action from another view that lists them; false for anything else. */
   async handleLane(message: WebviewMessage): Promise<boolean> {
-    if (!['switchLane', 'parkLane', 'warmUpLane', 'openLaneChat', 'reviewLane', 'newLane', 'openLanes'].includes(message.type)) return false
+    if (!['switchLane', 'parkLane', 'warmUpLane', 'openLaneChat', 'reviewLane', 'newLane', 'openLanes', 'openSession', 'openGroup', 'newGroupChat'].includes(message.type)) return false
     await this.handle(message)
     return true
   }

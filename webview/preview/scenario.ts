@@ -412,6 +412,21 @@ const messages: HostMessage[] =
             }
           }
         ]
+    : scenario === 'conversations'
+      ? [
+          { type: 'empty' },
+          { type: 'listing', listing: 'conversations' },
+          {
+            type: 'side',
+            side: {
+              groups: [
+                { id: 'g1', title: 'Rank recent edits higher', lead: 'claude', running: 'codex', activity: '$ pnpm test search', needsYou: false, agents: ['claude', 'codex', 'grok'], laneId: 'search-recency' },
+                { id: 'g2', title: 'Billing CSV', lead: 'grok', needsYou: true, agents: ['grok'], laneId: 'billing-export' }
+              ],
+              sessions: [{ id: 's9', title: 'Sign-in screens', providerId: 'claude', status: 'idle', updatedAt: '2026-10-28T08:00:00.000Z', inTab: false, unread: false }]
+            }
+          }
+        ]
     : scenario === 'flow'
       ? [providers]
     : scenario === 'showcase'

@@ -135,6 +135,7 @@ export type HostMessage =
   | { type: 'editPrompt'; parts: PromptPart[] }
   /** A group chat: everything so far, then live state and items. */
   | { type: 'groupSnapshot'; state: GroupState; items: TimelineItem[] }
+  | { type: 'listing'; listing: 'lanes' | 'conversations' }
   | { type: 'groupState'; state: GroupState }
   | { type: 'groupItem'; agent: string; item: SessionItem; delegation?: string }
   | { type: 'side'; side: SideData }

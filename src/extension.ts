@@ -21,7 +21,7 @@ import type { LaneNode, SessionNode } from './ui/sessions-tree'
 import { NEW_LANE_PANEL, NewLaneView } from './ui/new-lane-view'
 import { REVIEW_PANEL, ReviewView } from './ui/review-view'
 import { SETUP_PANEL, SetupView } from './ui/setup-view'
-import { CONVERSATIONS_VIEW, LANES_PANEL, SIDE_VIEW, SideView } from './ui/side-view'
+import { LANES_PANEL, SIDE_VIEW, SideView } from './ui/side-view'
 import { SessionsStatusBar } from './ui/status-bar'
 import { KeepAwake } from './ui/keep-awake'
 import { Unread } from './ui/unread'
@@ -83,7 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (choice === 'Undo it') await runLane('Undoing the interrupted switch…', async () => void vscode.window.showInformationMessage((await lanes.undoUnfinishedMoves()).join(' · ')))
   })
 
-  context.subscriptions.push(surfaces.useLanes({ cards: () => side.laneCards(), handle: (message) => side.handleLane(message), onChange: (listener) => side.onLanesChanged(listener) }))
+  context.subscriptions.push(surfaces.useLanes({ cards: () => side.laneCards(), side: () => side.side(), handle: (message) => side.handleLane(message), onChange: (listener) => side.onLanesChanged(listener) }))
 
   // Every chat started from a provider is a group chat it leads. Delegation starts off; the chat's toggle turns it on.
   surfaces.startGroup = async (lead, text) => {
@@ -152,7 +152,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand('canopy.clearLinearKey', () => context.secrets.delete(LINEAR_SECRET)),
     vscode.commands.registerCommand('canopy.openInEditor', () => surfaces.openSidebarInEditor()),
-    vscode.commands.registerCommand('canopy.showConversations', () => vscode.commands.executeCommand('canopy.conversations.focus')),
+    vscode.commands.registerCommand('canopy.showConversations', () => surfaces.showLanesInSidebar('conversations')),
     vscode.commands.registerCommand('canopy.manageProviders', () => surfaces.openProviders()),
     vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, diffs),
     vscode.workspace.registerTextDocumentContentProvider(GIT_SCHEME, laneChanges),
@@ -163,7 +163,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     side,
     vscode.window.registerWebviewViewProvider(SIDE_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
-    vscode.window.registerWebviewViewProvider(CONVERSATIONS_VIEW, side, { webviewOptions: { retainContextWhenHidden: true } }),
     // Tabs VS Code restores after a reload.
     vscode.window.registerWebviewPanelSerializer(LANES_PANEL, side),
     vscode.window.registerWebviewPanelSerializer(SETUP_PANEL, setup),

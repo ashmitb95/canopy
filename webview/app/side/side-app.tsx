@@ -94,17 +94,23 @@ function Row({ attention, active, onOpen, context, children }: { attention: bool
   )
 }
 
-/** The primary sidebar, or with `conversationsOnly` the Conversations view in the secondary sidebar. */
-export function SideApp({ conversationsOnly = false }: { conversationsOnly?: boolean }) {
-  const [data, setData] = useState<SideData>()
+/**
+ * The primary sidebar, or with `conversationsOnly` every conversation. `embedded` is the data when another view
+ * hosts the list, such as the chat view, which then owns the messages to and from the extension.
+ */
+export function SideApp({ conversationsOnly = false, embedded }: { conversationsOnly?: boolean; embedded?: SideData }) {
+  const [own, setOwn] = useState<SideData>()
   const [lanesOpen, setLanesOpen] = useState(true)
+  const hosted = conversationsOnly && embedded !== undefined
   useEffect(() => {
+    if (hosted) return
     const off = onHostMessage((message) => {
-      if (message.type === 'side') setData(message.side)
+      if (message.type === 'side') setOwn(message.side)
     })
     send({ type: 'ready' })
     return off
-  }, [])
+  }, [hosted])
+  const data = embedded ?? own
   if (!data) return null
   return (
     <div className="flex h-screen flex-col text-[13px]">

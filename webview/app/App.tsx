@@ -6,6 +6,7 @@ import { ChatHeader } from './components/chat-header'
 import { Composer } from './components/composer'
 import { EmptyState } from './components/empty-state'
 import { LanesApp } from './side/lanes-app'
+import { SideApp } from './side/side-app'
 import { SignInBanner } from './components/sign-in-banner'
 import { ExploredCard } from './items/explored-card'
 import { nestItems, renderUnits } from './units'
@@ -46,7 +47,7 @@ export function App() {
 
   if (state.group) return <GroupView state={state} />
   // The chat view in the sidebar shows the lanes until a chat is opened in it.
-  if (state.empty && document.body.dataset.surface === 'view') return <LanesApp cards={state.laneCards ?? []} />
+  if (state.empty && document.body.dataset.surface === 'view') return state.listing === 'conversations' ? (state.side ? <SideApp conversationsOnly embedded={state.side} /> : null) : <LanesApp cards={state.laneCards ?? []} />
   if (state.empty) return <EmptyState providers={state.providers} signIns={state.signIns} />
 
   return (

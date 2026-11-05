@@ -2,7 +2,7 @@ import type { Quota, SessionItem } from '../../src/core/types'
 import type { QueuedPrompt, SessionEvent } from '../../src/sessions/manager'
 import type { SessionRecord, SessionStatus } from '../../src/sessions/store'
 import type { GroupState, TimelineItem } from '../../src/group/chat'
-import type { EditorContext, GroupComposer, HostMessage, LaneCard, LaneInfo, ProviderInfo, SessionSummary, SignInProgress } from '../../src/ui/protocol'
+import type { EditorContext, GroupComposer, HostMessage, LaneCard, LaneInfo, ProviderInfo, SessionSummary, SideData, SignInProgress } from '../../src/ui/protocol'
 
 export type ChatState = {
   sessionId?: string
@@ -29,6 +29,9 @@ export type ChatState = {
   groupComposer?: GroupComposer
   /** Lane cards, which the sidebar chat view shows while no chat is open in it. */
   laneCards?: LaneCard[]
+  /** The chat view with no chat open lists the lanes, or every conversation. */
+  listing?: 'lanes' | 'conversations'
+  side?: SideData
 }
 
 export const initialState: ChatState = {
@@ -72,7 +75,10 @@ export function reduce(state: ChatState, message: HostMessage): ChatState {
       return { ...state, editorContext: message.context }
     case 'laneCards':
       return { ...state, laneCards: message.lanes }
+    case 'listing':
+      return { ...state, listing: message.listing }
     case 'side':
+      return { ...state, side: message.side }
     case 'setup':
     case 'review':
     case 'newLane':

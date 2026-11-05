@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4
+
+- Delegation is a switch on each chat, off by default. Off, the lead works alone with no roles; on, it hands work out by role. Chats from earlier versions keep delegating.
+- Conversations opens inside the Canopy chat view from its title bar, next to Lanes, in place of a separate sidebar tab.
+- The readme's chat recording shows the current app: research, a two-phase plan, a review, and a checked report.
+- The project page at ashmitb95.github.io/canopy reflects the delegation switch.
+
 ## 1.0.3
 
 - Open in Editor opens the chat, not the providers screen.

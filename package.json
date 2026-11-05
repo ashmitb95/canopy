@@ -3,7 +3,7 @@
   "displayName": "Canopy -- Multi provider, Multi repo agent orchestrator",
   "description": "Multi provider chat with coding agents on your own subscriptions.",
   "icon": "media/canopy-icon.png",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "license": "MIT",
   "repository": {
     "type": "git",
